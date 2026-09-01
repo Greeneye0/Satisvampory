@@ -4,90 +4,147 @@ using ProjectM.Network;
 using ProjectM.Shared.Systems;
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Unity.Collections;
 using Unity.Entities;
 
 namespace Satisvampory.Services
 {
     /// <summary>
-    /// ClanShare ON: a throne sees and hunts servants from every included clan plot.
-    /// Excluded plots (.s cse) stay local. Does not copy missions onto this throne.
+    /// ClanShare throne: chat picks a plot, then ServantInfo / hunt events are retargeted
+    /// at that plot's real throne. Vanilla listing stays Burst-safe (no extra entries).
     /// </summary>
     internal static class ClanThroneServants
     {
-        public static bool TryGetSharePlots(Entity throne, out int homePlot, out IReadOnlyList<int> plots)
-        {
-            homePlot = -1;
-            plots = Array.Empty<int>();
-            if (!Core.HasInitialized)
-                return false;
-            if (throne == Entity.Null || !Core.EntityManager.Exists(throne) || !throne.Has<UseThroneComponent>())
-                return false;
-            homePlot = Core.TerritoryService.GetTerritoryId(throne);
-            if (homePlot < 0)
-                return false;
-            if (Core.PlayerSettings.IsTerritoryClanShareExcluded(homePlot))
-                return false;
-            var ids = Core.TerritoryService.GetLogisticsTerritoryIds(homePlot);
-            if (ids == null || ids.Count <= 1)
-                return false;
-            plots = ids;
-            return true;
-        }
+        static readonly Dictionary<ulong, int> selectedPlot = new();
+        static readonly Dictionary<int, Entity> throneByPlot = new();
+        static DateTime throneCacheAt;
 
-        public static void AddMissingEntries(Entity throne,
-            ref FixedList4096Bytes<ServantInfoEvent.Response.Entry> entries)
-        {
-            if (!TryGetSharePlots(throne, out var home, out var plots))
-                return;
-            var found = CollectAlive(plots);
-            var added = 0;
-            for (var i = 0; i < found.Count; i++)
-            {
-                if (entries.Length >= entries.Capacity)
-                    break;
-                var servant = found[i].servant;
-                if (EntriesHave(ref entries, servant))
-                    continue;
-                var station = found[i].station;
-                var state = StateOf(servant, ref station);
-                var entry = ServantInfoEvent.Response.Entry.Create(Core.EntityManager, servant, ref station, state);
-                entries.Add(ref entry);
-                added++;
-            }
-            if (added > 0)
-            {
-                DestDebugLog.Note("throne", home, 0, "share entries +" + added + " total=" + entries.Length);
-                Core.Log.LogInfo("ClanShare throne plot " + home + " extra servants +" + added + " total=" + entries.Length);
-            }
-        }
-
-        public static void HonorMissionState(Entity servant, ref ServantInfoEvent.Response.ServantState state)
-        {
-            if (state == ServantInfoEvent.Response.ServantState.AwayOnHunt)
-                return;
-            if (servant == Entity.Null || !Core.EntityManager.Exists(servant) || !servant.Has<ServantData>())
-                return;
-            if (servant.Read<ServantData>().IsOnMission)
-                state = ServantInfoEvent.Response.ServantState.AwayOnHunt;
-        }
-
-        static ServantInfoEvent.Response.ServantState StateOf(Entity servant, ref ServantCoffinstation station)
-        {
-            var state = ServantInfoEvent.Response.ServantState.Free;
-            if (station.Injury.GuidHash != 0)
-                state = ServantInfoEvent.Response.ServantState.Injured;
-            else if (servant.Has<ServantHasItemsInInventory>())
-                state = ServantInfoEvent.Response.ServantState.HasItemInInventory;
-            HonorMissionState(servant, ref state);
-            return state;
-        }
-
-        public static bool StartQueryNeedsShare(ServantMissionActionSystem system)
+        public static void RewriteInfoRequests(ServantInfoEventSystem_Server system)
         {
             if (system == null || !Core.HasInitialized)
+                return;
+            RewriteQuery(system._RequestQuery, RewriteInfo);
+        }
+
+        public static void RewriteMissionEvents(ServantMissionActionSystem system)
+        {
+            if (system == null || !Core.HasInitialized)
+                return;
+            RewriteQuery(system._StartMissionEventQuery, RewriteStart);
+            RewriteQuery(system._AbortMissionEventQuery, RewriteAbort);
+        }
+
+        public static bool MayManageFrom(Entity character, Entity throne)
+        {
+            if (!Core.HasInitialized || character == Entity.Null || throne == Entity.Null)
                 return false;
-            var query = system._StartMissionEventQuery;
+            if (!Core.EntityManager.Exists(character) || !Core.EntityManager.Exists(throne))
+                return false;
+            var sitting = Core.TerritoryService.GetStandingTerritoryId(character);
+            var target = Core.TerritoryService.GetTerritoryId(throne);
+            if (sitting < 0 || target < 0)
+                return false;
+            var ids = Core.TerritoryService.GetLogisticsTerritoryIds(sitting);
+            if (ids == null || ids.Count <= 1)
+                return false;
+            var sittingOk = false;
+            var targetOk = false;
+            for (var i = 0; i < ids.Count; i++)
+            {
+                if (ids[i] == sitting) sittingOk = true;
+                if (ids[i] == target) targetOk = true;
+            }
+            return sittingOk && targetOk;
+        }
+
+        public static string ChatList(Entity character, ulong steam)
+        {
+            var standing = character != Entity.Null ? Core.TerritoryService.GetStandingTerritoryId(character) : -1;
+            if (standing < 0)
+                return "Stand on a clan castle to pick a throne plot.";
+            var ids = Core.TerritoryService.GetLogisticsTerritoryIds(standing);
+            if (ids == null || ids.Count == 0)
+                return "No castle under you.";
+            if (ids.Count == 1)
+                return "ClanShare is off or this plot is excluded. Sit this throne to manage its servants.";
+            selectedPlot.TryGetValue(steam, out var managing);
+            var sb = new StringBuilder();
+            sb.Append("ClanShare throne — pick a plot, sit (or stay sat), reopen the hunt UI.\n");
+            for (var i = 0; i < ids.Count; i++)
+            {
+                var plot = ids[i];
+                var n = CountAlive(plot);
+                var here = plot == standing ? " <color=yellow>(here)</color>" : "";
+                var sel = plot == managing ? " <color=green>(managing)</color>" : "";
+                var throne = FindThrone(plot);
+                var noThrone = throne == Entity.Null ? " <color=red>(no throne)</color>" : "";
+                sb.Append(".s throne ").Append(plot).Append("  ")
+                    .Append(Core.TerritoryService.FormatPlotLabel(plot))
+                    .Append("  servants ").Append(n)
+                    .Append(here).Append(sel).Append(noThrone).Append('\n');
+            }
+            sb.Append(".s throne here  — this castle");
+            var text = sb.ToString();
+            return text.Length <= Core.MaxChatReply ? text : text.Substring(0, Core.MaxChatReply);
+        }
+
+        public static string ChatSelect(Entity character, ulong steam, string arg)
+        {
+            if (string.IsNullOrWhiteSpace(arg) || arg.Equals("list", StringComparison.OrdinalIgnoreCase))
+                return ChatList(character, steam);
+            if (arg.Equals("here", StringComparison.OrdinalIgnoreCase)
+                || arg.Equals("clear", StringComparison.OrdinalIgnoreCase)
+                || arg.Equals("local", StringComparison.OrdinalIgnoreCase))
+            {
+                selectedPlot.Remove(steam);
+                return "Throne hunts this castle again. Sit / reopen the hunt UI.";
+            }
+            if (!int.TryParse(arg, out var plot) || plot < TerritoryService.MIN_TERRITORY_ID || plot > TerritoryService.MAX_TERRITORY_ID)
+                return "Use a plot number from .s throne, or .s throne here.";
+            var standing = character != Entity.Null ? Core.TerritoryService.GetStandingTerritoryId(character) : -1;
+            if (standing < 0)
+                return "Stand on a clan castle to pick a throne plot.";
+            var ids = Core.TerritoryService.GetLogisticsTerritoryIds(standing);
+            var onIsland = false;
+            if (ids != null)
+                for (var i = 0; i < ids.Count; i++)
+                    if (ids[i] == plot) { onIsland = true; break; }
+            if (!onIsland)
+                return "Plot " + plot + " is not on your ClanShare island (need .s cs, not .s cse).";
+            if (FindThrone(plot) == Entity.Null)
+                return "No throne on " + Core.TerritoryService.FormatPlotLabel(plot) + ".";
+            if (plot == standing)
+            {
+                selectedPlot.Remove(steam);
+                return "Managing " + Core.TerritoryService.FormatPlotLabel(plot) + " (this castle). Sit / reopen the hunt UI.";
+            }
+            selectedPlot[steam] = plot;
+            return "Managing servants on " + Core.TerritoryService.FormatPlotLabel(plot)
+                + ". Sit a clan throne and reopen the hunt UI. Hunts go on that castle's throne.";
+        }
+
+        public static string DebugDump(int plotFilter)
+        {
+            var sb = new StringBuilder();
+            sb.Append("{\"plot\":").Append(plotFilter).Append(",\"thrones\":[");
+            var first = true;
+            foreach (var kv in AllThrones())
+            {
+                if (plotFilter >= 0 && kv.Key != plotFilter)
+                    continue;
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append("{\"plot\":").Append(kv.Key)
+                    .Append(",\"alive\":").Append(CountAlive(kv.Key))
+                    .Append('}');
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+
+        static void RewriteQuery(EntityQuery query, Action<Entity> rewrite)
+        {
             NativeArray<Entity> rows = default;
             try
             {
@@ -95,13 +152,9 @@ namespace Satisvampory.Services
                 for (var i = 0; i < rows.Length; i++)
                 {
                     var entity = rows[i];
-                    if (entity == Entity.Null || !Core.EntityManager.Exists(entity) || !entity.Has<SendOnMissionEvent>())
+                    if (entity == Entity.Null || !Core.EntityManager.Exists(entity))
                         continue;
-                    var throneId = entity.Read<SendOnMissionEvent>().Throne;
-                    if (!Core.TryGetEntityFromNetworkId(throneId, out var throne))
-                        continue;
-                    if (TryGetSharePlots(throne, out _, out _))
-                        return true;
+                    rewrite(entity);
                 }
             }
             catch (Exception e)
@@ -113,14 +166,98 @@ namespace Satisvampory.Services
                 if (rows.IsCreated)
                     rows.Dispose();
             }
-            return false;
         }
 
-        public static string DebugDump(int plotFilter)
+        static void RewriteInfo(Entity entity)
         {
-            var sb = new System.Text.StringBuilder();
-            sb.Append("{\"plot\":").Append(plotFilter).Append(",\"thrones\":[");
-            var first = true;
+            if (!entity.Has<ServantInfoEvent.Request>() || !TryTargetFromEvent(entity, out var target, out var plot))
+                return;
+            var req = entity.Read<ServantInfoEvent.Request>();
+            if (!Retarget(ref req.Throne, target))
+                return;
+            entity.Write(req);
+            DestDebugLog.Note("throne", plot, 0, "info -> plot " + plot);
+        }
+
+        static void RewriteStart(Entity entity)
+        {
+            if (!entity.Has<SendOnMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot))
+                return;
+            var ev = entity.Read<SendOnMissionEvent>();
+            if (!Retarget(ref ev.Throne, target))
+                return;
+            entity.Write(ev);
+            DestDebugLog.Note("throne", plot, 0, "send -> plot " + plot);
+        }
+
+        static void RewriteAbort(Entity entity)
+        {
+            if (!entity.Has<AbortMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot))
+                return;
+            var ev = entity.Read<AbortMissionEvent>();
+            if (!Retarget(ref ev.Throne, target))
+                return;
+            entity.Write(ev);
+            DestDebugLog.Note("throne", plot, 0, "abort -> plot " + plot);
+        }
+
+        static bool TryTargetFromEvent(Entity entity, out Entity target, out int plot)
+        {
+            target = Entity.Null;
+            plot = -1;
+            if (!entity.Has<FromCharacter>())
+                return false;
+            var from = entity.Read<FromCharacter>();
+            var character = from.Character;
+            if (character == Entity.Null || !Core.EntityManager.Exists(character) || !from.User.Has<User>())
+                return false;
+            var steam = from.User.Read<User>().PlatformId;
+            if (!selectedPlot.TryGetValue(steam, out plot) || plot < 0)
+                return false;
+            var sitting = Core.TerritoryService.GetStandingTerritoryId(character);
+            if (sitting < 0)
+                return false;
+            var ids = Core.TerritoryService.GetLogisticsTerritoryIds(sitting);
+            var ok = false;
+            if (ids != null)
+                for (var i = 0; i < ids.Count; i++)
+                    if (ids[i] == plot) { ok = true; break; }
+            if (!ok)
+                return false;
+            target = FindThrone(plot);
+            return target != Entity.Null && Core.EntityManager.Exists(target) && target.Has<NetworkId>();
+        }
+
+        static bool Retarget(ref NetworkId throneId, Entity target)
+        {
+            var want = target.Read<NetworkId>();
+            if (throneId == want)
+                return false;
+            throneId = want;
+            return true;
+        }
+
+        static Entity FindThrone(int plot)
+        {
+            RefreshThroneCache();
+            if (throneByPlot.TryGetValue(plot, out var throne)
+                && throne != Entity.Null && Core.EntityManager.Exists(throne) && throne.Has<UseThroneComponent>())
+                return throne;
+            return Entity.Null;
+        }
+
+        static Dictionary<int, Entity> AllThrones()
+        {
+            RefreshThroneCache();
+            return throneByPlot;
+        }
+
+        static void RefreshThroneCache()
+        {
+            if (throneCacheAt != default && (DateTime.UtcNow - throneCacheAt).TotalSeconds < 2)
+                return;
+            throneByPlot.Clear();
+            throneCacheAt = DateTime.UtcNow;
             var qb = new EntityQueryBuilder(Allocator.Temp)
                 .AddAll(new(Il2CppType.Of<UseThroneComponent>(), ComponentType.AccessMode.ReadOnly));
             var query = Core.EntityManager.CreateEntityQuery(ref qb);
@@ -132,21 +269,13 @@ namespace Satisvampory.Services
                 for (var i = 0; i < rows.Length; i++)
                 {
                     var throne = rows[i];
-                    if (throne == Entity.Null || !Core.EntityManager.Exists(throne))
+                    if (throne == Entity.Null || !Core.EntityManager.Exists(throne) || !throne.Has<NetworkId>())
                         continue;
                     var plot = Core.TerritoryService.GetTerritoryId(throne);
-                    if (plotFilter >= 0 && plot != plotFilter)
+                    if (plot < 0)
                         continue;
-                    var share = TryGetSharePlots(throne, out _, out var plots);
-                    IReadOnlyList<int> countPlots = share ? plots : plot >= 0 ? new[] { plot } : Array.Empty<int>();
-                    var visible = CollectAlive(countPlots).Count;
-                    if (!first) sb.Append(',');
-                    first = false;
-                    sb.Append("{\"plot\":").Append(plot)
-                        .Append(",\"share\":").Append(share ? "true" : "false")
-                        .Append(",\"plots\":").Append(countPlots.Count)
-                        .Append(",\"visible\":").Append(visible)
-                        .Append('}');
+                    if (!throneByPlot.ContainsKey(plot))
+                        throneByPlot[plot] = throne;
                 }
             }
             finally
@@ -155,33 +284,11 @@ namespace Satisvampory.Services
                     rows.Dispose();
                 query.Dispose();
             }
-            sb.Append("]}");
-            return sb.ToString();
         }
 
-        struct AliveServant
+        static int CountAlive(int plot)
         {
-            public Entity servant;
-            public ServantCoffinstation station;
-        }
-
-        static List<AliveServant> CollectAlive(IReadOnlyList<int> plots)
-        {
-            var list = new List<AliveServant>();
-            if (plots == null || plots.Count == 0)
-                return list;
-            var wanted = new HashSet<int>();
-            for (var i = 0; i < plots.Count; i++)
-            {
-                var plot = plots[i];
-                var heart = Core.TerritoryService.GetCastleHeart(plot);
-                if (heart == Entity.Null || TerritoryService.IsHeartRaided(heart))
-                    continue;
-                wanted.Add(plot);
-            }
-            if (wanted.Count == 0)
-                return list;
-
+            var n = 0;
             var qb = new EntityQueryBuilder(Allocator.Temp)
                 .AddAll(new(Il2CppType.Of<ServantCoffinstation>(), ComponentType.AccessMode.ReadOnly));
             var query = Core.EntityManager.CreateEntityQuery(ref qb);
@@ -195,16 +302,14 @@ namespace Satisvampory.Services
                     var coffin = rows[i];
                     if (coffin == Entity.Null || !Core.EntityManager.Exists(coffin) || !coffin.Has<ServantCoffinstation>())
                         continue;
-                    var plot = Core.TerritoryService.GetTerritoryId(coffin);
-                    if (!wanted.Contains(plot))
+                    if (Core.TerritoryService.GetTerritoryId(coffin) != plot)
                         continue;
                     var station = coffin.Read<ServantCoffinstation>();
                     if (station.State != ServantCoffinState.ServantAlive)
                         continue;
                     var servant = station.ConnectedServant.GetEntityOnServer();
-                    if (servant == Entity.Null || !Core.EntityManager.Exists(servant))
-                        continue;
-                    list.Add(new AliveServant { servant = servant, station = station });
+                    if (servant != Entity.Null && Core.EntityManager.Exists(servant))
+                        n++;
                 }
             }
             finally
@@ -213,18 +318,7 @@ namespace Satisvampory.Services
                     rows.Dispose();
                 query.Dispose();
             }
-            return list;
-        }
-
-        static bool EntriesHave(ref FixedList4096Bytes<ServantInfoEvent.Response.Entry> entries, Entity servant)
-        {
-            if (!servant.Has<NetworkId>())
-                return false;
-            var id = servant.Read<NetworkId>();
-            for (var i = 0; i < entries.Length; i++)
-                if (entries[i].NetworkId == id)
-                    return true;
-            return false;
+            return n;
         }
     }
 }
