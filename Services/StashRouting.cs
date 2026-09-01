@@ -18,6 +18,9 @@ namespace Satisvampory.Services
     /// No '+': 1.6.1.35 type-word AND fallback when a token is weapon/armor/material.
     /// Overflow/spoils/salvage/trash are dest-class, never item names. Overflow never
     /// outranks exact/category/named custom. Never drain s#/r#. Never self-sort INTO overflow.
+    /// Built-in dest words (blood, stone, bone, jewel, …) match dest-group membership
+    /// only — not ItemCategory flags or a substring of the item name (Blood Jewel is
+    /// jewels, not blood; Miststone is not stone).
     /// Spelling fold: fiber/fibre, sulfur/sulphur, armor/armour, etc.
     /// </summary>
     internal static class StashRouting
@@ -466,10 +469,12 @@ namespace Satisvampory.Services
                 return ItemGroupService.IsGreaterBloodEssence(item);
             var variants = TokenVariants(token);
 
+            var tokenIsDestGroup = false;
             foreach (var v in variants)
             {
                 if (!ItemGroupService.TryGetBuiltInCanonical(v, out var canonical))
                     continue;
+                tokenIsDestGroup = true;
                 if (ItemGroupService.IsDeletedBuiltIn(ownerId, canonical))
                     continue;
                 foreach (var m in ItemGroupService.ResolveMembers(ownerId, canonical))
@@ -487,6 +492,10 @@ namespace Satisvampory.Services
                     }
                 }
             }
+            // "Blood" is the blood dest group, not a substring of "Blood Jewel".
+            // "Stone" is stone dests, not Miststone. Membership already failed.
+            if (tokenIsDestGroup)
+                return false;
 
             foreach (var (name, _) in Core.PlayerSettings.ListCustomGroups(ownerId))
             {
@@ -1030,7 +1039,7 @@ namespace Satisvampory.Services
                 r.Spec = specCat;
                 r.UsableDest = true;
                 r.UsableSource = true;
-                r.Label = LabelNameMatch;
+                r.Label = LabelCategory;
                 return r;
             }
             r.Class = 3;
