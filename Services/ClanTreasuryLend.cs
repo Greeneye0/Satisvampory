@@ -144,6 +144,10 @@ namespace Satisvampory.Services
         static bool loggedEmptySkip;
         const int BuildCoverCopies = 3;
         const int EmptyHoldSeconds = 5 * 60;
+        const int UnoccupiedReturnSeconds = 90;
+        const int MaxLendPullsPerTick = 8;
+        static readonly Dictionary<int, DateTime> leftAt = new();
+        static int lendPullsLeft;
 
         internal static bool HoldKitOverflow(int plot) =>
             plot >= 0 && holdKitOverflowPlots.Contains(plot);
@@ -765,7 +769,7 @@ namespace Satisvampory.Services
 
         static int LendKitGuid(int destPlot, List<Entity> kitDest, IReadOnlyList<int> clanIds, List<int> occupiedInClan, string destMode, int guid, int target, bool ignoreLeftoverNamed)
         {
-            if (kitDest == null || kitDest.Count == 0 || guid == 0 || target <= 0)
+            if (kitDest == null || kitDest.Count == 0 || guid == 0 || target <= 0 || lendPullsLeft <= 0)
                 return 0;
             var type = new PrefabGUID(guid);
             var local = CountIn(kitDest, type);
@@ -777,6 +781,7 @@ namespace Satisvampory.Services
                 return 0;
             }
             var need = target - local;
+            lendPullsLeft--;
             var fail = false;
             var leftoverBlocked = 0;
             var leftoverHave = 0;
@@ -1051,6 +1056,7 @@ namespace Satisvampory.Services
             {
                 ReturnAllLedgers("empty-server");
                 previouslyOccupied.Clear();
+                leftAt.Clear();
                 pendingVerify.Clear();
                 if (!loggedEmptySkip)
                 {
@@ -1060,12 +1066,28 @@ namespace Satisvampory.Services
                 return;
             }
             loggedEmptySkip = false;
+            lendPullsLeft = MaxLendPullsPerTick;
 
+            foreach (var plot in occupied)
+                leftAt.Remove(plot);
             foreach (var plot in previouslyOccupied)
             {
-                if (!occupied.Contains(plot))
-                    ReturnPlot(plot, "unoccupied");
+                if (occupied.Contains(plot) || leftAt.ContainsKey(plot))
+                    continue;
+                leftAt[plot] = DateTime.UtcNow;
             }
+            var due = new List<int>();
+            foreach (var kv in leftAt)
+            {
+                if ((DateTime.UtcNow - kv.Value).TotalSeconds >= UnoccupiedReturnSeconds)
+                    due.Add(kv.Key);
+            }
+            for (var i = 0; i < due.Count; i++)
+            {
+                ReturnPlot(due[i], "unoccupied");
+                leftAt.Remove(due[i]);
+            }
+
             previouslyOccupied.Clear();
             occupiedPlots.Clear();
             holdKitOverflowPlots.Clear();
@@ -1090,6 +1112,8 @@ namespace Satisvampory.Services
                 {
                     Core.LogException(e);
                 }
+                if (lendPullsLeft < MaxLendPullsPerTick)
+                    continue;
                 try
                 {
                     SelfSortPlot(plot);
@@ -1355,12 +1379,14 @@ namespace Satisvampory.Services
         static void LendTargetAmounts(int destPlot, List<Entity> destInvs, Dictionary<int, int> targets,
             IReadOnlyList<int> clanIds, List<int> occupiedInClan, string destMode, bool ignoreLeftoverNamed)
         {
-            if (targets == null || targets.Count == 0)
+            if (targets == null || targets.Count == 0 || lendPullsLeft <= 0)
                 return;
 
             var destFull = false;
             foreach (var kv in OrderedCoveringTargets(targets))
             {
+                if (lendPullsLeft <= 0)
+                    return;
                 var guid = kv.Key;
                 var target = kv.Value;
                 if (guid == 0 || target <= 0)
@@ -1392,6 +1418,7 @@ namespace Satisvampory.Services
                 if (need <= 0)
                     continue;
 
+                lendPullsLeft--;
                 var fail = false;
                 var leftoverBlocked = 0;
                 var leftoverHave = 0;

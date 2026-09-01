@@ -356,7 +356,8 @@ namespace Satisvampory
                         serverGameManager.TryAddInventoryItem(outputInventory, itemGuid, response.RemainingAmount);
                         moved = transferAmount - response.RemainingAmount;
                     }
-                    if (moved > 0 && inputInventory.Has<InventoryConnection>())
+                    if (moved > 0 && inputInventory.Has<InventoryConnection>()
+                        && (Core.WorkQueue == null || !Core.WorkQueue.IsSelfTransferring))
                         Core.WorkQueue?.EnqueueOwner(inputInventory.Read<InventoryConnection>().InventoryOwner);
                     return moved;
                 }
