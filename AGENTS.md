@@ -1,5 +1,9 @@
 # Satisvampory
 
+## Product specs
+
+`specs/` is the product contract. Read the matching spec before changing dest ranking, tidy, covering, ClanShare, belts, scoop, servants, or settings. A behavior change updates that spec in the same commit. If code and spec disagree, the spec is the intended product.
+
 ## Ship versions to origin
 
 When you bump `Satisvampory.csproj` `Version` / `AssemblyVersion` / `FileVersion`:

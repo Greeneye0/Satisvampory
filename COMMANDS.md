@@ -4,6 +4,8 @@ Chat commands. Prefix **`.s`**. Admin server toggles are **`.sg`**. `.l help` re
 
 There is no `.leftover` command. Chest floors are **`.s reserve`**.
 
+Product contract (dest ranking, tidy, covering, ClanShare, and the rest): **[specs/](specs/README.md)**. This file is the player-facing command table; the specs are the rail for updates.
+
 Most logistics features need the **server allow (`.sg`) on** and your **player toggle (`.s`) on**. Scoop does not use `.sg`.
 
 ## Who it applies to
