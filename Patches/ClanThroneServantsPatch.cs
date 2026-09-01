@@ -9,35 +9,21 @@ using Unity.Entities;
 
 namespace Satisvampory.Patches
 {
-    [HarmonyPatch(typeof(ServantHelper), nameof(ServantHelper.GetAllServants))]
-    public static class ClanThroneGetAllServantsPatch
-    {
-        static void Postfix(Entity throneEntity, NativeList<Entity> result)
-        {
-            if (!Core.HasInitialized)
-                return;
-            try
-            {
-                ClanThroneServants.AddMissingServants(throneEntity, ref result);
-            }
-            catch (Exception e)
-            {
-                Core.LogException(e);
-            }
-        }
-    }
-
+    /// <summary>
+    /// Sit crashed the dedicated server: Burst SerializeAndSendServerEventsSystem
+    /// aborted after GetAllServants postfix wrote a native NativeList. Listing only
+    /// patches GetResponseEntries (vanilla Entry.Create into the response list).
+    /// </summary>
     [HarmonyPatch(typeof(ServantInfoEventSystem_Server), nameof(ServantInfoEventSystem_Server.GetResponseEntries))]
     public static class ClanThroneServantInfoPatch
     {
-        static void Postfix(ServantInfoEventSystem_Server __instance, Entity throneEntity,
-            ref FixedList4096Bytes<ServantInfoEvent.Response.Entry> entries)
+        static void Postfix(Entity throneEntity, ref FixedList4096Bytes<ServantInfoEvent.Response.Entry> entries)
         {
             if (!Core.HasInitialized)
                 return;
             try
             {
-                ClanThroneServants.AddMissingEntries(__instance, throneEntity, ref entries);
+                ClanThroneServants.AddMissingEntries(throneEntity, ref entries);
             }
             catch (Exception e)
             {

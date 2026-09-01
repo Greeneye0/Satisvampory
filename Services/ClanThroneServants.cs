@@ -35,28 +35,10 @@ namespace Satisvampory.Services
             return true;
         }
 
-        public static void AddMissingServants(Entity throne, ref NativeList<Entity> result)
-        {
-            if (!result.IsCreated || !TryGetSharePlots(throne, out var home, out var plots))
-                return;
-            var found = CollectAlive(plots);
-            var added = 0;
-            for (var i = 0; i < found.Count; i++)
-            {
-                var servant = found[i].servant;
-                if (ListHas(ref result, servant))
-                    continue;
-                result.Add(ref servant);
-                added++;
-            }
-            if (added > 0)
-                DestDebugLog.Note("throne", home, 0, "share servants +" + added + " plots=" + plots.Count);
-        }
-
-        public static void AddMissingEntries(ServantInfoEventSystem_Server system, Entity throne,
+        public static void AddMissingEntries(Entity throne,
             ref FixedList4096Bytes<ServantInfoEvent.Response.Entry> entries)
         {
-            if (system == null || !TryGetSharePlots(throne, out var home, out var plots))
+            if (!TryGetSharePlots(throne, out var home, out var plots))
                 return;
             var found = CollectAlive(plots);
             var added = 0;
@@ -68,11 +50,16 @@ namespace Satisvampory.Services
                 if (EntriesHave(ref entries, servant))
                     continue;
                 var station = found[i].station;
-                system.AddEntry(ref entries, servant, throne, ref station);
+                var state = StateOf(servant, ref station);
+                var entry = ServantInfoEvent.Response.Entry.Create(Core.EntityManager, servant, ref station, state);
+                entries.Add(ref entry);
                 added++;
             }
             if (added > 0)
+            {
                 DestDebugLog.Note("throne", home, 0, "share entries +" + added + " total=" + entries.Length);
+                Core.Log.LogInfo("ClanShare throne plot " + home + " extra servants +" + added + " total=" + entries.Length);
+            }
         }
 
         public static void HonorMissionState(Entity servant, ref ServantInfoEvent.Response.ServantState state)
@@ -83,6 +70,17 @@ namespace Satisvampory.Services
                 return;
             if (servant.Read<ServantData>().IsOnMission)
                 state = ServantInfoEvent.Response.ServantState.AwayOnHunt;
+        }
+
+        static ServantInfoEvent.Response.ServantState StateOf(Entity servant, ref ServantCoffinstation station)
+        {
+            var state = ServantInfoEvent.Response.ServantState.Free;
+            if (station.Injury.GuidHash != 0)
+                state = ServantInfoEvent.Response.ServantState.Injured;
+            else if (servant.Has<ServantHasItemsInInventory>())
+                state = ServantInfoEvent.Response.ServantState.HasItemInInventory;
+            HonorMissionState(servant, ref state);
+            return state;
         }
 
         public static bool StartQueryNeedsShare(ServantMissionActionSystem system)
@@ -216,14 +214,6 @@ namespace Satisvampory.Services
                 query.Dispose();
             }
             return list;
-        }
-
-        static bool ListHas(ref NativeList<Entity> list, Entity servant)
-        {
-            for (var i = 0; i < list.Length; i++)
-                if (list[i] == servant)
-                    return true;
-            return false;
         }
 
         static bool EntriesHave(ref FixedList4096Bytes<ServantInfoEvent.Response.Entry> entries, Entity servant)
