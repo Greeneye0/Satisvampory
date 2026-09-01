@@ -78,7 +78,7 @@ namespace Satisvampory.Services
 
         public bool ToggleConveyor(ulong playerId = WorldId) => FlipFlag(playerId, static s => s.Conveyor, static (s, v) => { s.Conveyor = v; return s; });
 
-        const int WorldId = 0;
+        internal const int WorldId = 0;
 
         static readonly string ConfigDir = Path.Combine(BepInEx.Paths.ConfigPath, MyPluginInfo.PLUGIN_NAME);
         static readonly string SettingsFile = Path.Combine(ConfigDir, "playerSettings.json");
@@ -219,13 +219,13 @@ namespace Satisvampory.Services
             }
         }
 
-        void MarkDirty()
+        internal void MarkDirty()
         {
             saveDirty = true;
             ClanTreasuryLend.BumpSettings();
         }
 
-        bool TryRow(ulong id, out SettingsRow settings) => playerSettings.TryGetValue(id, out settings);
+        internal bool TryRow(ulong id, out SettingsRow settings) => playerSettings.TryGetValue(id, out settings);
 
         public void FlushSettings(bool force = false)
         {
@@ -250,7 +250,7 @@ namespace Satisvampory.Services
             }
         }
 
-        SettingsRow GetOrCreate(ulong platformId)
+        internal SettingsRow GetOrCreate(ulong platformId)
         {
             if (!playerSettings.TryGetValue(platformId, out var settings))
                 settings = new SettingsRow();
@@ -269,13 +269,13 @@ namespace Satisvampory.Services
             return settings;
         }
 
-        void Put(ulong platformId, SettingsRow settings)
+        internal void Put(ulong platformId, SettingsRow settings)
         {
             playerSettings[platformId] = settings;
             MarkDirty();
         }
 
-        SettingsRow Snapshot(ulong id, bool create)
+        internal SettingsRow Snapshot(ulong id, bool create)
         {
             if (playerSettings.TryGetValue(id, out var row))
                 return row;
@@ -329,7 +329,6 @@ namespace Satisvampory.Services
 
         internal Dictionary<ulong, SettingsRow> Rows => playerSettings;
         internal SettingsRow Blank => defaultSettings;
-        internal bool TryRow(ulong id, out SettingsRow settings) => playerSettings.TryGetValue(id, out settings);
         public bool IsRrGlobalEnabled(ulong playerId) => SettingsExtras.IsRrGlobalEnabled(playerId);
         public bool ToggleRrGlobal(ulong playerId = WorldId) => SettingsExtras.ToggleRrGlobal(playerId);
         public bool IsRrGlobalServerAllowed() => SettingsExtras.IsRrGlobalServerAllowed();
@@ -357,11 +356,11 @@ namespace Satisvampory.Services
         public void SetHeartFuelOptOut(bool optedOut, params string[] heartKeys) => SettingsExtras.SetHeartFuelOptOut(optedOut, heartKeys);
         public bool IsAutoEnabled(ulong platformId) => SettingsExtras.IsAutoEnabled(platformId);
         public bool ToggleAuto(ulong platformId) => SettingsExtras.ToggleAuto(platformId);
-        public bool TryParseAutoFilter(string value, out AutoFilter filter) => SettingsExtras.TryParseAutoFilter(value, out filter);
+        public static bool TryParseAutoFilter(string value, out AutoFilter filter) => SettingsExtras.TryParseAutoFilter(value, out filter);
         public AutoFilter GetAutoFilter(ulong platformId) => SettingsExtras.GetAutoFilter(platformId);
         public AutoFilter SetAutoFilter(ulong platformId, AutoFilter filter) => SettingsExtras.SetAutoFilter(platformId, filter);
         public void SetAutoOnWithFilter(ulong platformId, AutoFilter filter) => SettingsExtras.SetAutoOnWithFilter(platformId, filter);
-        public bool TryParseNotifyMode(string value, out NotifyMode mode) => SettingsExtras.TryParseNotifyMode(value, out mode);
+        public static bool TryParseNotifyMode(string value, out NotifyMode mode) => SettingsExtras.TryParseNotifyMode(value, out mode);
         public NotifyMode GetNotifyMode(ulong platformId) => SettingsExtras.GetNotifyMode(platformId);
         public NotifyMode SetNotifyMode(ulong platformId, NotifyMode mode) => SettingsExtras.SetNotifyMode(platformId, mode);
         public float GetRadius(ulong platformId) => SettingsExtras.GetRadius(platformId);

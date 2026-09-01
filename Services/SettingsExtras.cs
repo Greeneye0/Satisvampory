@@ -10,13 +10,13 @@ namespace Satisvampory.Services
         static PlayerSettingsService S => Core.PlayerSettings;
 
         internal static bool IsRrGlobalEnabled(ulong playerId) =>
-            S.Snapshot(playerId, false).RrGlobal && (!S.TryRow(WorldId, out var g) || g.RrGlobalAllow);
+            S.Snapshot(playerId, false).RrGlobal && (!S.TryRow(PlayerSettingsService.WorldId, out var g) || g.RrGlobalAllow);
 
-        internal static bool ToggleRrGlobal(ulong playerId = WorldId)
+        internal static bool ToggleRrGlobal(ulong playerId = PlayerSettingsService.WorldId)
         {
             if (!S.TryRow(playerId, out var settings))
                 settings = new SettingsRow();
-            if (playerId == WorldId)
+            if (playerId == PlayerSettingsService.WorldId)
             {
                 settings.RrGlobalAllow = !settings.RrGlobalAllow;
                 S.Put(playerId, settings);
@@ -33,7 +33,7 @@ namespace Satisvampory.Services
         
         internal static int GetPullReserve(ulong playerId, PrefabGUID item = default)
         {
-            if (!IsDontPullLastEnabled(playerId)) return 0;
+            if (!S.IsDontPullLastEnabled(playerId)) return 0;
             if (!S.TryRow(playerId, out var settings))
                 settings = S.Blank;
             if (item.GuidHash != 0 && settings.ItemReserves != null &&
@@ -187,18 +187,18 @@ namespace Satisvampory.Services
 
         internal static bool IsGlobalSalvageEnabled() => !S.TryRow(0, out var settings) || settings.Salvage;
 
-        internal static string S.PlotSalvageKey(int territoryId) => territoryId.ToString();
+        internal static string PlotSalvageKey(int territoryId) => territoryId.ToString();
 
         internal static bool GetPlotSalvageFlag(ulong heartOwnerId, int territoryId) =>
             S.TryRow(heartOwnerId, out var settings) && settings.PlotSalvage != null
-            && settings.PlotSalvage.TryGetValue(S.PlotSalvageKey(territoryId), out var on) && on;
+            && settings.PlotSalvage.TryGetValue(PlotSalvageKey(territoryId), out var on) && on;
 
         internal static bool TogglePlotSalvage(ulong heartOwnerId, int territoryId)
         {
             if (!S.Rows.TryGetValue(heartOwnerId, out var settings))
                 settings = new SettingsRow();
             settings.PlotSalvage ??= new Dictionary<string, bool>();
-            var key = S.PlotSalvageKey(territoryId);
+            var key = PlotSalvageKey(territoryId);
             var next = !(settings.PlotSalvage.TryGetValue(key, out var on) && on);
             settings.PlotSalvage[key] = next;
             S.Rows[heartOwnerId] = settings;
@@ -206,19 +206,19 @@ namespace Satisvampory.Services
             return next;
         }
 
-        internal static string S.HeartFeedKey(int territoryId) => territoryId.ToString();
+        internal static string HeartFeedKey(int territoryId) => territoryId.ToString();
 
         /// <summary>Heart auto-feed is ON by default when the plot has no stored flag.</summary>
         internal static bool IsHeartFeedEnabled(ulong heartOwnerId, int territoryId) =>
             !S.TryRow(heartOwnerId, out var settings) || settings.HeartFeed == null
-            || !settings.HeartFeed.TryGetValue(S.HeartFeedKey(territoryId), out var on) || on;
+            || !settings.HeartFeed.TryGetValue(HeartFeedKey(territoryId), out var on) || on;
 
         internal static bool ToggleHeartFeed(ulong heartOwnerId, int territoryId)
         {
             if (!S.Rows.TryGetValue(heartOwnerId, out var settings))
                 settings = new SettingsRow();
             settings.HeartFeed ??= new Dictionary<string, bool>();
-            var key = S.HeartFeedKey(territoryId);
+            var key = HeartFeedKey(territoryId);
             var current = !settings.HeartFeed.TryGetValue(key, out var on) || on;
             var next = !current;
             settings.HeartFeed[key] = next;
@@ -231,7 +231,7 @@ namespace Satisvampory.Services
         {
             if (string.IsNullOrEmpty(heartKey))
                 return false;
-            if (!S.TryRow(WorldId, out var settings) || settings.HeartFuelSeeded == null)
+            if (!S.TryRow(PlayerSettingsService.WorldId, out var settings) || settings.HeartFuelSeeded == null)
                 return false;
             return settings.HeartFuelSeeded.Contains(heartKey);
         }
@@ -259,7 +259,7 @@ namespace Satisvampory.Services
         {
             if (string.IsNullOrEmpty(heartKey))
                 return false;
-            if (!S.TryRow(WorldId, out var settings) || settings.HeartFuelOptOut == null)
+            if (!S.TryRow(PlayerSettingsService.WorldId, out var settings) || settings.HeartFuelOptOut == null)
                 return false;
             return settings.HeartFuelOptOut.Contains(heartKey);
         }
@@ -302,7 +302,7 @@ namespace Satisvampory.Services
             return s.AutoScoop;
         }
 
-        internal static static bool TryParseAutoFilter(string value, out AutoFilter filter)
+        internal static bool TryParseAutoFilter(string value, out AutoFilter filter)
         {
             filter = AutoFilter.Around;
             if (string.IsNullOrWhiteSpace(value))
@@ -343,7 +343,7 @@ namespace Satisvampory.Services
             S.Put(platformId, s);
         }
 
-        internal static static bool TryParseNotifyMode(string value, out NotifyMode mode)
+        internal static bool TryParseNotifyMode(string value, out NotifyMode mode)
         {
             mode = NotifyMode.Manual;
             if (string.IsNullOrWhiteSpace(value))
@@ -527,7 +527,7 @@ namespace Satisvampory.Services
             enabled = false;
             if (string.IsNullOrEmpty(clanKey))
                 return false;
-            if (!S.TryRow(WorldId, out var settings) || settings.ClanShareByClan == null)
+            if (!S.TryRow(PlayerSettingsService.WorldId, out var settings) || settings.ClanShareByClan == null)
                 return false;
             return settings.ClanShareByClan.TryGetValue(clanKey, out enabled);
         }
@@ -551,19 +551,19 @@ namespace Satisvampory.Services
             return next;
         }
 
-        internal static string S.TerritoryExcludeKey(int territoryId) => "t" + territoryId;
+        internal static string TerritoryExcludeKey(int territoryId) => "t" + territoryId;
 
         internal static bool IsTerritoryClanShareExcluded(int territoryId)
         {
-            if (!S.TryRow(WorldId, out var settings) || settings.ClanShareExcludedTerritories == null)
+            if (!S.TryRow(PlayerSettingsService.WorldId, out var settings) || settings.ClanShareExcludedTerritories == null)
                 return false;
-            return settings.ClanShareExcludedTerritories.Contains(S.TerritoryExcludeKey(territoryId));
+            return settings.ClanShareExcludedTerritories.Contains(TerritoryExcludeKey(territoryId));
         }
 
         internal static bool ToggleTerritoryClanShareExclude(int territoryId)
         {
             var settings = S.GetGlobalMutable();
-            var key = S.TerritoryExcludeKey(territoryId);
+            var key = TerritoryExcludeKey(territoryId);
             var excluded = settings.ClanShareExcludedTerritories.Contains(key);
             if (excluded)
                 settings.ClanShareExcludedTerritories.Remove(key);
@@ -580,7 +580,7 @@ namespace Satisvampory.Services
         {
             if (string.IsNullOrEmpty(key))
                 return false;
-            if (!S.TryRow(WorldId, out var settings) || settings.StarterKitSeeded == null)
+            if (!S.TryRow(PlayerSettingsService.WorldId, out var settings) || settings.StarterKitSeeded == null)
                 return false;
             return settings.StarterKitSeeded.Contains(key);
         }
@@ -608,7 +608,7 @@ namespace Satisvampory.Services
         {
             if (string.IsNullOrEmpty(key))
                 return false;
-            if (!S.TryRow(WorldId, out var settings) || settings.StarterKitChestSeeded == null)
+            if (!S.TryRow(PlayerSettingsService.WorldId, out var settings) || settings.StarterKitChestSeeded == null)
                 return false;
             return settings.StarterKitChestSeeded.Contains(key);
         }
@@ -636,7 +636,7 @@ namespace Satisvampory.Services
         {
             if (string.IsNullOrEmpty(key))
                 return false;
-            if (!S.TryRow(WorldId, out var settings) || settings.StarterKitChestOptOut == null)
+            if (!S.TryRow(PlayerSettingsService.WorldId, out var settings) || settings.StarterKitChestOptOut == null)
                 return false;
             return settings.StarterKitChestOptOut.Contains(key);
         }
@@ -669,19 +669,19 @@ namespace Satisvampory.Services
             S.MarkDirty();
         }
 
-        internal static string S.NormalizeGroupKey(string name)
+        internal static string NormalizeGroupKey(string name)
         {
             return ItemGroupService.NormalizeName(name);
         }
 
-        internal static bool S.HasItemGroup(ulong playerId, string name)
+        internal static bool HasItemGroup(ulong playerId, string name)
         {
             if (!S.Rows.TryGetValue(playerId, out var settings) || settings.ItemGroups == null)
                 return false;
-            var key = S.NormalizeGroupKey(name);
+            var key = NormalizeGroupKey(name);
             foreach (var existing in settings.ItemGroups.Keys)
             {
-                if (S.NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                     return true;
             }
             return false;
@@ -702,11 +702,11 @@ namespace Satisvampory.Services
         {
             if (!S.Rows.TryGetValue(playerId, out var settings) || settings.ItemGroups == null)
                 yield break;
-            var key = S.NormalizeGroupKey(name);
+            var key = NormalizeGroupKey(name);
             string storedKey = null;
             foreach (var existing in settings.ItemGroups.Keys)
             {
-                if (S.NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                 {
                     storedKey = existing;
                     break;
@@ -734,8 +734,8 @@ namespace Satisvampory.Services
                 settings = new SettingsRow();
             settings.ItemGroups ??= new Dictionary<string, List<string>>();
             settings.ItemGroupNames ??= new Dictionary<string, Dictionary<string, string>>();
-            var key = S.NormalizeGroupKey(name);
-            if (S.HasItemGroup(playerId, key) || settings.ItemGroups.ContainsKey(key))
+            var key = NormalizeGroupKey(name);
+            if (HasItemGroup(playerId, key) || settings.ItemGroups.ContainsKey(key))
                 return false;
             settings.ItemGroups[key] = new List<string>();
             settings.ItemGroupNames[key] = new Dictionary<string, string>();
@@ -748,11 +748,11 @@ namespace Satisvampory.Services
         {
             if (!S.Rows.TryGetValue(playerId, out var settings) || settings.ItemGroups == null)
                 return false;
-            var key = S.NormalizeGroupKey(name);
+            var key = NormalizeGroupKey(name);
             string storedKey = null;
             foreach (var existing in settings.ItemGroups.Keys)
             {
-                if (S.NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                 {
                     storedKey = existing;
                     break;
@@ -773,11 +773,11 @@ namespace Satisvampory.Services
                 settings = new SettingsRow();
             settings.ItemGroups ??= new Dictionary<string, List<string>>();
             settings.ItemGroupNames ??= new Dictionary<string, Dictionary<string, string>>();
-            var key = S.NormalizeGroupKey(name);
+            var key = NormalizeGroupKey(name);
             string storedKey = key;
             foreach (var existing in settings.ItemGroups.Keys)
             {
-                if (S.NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                 {
                     storedKey = existing;
                     break;
@@ -806,11 +806,11 @@ namespace Satisvampory.Services
         {
             if (!S.Rows.TryGetValue(playerId, out var settings) || settings.ItemGroups == null)
                 return false;
-            var key = S.NormalizeGroupKey(name);
+            var key = NormalizeGroupKey(name);
             string storedKey = null;
             foreach (var existing in settings.ItemGroups.Keys)
             {
-                if (S.NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                 {
                     storedKey = existing;
                     break;
@@ -881,10 +881,10 @@ namespace Satisvampory.Services
         {
             if (!S.Rows.TryGetValue(playerId, out var settings) || settings.DeletedGroups == null)
                 return false;
-            var key = S.NormalizeGroupKey(name);
+            var key = NormalizeGroupKey(name);
             foreach (var existing in settings.DeletedGroups)
             {
-                if (S.NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                     return true;
             }
             return false;
@@ -894,40 +894,40 @@ namespace Satisvampory.Services
         {
             if (!S.Rows.TryGetValue(playerId, out var settings) || settings.OverlaidGroups == null)
                 return false;
-            var key = S.NormalizeGroupKey(name);
+            var key = NormalizeGroupKey(name);
             foreach (var existing in settings.OverlaidGroups)
             {
-                if (S.NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                     return true;
             }
             return false;
         }
 
-        internal static bool S.ListContainsNormalized(List<string> list, string key)
+        internal static bool ListContainsNormalized(List<string> list, string key)
         {
             if (list == null)
                 return false;
             foreach (var existing in list)
             {
-                if (S.NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                     return true;
             }
             return false;
         }
 
-        internal static void S.ListAddNormalized(List<string> list, string key)
+        internal static void ListAddNormalized(List<string> list, string key)
         {
-            if (!S.ListContainsNormalized(list, key))
+            if (!ListContainsNormalized(list, key))
                 list.Add(key);
         }
 
-        internal static bool S.ListRemoveNormalized(List<string> list, string key)
+        internal static bool ListRemoveNormalized(List<string> list, string key)
         {
             if (list == null)
                 return false;
             for (var i = list.Count - 1; i >= 0; i--)
             {
-                if (S.NormalizeGroupKey(list[i]).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(list[i]).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                 {
                     list.RemoveAt(i);
                     return true;
@@ -936,13 +936,13 @@ namespace Satisvampory.Services
             return false;
         }
 
-        internal static string S.FindStoredGroupKey(Dictionary<string, List<string>> groups, string key)
+        internal static string FindStoredGroupKey(Dictionary<string, List<string>> groups, string key)
         {
             if (groups == null)
                 return null;
             foreach (var existing in groups.Keys)
             {
-                if (S.NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
+                if (NormalizeGroupKey(existing).Equals(key, System.StringComparison.OrdinalIgnoreCase))
                     return existing;
             }
             return null;
@@ -957,8 +957,8 @@ namespace Satisvampory.Services
             settings.OverlaidGroups ??= new List<string>();
             settings.DeletedGroups ??= new List<string>();
 
-            var key = S.NormalizeGroupKey(name);
-            var storedKey = S.FindStoredGroupKey(settings.ItemGroups, key) ?? key;
+            var key = NormalizeGroupKey(name);
+            var storedKey = FindStoredGroupKey(settings.ItemGroups, key) ?? key;
             var list = new List<string>();
             var names = new Dictionary<string, string>();
             foreach (var (guid, itemName) in members)
@@ -971,8 +971,8 @@ namespace Satisvampory.Services
             }
             settings.ItemGroups[storedKey] = list;
             settings.ItemGroupNames[storedKey] = names;
-            S.ListRemoveNormalized(settings.DeletedGroups, key);
-            S.ListAddNormalized(settings.OverlaidGroups, key);
+            ListRemoveNormalized(settings.DeletedGroups, key);
+            ListAddNormalized(settings.OverlaidGroups, key);
             S.Put(playerId, settings);
             S.MarkDirty();
         }
@@ -986,15 +986,15 @@ namespace Satisvampory.Services
             settings.OverlaidGroups ??= new List<string>();
             settings.DeletedGroups ??= new List<string>();
 
-            var key = S.NormalizeGroupKey(name);
-            var storedKey = S.FindStoredGroupKey(settings.ItemGroups, key);
+            var key = NormalizeGroupKey(name);
+            var storedKey = FindStoredGroupKey(settings.ItemGroups, key);
             if (storedKey != null)
             {
                 settings.ItemGroups.Remove(storedKey);
                 settings.ItemGroupNames?.Remove(storedKey);
             }
-            S.ListRemoveNormalized(settings.OverlaidGroups, key);
-            S.ListAddNormalized(settings.DeletedGroups, key);
+            ListRemoveNormalized(settings.OverlaidGroups, key);
+            ListAddNormalized(settings.DeletedGroups, key);
             S.Put(playerId, settings);
             S.MarkDirty();
             return true;
@@ -1009,14 +1009,14 @@ namespace Satisvampory.Services
             settings.OverlaidGroups ??= new List<string>();
             settings.DeletedGroups ??= new List<string>();
 
-            var key = S.NormalizeGroupKey(name);
-            var storedKey = S.FindStoredGroupKey(settings.ItemGroups, key);
+            var key = NormalizeGroupKey(name);
+            var storedKey = FindStoredGroupKey(settings.ItemGroups, key);
             if (storedKey != null)
             {
                 settings.ItemGroups.Remove(storedKey);
                 settings.ItemGroupNames?.Remove(storedKey);
             }
-            var changed = S.ListRemoveNormalized(settings.OverlaidGroups, key) | S.ListRemoveNormalized(settings.DeletedGroups, key) | (storedKey != null);
+            var changed = ListRemoveNormalized(settings.OverlaidGroups, key) | ListRemoveNormalized(settings.DeletedGroups, key) | (storedKey != null);
             S.Put(playerId, settings);
             S.MarkDirty();
             return changed;
@@ -1034,15 +1034,15 @@ namespace Satisvampory.Services
             var restored = new List<string>();
             foreach (var builtIn in builtInNames)
             {
-                var key = S.NormalizeGroupKey(builtIn);
-                var storedKey = S.FindStoredGroupKey(settings.ItemGroups, key);
+                var key = NormalizeGroupKey(builtIn);
+                var storedKey = FindStoredGroupKey(settings.ItemGroups, key);
                 if (storedKey != null)
                 {
                     settings.ItemGroups.Remove(storedKey);
                     settings.ItemGroupNames?.Remove(storedKey);
                 }
-                S.ListRemoveNormalized(settings.OverlaidGroups, key);
-                S.ListRemoveNormalized(settings.DeletedGroups, key);
+                ListRemoveNormalized(settings.OverlaidGroups, key);
+                ListRemoveNormalized(settings.DeletedGroups, key);
                 restored.Add(key);
             }
             S.Put(playerId, settings);
