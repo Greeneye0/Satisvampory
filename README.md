@@ -2,7 +2,7 @@
 
 Server-only V Rising 1.1 BepInEx plugin. Castle logistics (named dest, ClanShare, conveyors, reserve/caps, treasury lend) plus ground scoop.
 
-Current version **1.0.24**.
+Current version **1.0.41**.
 
 Satisvampory should be the only logistics/scoop plugin in `BepInEx/plugins`.
 
@@ -14,7 +14,7 @@ In game: **`.s help`**. Prefix **`.s`**. Admin **`.sg`**. Chest floors are **`.s
 
 ## New castle (ClanShare)
 
-With **`.s cs`** on, a brand-new plot is already on the clan island. `.stash` and RR (double-tap R / `.s ss`) work as soon as the heart is placed — they dump to clan chests, not only this plot.
+With **`.s cs`** on, a brand-new plot is already on the clan island. `.stash` and RR (double-tap R / `.s ss`) work as soon as the heart is placed — they dump to clan chests, not only this plot. Sitting any included clan **throne** lists and sends servants from every included clan plot (`.s cse` plots stay local).
 
 Stand on the plot while you build. Covering only runs while a **clan member** is standing there (castle guests do not trigger clan covering or pull from other clan plots). If clan **reserves** are still met at the other castles, the kit **stays** when you leave.
 

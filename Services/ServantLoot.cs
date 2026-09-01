@@ -231,10 +231,14 @@ namespace Satisvampory.Services
                     }
                     if (!first) sb.Append(',');
                     first = false;
+                    var onMission = servant != Entity.Null && Core.EntityManager.Exists(servant)
+                        && servant.Has<ServantData>() && servant.Read<ServantData>().IsOnMission;
                     sb.Append("{\"plot\":").Append(plot)
                         .Append(",\"name\":\"").Append(DebugPeekServiceEsc(name)).Append('"')
+                        .Append(",\"state\":\"").Append(station.State.ToString()).Append('"')
                         .Append(",\"stacks\":").Append(stacks)
                         .Append(",\"kinds\":").Append(kinds)
+                        .Append(",\"onMission\":").Append(onMission ? "true" : "false")
                         .Append(",\"hasServant\":").Append(servant != Entity.Null && Core.EntityManager.Exists(servant) ? "true" : "false")
                         .Append('}');
                 }

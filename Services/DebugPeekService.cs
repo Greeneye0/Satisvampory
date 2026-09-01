@@ -126,7 +126,7 @@ namespace Satisvampory.Services
             switch (op)
             {
                 case "help":
-                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\"],"
+                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\"],"
                         + "\"req\":\"" + Esc(ReqPath) + "\",\"res\":\"" + Esc(ResPath) + "\","
                         + "\"hint\":\"{\\\"op\\\":\\\"log\\\",\\\"name\\\":\\\"dupe\\\"}\","
                         + "\"sim\":\"dry-run covering as if you are standing on plot. apply:true actually moves\","
@@ -139,6 +139,7 @@ namespace Satisvampory.Services
                         + "\"upgrade\":\"heart upgrade costs vs have on plot\","
                         + "\"settings\":\"cs/asm/hf/cse/conveyor/cloop for plot owner\","
                         + "\"servants\":\"list coffins/servants and loot counts (plot:N optional)\","
+                        + "\"thrones\":\"list thrones and ClanShare-visible servant counts (plot:N optional)\","
                         + "\"servantstash\":\"stash all returned servants now (plot:N optional)\"}";
                 case "players":
                     return PeekPlayers();
@@ -175,6 +176,8 @@ namespace Satisvampory.Services
                     return "{\"cleared\":" + ClanTreasuryLend.DebugUnstick(plot) + ",\"plot\":" + plot + "}";
                 case "servants":
                     return Core.Stash.DebugListServants(plot);
+                case "thrones":
+                    return ClanThroneServants.DebugDump(plot);
                 case "servantstash":
                 case "asmstash":
                     return Core.Stash.DebugStashAllServants(plot);
