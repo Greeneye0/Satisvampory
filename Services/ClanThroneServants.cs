@@ -4,6 +4,7 @@ using ProjectM.CastleBuilding;
 using ProjectM.Network;
 using ProjectM.Shared;
 using ProjectM.Shared.Systems;
+using Stunlock.Core;
 using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
@@ -22,6 +23,7 @@ namespace Satisvampory.Services
         static readonly Dictionary<ulong, int> selectedPlot = new();
         static readonly Dictionary<ulong, PendingPick> pendingPick = new();
         static readonly Dictionary<int, Entity> throneByPlot = new();
+        static readonly Dictionary<int, Entity> learnedThroneByPlot = new();
         static DateTime throneCacheAt;
         static readonly TimeSpan PickTtl = TimeSpan.FromMinutes(2);
         static readonly List<(Entity character, Entity target, NetworkId nid)> interactRestore = new();
@@ -43,6 +45,7 @@ namespace Satisvampory.Services
 
         public static void RewriteInfoRequests(ServantInfoEventSystem_Server system)
         {
+            RestoreInteract();
             interactRestore.Clear();
             infoEntities.Clear();
             if (system == null || !Core.HasInitialized)
@@ -60,7 +63,6 @@ namespace Satisvampory.Services
             {
                 Core.LogException(e);
             }
-            RestoreInteract();
         }
 
         public static void RewriteMissionEvents(ServantMissionActionSystem system)
@@ -230,6 +232,7 @@ namespace Satisvampory.Services
                     .Append(",\"alive\":").Append(CountAlive(kv.Key))
                     .Append(",\"nid\":\"").Append(Esc(nid)).Append('"')
                     .Append(",\"useThrone\":").Append(kv.Value.Has<UseThrone>() ? "true" : "false")
+                    .Append(",\"heart\":").Append(kv.Value.Has<CastleHeart>() ? "true" : "false")
                     .Append(",\"missions\":").Append(kv.Value.Has<ActiveServantMission>() ? "true" : "false")
                     .Append('}');
             }
@@ -277,6 +280,7 @@ namespace Satisvampory.Services
                 lastSkip = "no-request";
                 return;
             }
+            LearnIncomingThrone(entity);
             if (!TryTargetFromEvent(entity, out var target, out var plot, out var sitting, out var skip))
             {
                 lastSkip = skip;
@@ -414,22 +418,66 @@ namespace Satisvampory.Services
             lastResponseCount = -1;
             lastResponseNames = "";
             for (var i = 0; i < infoEntities.Count; i++)
-            {
-                var entity = infoEntities[i];
-                if (entity == Entity.Null || !Core.EntityManager.Exists(entity) || !entity.Has<ServantInfoEvent.Response>())
-                    continue;
-                var response = entity.Read<ServantInfoEvent.Response>();
-                lastResponseCount = response.Result.Length;
-                var sb = new StringBuilder();
-                for (var e = 0; e < response.Result.Length && e < 12; e++)
-                {
-                    if (e > 0) sb.Append(',');
-                    sb.Append(response.Result[e].Name.ToString());
-                }
-                lastResponseNames = sb.ToString();
-                DestDebugLog.Note("throne", lastTo, 0, "response n=" + lastResponseCount + " " + lastResponseNames + " patched=" + lastPatched);
-            }
+                ReadResponse(infoEntities[i]);
             infoEntities.Clear();
+            if (lastResponseCount >= 0)
+                return;
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<ServantInfoEvent.Response>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                    ReadResponse(rows[i]);
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
+        }
+
+        static void ReadResponse(Entity entity)
+        {
+            if (entity == Entity.Null || !Core.EntityManager.Exists(entity) || !entity.Has<ServantInfoEvent.Response>())
+                return;
+            var response = entity.Read<ServantInfoEvent.Response>();
+            lastResponseCount = response.Result.Length;
+            var sb = new StringBuilder();
+            for (var e = 0; e < response.Result.Length && e < 12; e++)
+            {
+                if (e > 0) sb.Append(',');
+                sb.Append(response.Result[e].Name.ToString());
+            }
+            lastResponseNames = sb.ToString();
+            DestDebugLog.Note("throne", lastTo, 0, "response n=" + lastResponseCount + " " + lastResponseNames + " patched=" + lastPatched);
+        }
+
+        static void LearnIncomingThrone(Entity requestEntity)
+        {
+            var nid = requestEntity.Read<ServantInfoEvent.Request>().Throne;
+            if (!Core.TryGetEntityFromNetworkId(nid, out var throne) || throne.Has<CastleHeart>() || throne.Has<PlayerCharacter>())
+                return;
+            var plot = Core.TerritoryService.GetTerritoryId(throne);
+            if (plot < 0 || !throne.Has<NetworkId>())
+                return;
+            learnedThroneByPlot[plot] = throne;
+            throneByPlot[plot] = throne;
+        }
+
+        public static void RemapGetEntries(ref Entity throneEntity)
+        {
+            if (lastSelected < 0 || throneEntity == Entity.Null)
+                return;
+            var want = FindThrone(lastSelected);
+            if (want == Entity.Null || want == throneEntity)
+                return;
+            throneEntity = want;
+            lastPatched += " getEntries=True";
         }
 
         static unsafe bool PatchThroneId(Entity entity, ComponentType type, Entity target, out int fromPlot)
@@ -453,9 +501,14 @@ namespace Satisvampory.Services
 
         static Entity FindThrone(int plot)
         {
+            if (learnedThroneByPlot.TryGetValue(plot, out var learned)
+                && learned != Entity.Null && Core.EntityManager.Exists(learned) && learned.Has<NetworkId>()
+                && !learned.Has<CastleHeart>())
+                return learned;
             RefreshThroneCache();
             if (throneByPlot.TryGetValue(plot, out var throne)
-                && throne != Entity.Null && Core.EntityManager.Exists(throne) && throne.Has<NetworkId>())
+                && throne != Entity.Null && Core.EntityManager.Exists(throne) && throne.Has<NetworkId>()
+                && !throne.Has<CastleHeart>())
                 return throne;
             return Entity.Null;
         }
@@ -472,8 +525,47 @@ namespace Satisvampory.Services
                 return;
             throneByPlot.Clear();
             throneCacheAt = DateTime.UtcNow;
-            RememberThrones(Il2CppType.Of<ActiveServantMission>());
             RememberThrones(Il2CppType.Of<UseThrone>());
+            RememberPrefabThrones();
+        }
+
+        static void RememberPrefabThrones()
+        {
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .WithOptions(EntityQueryOptions.IncludeDisabled)
+                .AddAll(new(Il2CppType.Of<PrefabGUID>(), ComponentType.AccessMode.ReadOnly))
+                .AddAll(new(Il2CppType.Of<CastleHeartConnection>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var throne = rows[i];
+                    if (throne == Entity.Null || !Core.EntityManager.Exists(throne) || !throne.Has<NetworkId>())
+                        continue;
+                    if (throne.Has<PlayerCharacter>() || throne.Has<CastleHeart>())
+                        continue;
+                    if (!throne.Has<PrefabGUID>())
+                        continue;
+                    var name = throne.Read<PrefabGUID>().LookupName();
+                    if (name == null || name.IndexOf("Throne", StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+                    var plot = Core.TerritoryService.GetTerritoryId(throne);
+                    if (plot < 0)
+                        continue;
+                    if (!throneByPlot.ContainsKey(plot))
+                        throneByPlot[plot] = throne;
+                }
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
         }
 
         static void RememberThrones(Il2CppSystem.Type component)
@@ -492,7 +584,7 @@ namespace Satisvampory.Services
                     var throne = rows[i];
                     if (throne == Entity.Null || !Core.EntityManager.Exists(throne) || !throne.Has<NetworkId>())
                         continue;
-                    if (throne.Has<PlayerCharacter>())
+                    if (throne.Has<PlayerCharacter>() || throne.Has<CastleHeart>())
                         continue;
                     var plot = Core.TerritoryService.GetTerritoryId(throne);
                     if (plot < 0)
