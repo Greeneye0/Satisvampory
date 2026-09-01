@@ -659,7 +659,7 @@ internal static class ScoopService
         try
         {
             // EntityManager.DestroyEntity does not replicate ItemPickup despawn;
-            // clients keep an F-to-pickup ghost. Use the same networked destroy as Kindred buffs.
+            // clients keep an F-to-pickup ghost. Networked destroy via TryRemoveBuff.
             DestroyUtility.Destroy(Core.EntityManager, drop, DestroyDebugReason.TryRemoveBuff);
             DropTracker.Forget(drop);
             return true;

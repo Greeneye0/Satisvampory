@@ -649,8 +649,8 @@ namespace Satisvampory.Services
         /// Name match after stripping whole s#/r# tokens and extra overflow/spoils/salvage/trash words.
         /// '+' splits AND-clauses. Spaces split OR names inside a clause (plurals fold).
         /// Item matches if EVERY '+' clause matches; a clause matches if ANY space-separated name
-        /// matches (Kindred group, ItemCategory token, or item-name/plural).
-        /// No '+': 1.6.1.35 type-word AND fallback when a token is weapon/armor/material.
+        /// matches (dest group, ItemCategory token, or item-name/plural).
+        /// No '+': type-word AND fallback when a token is weapon/armor/material.
         /// If '+' is present, '+' is the only AND; do not also AND on type-word across the string.
         /// Specificity: matching clause/token count, then matched length. Exact still ranks above this.
         /// </summary>

@@ -110,7 +110,7 @@ namespace Satisvampory.Services
             ["relic"] = GroupRelics,
         };
 
-        // 1.6.1.41: dest groups rebuilt every Kindred startup from PrefabCollection ItemData.
+        // Dest groups rebuilt at startup from PrefabCollection ItemData.
         // Flags first, then name/prefab overlay rules. No frozen GUID table. CSV is debug-only.
         // GBE alias = Greater Blood Essence (exact dest / find / pull). Not Blood Essence / potions.
         // FakeItem_ / Any * recipe placeholders are not stash dests and are omitted from unresolved chat.

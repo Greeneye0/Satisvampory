@@ -9,8 +9,8 @@ using Unity.Entities;
 namespace Satisvampory.Services
 {
     /// <summary>
-    /// Plot-keyed live entity lists (stations, braziers, spawners). Replaces the copied
-    /// per-service "query world, bucket by CastleHeartConnection" Kindred registries.
+    /// Plot-keyed live entity lists (stations, braziers, spawners). One query at scan,
+    /// then bucket by CastleHeartConnection instead of a per-service world walk.
     /// </summary>
     internal sealed class HeartBoundIndex
     {

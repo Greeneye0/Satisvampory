@@ -9,7 +9,7 @@ namespace Satisvampory.Services
 {
     /// <summary>
     /// Shared-castle chest lists keyed by plot. Group (s#/r#) and named (salvage/overflow/…)
-    /// filters live here so StashService is not a Kindred GetStashesOnTerritory fork.
+    /// filters live here so StashService does not own the scan.
     /// </summary>
     internal sealed class ChestIndex
     {

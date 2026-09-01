@@ -7,7 +7,7 @@ using Unity.Entities;
 namespace Satisvampory.Services
 {
     /// <summary>
-    /// .fi / .fc chest glow. Extracted so StashService is not a Kindred spotlight copy.
+    /// .fi / .fc chest glow. Owned here so StashService stays a dest façade.
     /// </summary>
     internal sealed class FindSpotlight
     {

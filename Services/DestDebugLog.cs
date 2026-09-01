@@ -75,7 +75,6 @@ namespace Satisvampory.Services
                 _dir = Path.Combine(Paths.BepInExRootPath, "Log");
                 Directory.CreateDirectory(_dir);
                 _path = Path.Combine(_dir, FileStem + ".log");
-                TryDeleteLegacyKindredLogs_NoLock();
                 _writer = NewWriter(FileMode.Append);
                 _writer.WriteLine($"{Stamp()} kind=boot via=boot plot=-1 item= FileVersion={MyPluginInfo.PLUGIN_VERSION}");
                 _writer.Flush();
@@ -93,17 +92,6 @@ namespace Satisvampory.Services
             {
                 AutoFlush = false
             };
-        }
-
-        static void TryDeleteLegacyKindredLogs_NoLock()
-        {
-            try
-            {
-                var leftovers = Directory.GetFiles(_dir, "KindredDest*.log");
-                for (var i = 0; i < leftovers.Length; i++)
-                    File.Delete(leftovers[i]);
-            }
-            catch { }
         }
 
         static void RotateIfNeeded_NoLock()

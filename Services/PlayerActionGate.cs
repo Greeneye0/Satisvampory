@@ -7,8 +7,7 @@ using Unity.Entities;
 namespace Satisvampory.Services
 {
     /// <summary>
-    /// Shared player/castle gates for .stash .pull empty-trash. Replaces the copied Kindred
-    /// downed/dead/combat/ally blocks in each command path.
+    /// Shared player/castle gates for .stash .pull empty-trash: downed, dead, combat, ally.
     /// </summary>
     internal static class PlayerActionGate
     {

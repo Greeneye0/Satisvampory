@@ -294,7 +294,6 @@ __pycache__/
 *.lutconfig
 build/
 dist/
-/KindredCommands.sln
 /*.sln
 /TODO.txt
 

@@ -1351,7 +1351,7 @@ namespace Satisvampory.Services
 
         /// <summary>
         /// Treasury-floor or unnamed chests are dest-compatible and must not starve conveyors.
-        /// Named chests (Kindred conveyor sources) are last-resort borrows only.
+        /// Named s#/r# chests are last-resort borrows only.
         /// </summary>
         static bool IsPreferredSourceStash(Entity stash)
         {
