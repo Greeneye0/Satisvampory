@@ -2,7 +2,7 @@
 
 Server-only V Rising 1.1 BepInEx plugin. Castle logistics (named dest, ClanShare, conveyors, reserve/caps, treasury lend) plus ground scoop.
 
-Current version **1.0.20**.
+Current version **1.0.21**.
 
 Satisvampory should be the only logistics/scoop plugin in `BepInEx/plugins`.
 
@@ -25,6 +25,10 @@ Stand on the plot while you build. Covering only runs while someone is standing 
 5. Place about **three large chests** on the treasury floor so the clan covering buffer can land (enough to place about 3 of whichever unlocked piece is hungriest per material; 1 if clan reserves are tight).
 
 Unnamed chests are fine. Named `s#` / `r#` belts can wait until the room exists.
+
+To **dismantle** a filled chest: empty it. Kit/covering will not restuff that chest for **5 minutes** (or leave the plot). A new chest is a new fill.
+
+To keep this castle **out of ClanShare**: stand on it as the heart owner and run **`.s cse`**. Standing there is then this plot only. Run `.s cse` again to include it.
 
 ## Install
 

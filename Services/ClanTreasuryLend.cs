@@ -138,8 +138,12 @@ namespace Satisvampory.Services
         static readonly Dictionary<int, List<Entity>> workstationsByPlot = new();
         static List<(int blueprint, bool start, List<(int guid, int amount)> costs)> blueprintCosts;
         static Dictionary<int, int> coveringCastle1x;
+        static readonly Dictionary<string, int> destStackCount = new();
+        static readonly Dictionary<string, DateTime> destEmptyHoldUntil = new();
+        static readonly HashSet<string> loggedEmptyHold = new();
         static bool loggedEmptySkip;
         const int BuildCoverCopies = 3;
+        const int EmptyHoldSeconds = 5 * 60;
 
         internal static bool HoldKitOverflow(int plot) =>
             plot >= 0 && holdKitOverflowPlots.Contains(plot);
@@ -432,6 +436,85 @@ namespace Satisvampory.Services
         }
 
         static long FailKey(int plot, int guid) => ((long)plot << 32) | (uint)guid;
+
+        static string DestHoldKey(int destPlot, Entity inventory)
+        {
+            var keys = KitChestKeys(destPlot, inventory);
+            if (keys != null && keys.Length > 0)
+                return keys[0];
+            return "inv" + inventory.Index + ":" + inventory.Version;
+        }
+
+        static int CountAnyStacks(Entity inv)
+        {
+            if (inv == Entity.Null || !Core.EntityManager.Exists(inv))
+                return 0;
+            if (!Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(inv, out var buf))
+                return 0;
+            var n = 0;
+            for (var i = 0; i < buf.Length; i++)
+            {
+                if (buf[i].ItemType.GuidHash == 0 || buf[i].Amount <= 0)
+                    continue;
+                n++;
+            }
+            return n;
+        }
+
+        static void NoteDestEmpties(int destPlot, List<Entity> destInvs)
+        {
+            if (destInvs == null)
+                return;
+            var now = DateTime.UtcNow;
+            for (var i = 0; i < destInvs.Count; i++)
+            {
+                var inv = destInvs[i];
+                var key = DestHoldKey(destPlot, inv);
+                var n = CountAnyStacks(inv);
+                destStackCount.TryGetValue(key, out var prev);
+                destStackCount[key] = n;
+                if (prev > 0 && n == 0)
+                {
+                    destEmptyHoldUntil[key] = now.AddSeconds(EmptyHoldSeconds);
+                    if (loggedEmptyHold.Add(key))
+                        Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} chest={key} emptied -- no kit/covering/self-sort dest for {EmptyHoldSeconds}s (unbuild ok)");
+                }
+                else if (n > 0)
+                {
+                    destEmptyHoldUntil.Remove(key);
+                    loggedEmptyHold.Remove(key);
+                }
+            }
+        }
+
+        static bool InEmptyHold(int destPlot, Entity inventory)
+        {
+            var key = DestHoldKey(destPlot, inventory);
+            if (!destEmptyHoldUntil.TryGetValue(key, out var until))
+                return false;
+            if (DateTime.UtcNow >= until)
+            {
+                destEmptyHoldUntil.Remove(key);
+                loggedEmptyHold.Remove(key);
+                return false;
+            }
+            return true;
+        }
+
+        static List<Entity> FilterEmptyHold(int destPlot, List<Entity> destInvs)
+        {
+            var list = new List<Entity>();
+            if (destInvs == null)
+                return list;
+            for (var i = 0; i < destInvs.Count; i++)
+            {
+                var inv = destInvs[i];
+                if (InEmptyHold(destPlot, inv))
+                    continue;
+                list.Add(inv);
+            }
+            return list;
+        }
 
         internal static IEnumerator Loop()
         {
@@ -1135,12 +1218,16 @@ namespace Satisvampory.Services
             HandleHeartFuel(destPlot, heart, clanIds, occupiedInClan);
 
             var destInvs = GetDestInventories(destPlot, out var destMode);
+            NoteDestEmpties(destPlot, destInvs);
             if (destInvs.Count == 0)
             {
                 if (warnedNoDest.Add(destPlot))
                     Core.Log.LogWarning($"[ClanTreasuryLend] no dest chest plot={destPlot} -- kit/upgrade skipped, fuel seed only");
                 return;
             }
+            destInvs = FilterEmptyHold(destPlot, destInvs);
+            if (destInvs.Count == 0)
+                return;
             if (destMode == "allShared" && stickyFailedAllSharedPlots.Contains(destPlot))
             {
                 if (loggedAllSharedPlotSkip.Add(destPlot))
@@ -2690,6 +2777,8 @@ namespace Satisvampory.Services
                         if (moves >= SelfSortMovesPerTick || surplus <= 0)
                             break;
                         if (dstInv.Equals(srcInv))
+                            continue;
+                        if (InEmptyHold(plot, dstInv))
                             continue;
                         if (!dstRank.StrictlyBetterDestThan(srcRank))
                             continue;
