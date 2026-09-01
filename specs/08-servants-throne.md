@@ -13,7 +13,7 @@ Do not give servant loot a different dest order than stash.
 
 ## `.s throne` / `.s hunt` (ClanShare hunt from this chair)
 
-Do **not** clone the hunt map. Fog of war, undiscovered zones, and zone clicks stay the **vanilla** throne map (same interaction). Satisvampory is server-only; a later **HuntClock** overlay may add a castle switcher and servant list, still using that vanilla map.
+Do **not** clone the hunt map. Fog of war, undiscovered zones, and zone clicks stay the **vanilla** throne map (same interaction). Satisvampory is server-only. **HuntClock 1.2** draws a castle-switch popup on that map (not a second map) and arms `.s hunt` / mailbox `hunt` for the next vanilla click. Snapshot: `debug/thrones-client.json`.
 
 ClanShare ON: sit **this** castle’s throne. Pick another clan plot’s servants. Click a **discovered** zone on this map. The server rewrites `SendOnMissionEvent` to that plot’s real throne + those servants (`MissionDataID` / `MapZoneId` stay the vanilla click).
 

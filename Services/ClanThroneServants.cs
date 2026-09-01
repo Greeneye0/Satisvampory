@@ -1,3 +1,4 @@
+using BepInEx;
 using Il2CppInterop.Runtime;
 using ProjectM;
 using ProjectM.CastleBuilding;
@@ -9,6 +10,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Text;
 using Unity.Collections;
@@ -275,6 +277,62 @@ namespace Satisvampory.Services
             return "Next click on this throne's map sends " + string.Join(", ", who)
                 + " from " + Core.TerritoryService.FormatPlotLabel(plot)
                 + ". Undiscovered zones stay fogged (vanilla map).";
+        }
+
+        internal static readonly string ClientJsonPath = Path.Combine(
+            BepInEx.Paths.ConfigPath, MyPluginInfo.PLUGIN_NAME, "debug", "thrones-client.json");
+
+        public static void WriteClientSnapshot()
+        {
+            if (!Core.HasInitialized)
+                return;
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(ClientJsonPath));
+                var sb = new StringBuilder();
+                sb.Append("{\"plots\":[");
+                var firstPlot = true;
+                foreach (var p in ConnectedPlayers())
+                {
+                    var standing = p.plot;
+                    if (standing < 0)
+                        continue;
+                    var ids = Core.TerritoryService.GetLogisticsTerritoryIds(standing);
+                    if (ids == null || ids.Count == 0)
+                        continue;
+                    for (var i = 0; i < ids.Count; i++)
+                    {
+                        var plot = ids[i];
+                        if (!firstPlot)
+                            sb.Append(',');
+                        firstPlot = false;
+                        sb.Append("{\"plot\":").Append(plot)
+                            .Append(",\"here\":").Append(plot == standing ? "true" : "false")
+                            .Append(",\"label\":\"").Append(Esc(Core.TerritoryService.FormatPlotLabel(plot))).Append('"')
+                            .Append(",\"servants\":[");
+                        var rows = AliveRows(plot);
+                        for (var s = 0; s < rows.Count; s++)
+                        {
+                            if (s > 0)
+                                sb.Append(',');
+                            sb.Append("{\"i\":").Append(s + 1)
+                                .Append(",\"name\":\"").Append(Esc(rows[s].Name)).Append('"')
+                                .Append(",\"nid\":\"").Append(Esc(rows[s].Nid.ToString())).Append("\"}");
+                        }
+                        sb.Append("]}");
+                    }
+                    break;
+                }
+                sb.Append("]}");
+                var tmp = ClientJsonPath + ".tmp";
+                File.WriteAllText(tmp, sb.ToString());
+                File.Copy(tmp, ClientJsonPath, true);
+                File.Delete(tmp);
+            }
+            catch (Exception e)
+            {
+                Core.LogException(e);
+            }
         }
 
         public static string DebugHunt(int plot, string arg)
