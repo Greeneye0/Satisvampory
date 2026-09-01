@@ -5,6 +5,7 @@ using ProjectM.Network;
 using ProjectM.Shared.Systems;
 using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Text;
 using Unity.Collections;
 using Unity.Entities;
@@ -217,33 +218,27 @@ namespace Satisvampory.Services
         {
             if (!entity.Has<ServantInfoEvent.Request>() || !TryTargetFromEvent(entity, out var target, out var plot))
                 return;
-            var req = entity.Read<ServantInfoEvent.Request>();
-            if (!Retarget(ref req.Throne, target))
+            if (!PatchThroneId(entity, new ComponentType(Il2CppType.Of<ServantInfoEvent.Request>()), target, out var fromPlot))
                 return;
-            entity.Write(req);
-            DestDebugLog.Note("throne", plot, 0, "info -> plot " + plot);
+            DestDebugLog.Note("throne", plot, 0, "info " + fromPlot + " -> " + plot);
         }
 
         static void RewriteStart(Entity entity)
         {
             if (!entity.Has<SendOnMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot))
                 return;
-            var ev = entity.Read<SendOnMissionEvent>();
-            if (!Retarget(ref ev.Throne, target))
+            if (!PatchThroneId(entity, new ComponentType(Il2CppType.Of<SendOnMissionEvent>()), target, out var fromPlot))
                 return;
-            entity.Write(ev);
-            DestDebugLog.Note("throne", plot, 0, "send -> plot " + plot);
+            DestDebugLog.Note("throne", plot, 0, "send " + fromPlot + " -> " + plot);
         }
 
         static void RewriteAbort(Entity entity)
         {
             if (!entity.Has<AbortMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot))
                 return;
-            var ev = entity.Read<AbortMissionEvent>();
-            if (!Retarget(ref ev.Throne, target))
+            if (!PatchThroneId(entity, new ComponentType(Il2CppType.Of<AbortMissionEvent>()), target, out var fromPlot))
                 return;
-            entity.Write(ev);
-            DestDebugLog.Note("throne", plot, 0, "abort -> plot " + plot);
+            DestDebugLog.Note("throne", plot, 0, "abort " + fromPlot + " -> " + plot);
         }
 
         static bool TryTargetFromEvent(Entity entity, out Entity target, out int plot)
@@ -273,12 +268,22 @@ namespace Satisvampory.Services
             return target != Entity.Null && Core.EntityManager.Exists(target) && target.Has<NetworkId>();
         }
 
-        static bool Retarget(ref NetworkId throneId, Entity target)
+        static unsafe bool PatchThroneId(Entity entity, ComponentType type, Entity target, out int fromPlot)
         {
+            fromPlot = -1;
             var want = target.Read<NetworkId>();
-            if (throneId == want)
+            var raw = Core.EntityManager.GetComponentDataRawRW(entity, type.TypeIndex);
+            if (raw == null)
                 return false;
-            throneId = want;
+            var ptr = new IntPtr(raw);
+            var current = Marshal.PtrToStructure<NetworkId>(ptr);
+            if (Core.TryGetEntityFromNetworkId(current, out var currentThrone))
+            {
+                fromPlot = Core.TerritoryService.GetTerritoryId(currentThrone);
+                if (fromPlot == Core.TerritoryService.GetTerritoryId(target))
+                    return false;
+            }
+            Marshal.StructureToPtr(want, ptr, false);
             return true;
         }
 
@@ -303,8 +308,8 @@ namespace Satisvampory.Services
                 return;
             throneByPlot.Clear();
             throneCacheAt = DateTime.UtcNow;
-            RememberThrones(Il2CppType.Of<UseThrone>());
             RememberThrones(Il2CppType.Of<ActiveServantMission>());
+            RememberThrones(Il2CppType.Of<UseThrone>());
         }
 
         static void RememberThrones(Il2CppSystem.Type component)
