@@ -63,13 +63,13 @@ public class CraftingPatch
 
     [HarmonyPatch(typeof(StopCraftingSystem), nameof(StopCraftingSystem.OnUpdate))]
     [HarmonyPrefix]
-    static void StopCraftPrefix(StopCraftingSystem system) => Visit(system._EventQuery, OnStopCraft);
+    static void StopCraftPrefix(StopCraftingSystem __instance) => Visit(__instance._EventQuery, OnStopCraft);
 
     [HarmonyPatch(typeof(ForgeSystem_Events), nameof(ForgeSystem_Events.OnUpdate))]
     [HarmonyPrefix]
-    static void ForgePrefix(ForgeSystem_Events system) => Visit(system._CancelRepairEventQuery, OnForgeCancel);
+    static void ForgePrefix(ForgeSystem_Events __instance) => Visit(__instance._CancelRepairEventQuery, OnForgeCancel);
 
     [HarmonyPatch(typeof(RepairItemSystem), nameof(RepairItemSystem.OnUpdate))]
     [HarmonyPrefix]
-    static void RepairPrefix(RepairItemSystem system) { Visit(system._RepairItemEventQuery, OnRepairSlot); Visit(system._RepairEquippedItemEventQuery, OnRepairGear); }
+    static void RepairPrefix(RepairItemSystem __instance) { Visit(__instance._RepairItemEventQuery, OnRepairSlot); Visit(__instance._RepairEquippedItemEventQuery, OnRepairGear); }
 }

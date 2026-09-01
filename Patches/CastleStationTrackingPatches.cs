@@ -10,7 +10,7 @@ namespace Satisvampory.Patches;
 [HarmonyPatch(typeof(CastleHasItemsOnSpawnSystem), nameof(CastleHasItemsOnSpawnSystem.OnUpdate))]
 internal class CastleStationSpawnSystemPatch
 {
-    public static bool Prefix(CastleHasItemsOnSpawnSystem system) { Track(system.__query_60442477_0, spawn: true); return true; }
+    public static bool Prefix(CastleHasItemsOnSpawnSystem __instance) { Track(__instance.__query_60442477_0, spawn: true); return true; }
 
     internal static void Track(EntityQuery query, bool spawn)
     {
@@ -35,5 +35,5 @@ internal class CastleStationSpawnSystemPatch
 [HarmonyPatch(typeof(CastleHasItemsOnDestroySystem), nameof(CastleHasItemsOnDestroySystem.OnUpdate))]
 internal class CastleStationDestroySystemPatch
 {
-    public static bool Prefix(CastleHasItemsOnDestroySystem system) { CastleStationSpawnSystemPatch.Track(system._DestroyConnectedCastleItem, spawn: false); return true; }
+    public static bool Prefix(CastleHasItemsOnDestroySystem __instance) { CastleStationSpawnSystemPatch.Track(__instance._DestroyConnectedCastleItem, spawn: false); return true; }
 }

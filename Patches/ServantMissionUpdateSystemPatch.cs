@@ -17,8 +17,8 @@ public static class ServantMissionUpdateSystemPatch
     static int lastStashFrame = -1;
     static readonly HashSet<int> stashed = new();
 
-    static void Prefix(ServantMissionUpdateSystem system) => TryStash(system, "prefix");
-    static void Postfix(ServantMissionUpdateSystem system) => TryStash(system, "postfix");
+    static void Prefix(ServantMissionUpdateSystem __instance) => TryStash(__instance, "prefix");
+    static void Postfix(ServantMissionUpdateSystem __instance) => TryStash(__instance, "postfix");
 
     internal static void TryStash(ServantMissionUpdateSystem instance, string via)
     {
@@ -63,5 +63,5 @@ public static class ServantMissionFinishMissionsPatch
         AccessTools.Method(typeof(ServantMissionUpdateSystem), "FinishMissions")
         ?? AccessTools.DeclaredMethod(typeof(ServantMissionUpdateSystem), "FinishMissions");
 
-    static void Postfix(ServantMissionUpdateSystem system) { if (system != null) ServantMissionUpdateSystemPatch.TryStash(system, "finish"); }
+    static void Postfix(ServantMissionUpdateSystem __instance) { if (__instance != null) ServantMissionUpdateSystemPatch.TryStash(__instance, "finish"); }
 }
