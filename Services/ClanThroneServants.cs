@@ -17,8 +17,16 @@ namespace Satisvampory.Services
     internal static class ClanThroneServants
     {
         static readonly Dictionary<ulong, int> selectedPlot = new();
+        static readonly Dictionary<ulong, PendingPick> pendingPick = new();
         static readonly Dictionary<int, Entity> throneByPlot = new();
         static DateTime throneCacheAt;
+        static readonly TimeSpan PickTtl = TimeSpan.FromMinutes(2);
+
+        struct PendingPick
+        {
+            public List<int> Plots;
+            public DateTime ExpiresUtc;
+        }
 
         public static void RewriteInfoRequests(ServantInfoEventSystem_Server system)
         {
@@ -62,31 +70,57 @@ namespace Satisvampory.Services
         {
             var standing = character != Entity.Null ? Core.TerritoryService.GetStandingTerritoryId(character) : -1;
             if (standing < 0)
-                return "Stand on a clan castle to pick a throne plot.";
+                return "Stand on a clan castle (or sit its throne) to pick a plot.";
             var ids = Core.TerritoryService.GetLogisticsTerritoryIds(standing);
             if (ids == null || ids.Count == 0)
                 return "No castle under you.";
             if (ids.Count == 1)
                 return "ClanShare is off or this plot is excluded. Sit this throne to manage its servants.";
             selectedPlot.TryGetValue(steam, out var managing);
+            var usingDefault = managing <= 0 || managing == standing;
+            pendingPick[steam] = new PendingPick
+            {
+                Plots = new List<int>(ids),
+                ExpiresUtc = DateTime.UtcNow + PickTtl
+            };
             var sb = new StringBuilder();
-            sb.Append("ClanShare throne — pick a plot, sit (or stay sat), reopen the hunt UI.\n");
+            sb.Append("ClanShare throne — default is this castle. Pick a number, then sit / reopen hunt UI.\n");
             for (var i = 0; i < ids.Count; i++)
             {
                 var plot = ids[i];
                 var n = CountAlive(plot);
-                var here = plot == standing ? " <color=yellow>(here)</color>" : "";
-                var sel = plot == managing ? " <color=green>(managing)</color>" : "";
-                var throne = FindThrone(plot);
-                var noThrone = throne == Entity.Null ? " <color=red>(no throne)</color>" : "";
-                sb.Append(".s throne ").Append(plot).Append("  ")
+                var mark = "";
+                if (plot == standing && usingDefault)
+                    mark = " <color=yellow>(here, default)</color>";
+                else if (plot == standing)
+                    mark = " <color=yellow>(here)</color>";
+                if (plot == managing && !usingDefault)
+                    mark += " <color=green>(managing)</color>";
+                var noThrone = FindThrone(plot) == Entity.Null ? " <color=red>(no throne)</color>" : "";
+                sb.Append(i + 1).Append(") ")
                     .Append(Core.TerritoryService.FormatPlotLabel(plot))
                     .Append("  servants ").Append(n)
-                    .Append(here).Append(sel).Append(noThrone).Append('\n');
+                    .Append(mark).Append(noThrone).Append('\n');
             }
-            sb.Append(".s throne here  — this castle");
+            sb.Append(".s 2  or  .s throne 2");
             var text = sb.ToString();
             return text.Length <= Core.MaxChatReply ? text : text.Substring(0, Core.MaxChatReply);
+        }
+
+        public static bool TryPickNumber(Entity character, ulong steam, int number, out string reply)
+        {
+            reply = null;
+            if (!pendingPick.TryGetValue(steam, out var pending) || pending.Plots == null)
+                return false;
+            if (DateTime.UtcNow > pending.ExpiresUtc)
+            {
+                pendingPick.Remove(steam);
+                return false;
+            }
+            if (number < 1 || number > pending.Plots.Count)
+                return false;
+            reply = ApplyPlot(character, steam, pending.Plots[number - 1]);
+            return true;
         }
 
         public static string ChatSelect(Entity character, ulong steam, string arg)
@@ -95,16 +129,25 @@ namespace Satisvampory.Services
                 return ChatList(character, steam);
             if (arg.Equals("here", StringComparison.OrdinalIgnoreCase)
                 || arg.Equals("clear", StringComparison.OrdinalIgnoreCase)
-                || arg.Equals("local", StringComparison.OrdinalIgnoreCase))
+                || arg.Equals("local", StringComparison.OrdinalIgnoreCase)
+                || arg.Equals("default", StringComparison.OrdinalIgnoreCase))
             {
                 selectedPlot.Remove(steam);
-                return "Throne hunts this castle again. Sit / reopen the hunt UI.";
+                pendingPick.Remove(steam);
+                return "Default: this castle's throne. Sit / reopen the hunt UI.";
             }
-            if (!int.TryParse(arg, out var plot) || plot < TerritoryService.MIN_TERRITORY_ID || plot > TerritoryService.MAX_TERRITORY_ID)
-                return "Use a plot number from .s throne, or .s throne here.";
+            if (!int.TryParse(arg, out var n))
+                return "Use .s throne then .s 2, or .s throne here.";
+            if (TryPickNumber(character, steam, n, out var fromIndex))
+                return fromIndex;
+            return ApplyPlot(character, steam, n);
+        }
+
+        static string ApplyPlot(Entity character, ulong steam, int plot)
+        {
             var standing = character != Entity.Null ? Core.TerritoryService.GetStandingTerritoryId(character) : -1;
             if (standing < 0)
-                return "Stand on a clan castle to pick a throne plot.";
+                return "Stand on a clan castle (or sit its throne) to pick a plot.";
             var ids = Core.TerritoryService.GetLogisticsTerritoryIds(standing);
             var onIsland = false;
             if (ids != null)
@@ -114,14 +157,15 @@ namespace Satisvampory.Services
                 return "Plot " + plot + " is not on your ClanShare island (need .s cs, not .s cse).";
             if (FindThrone(plot) == Entity.Null)
                 return "No throne on " + Core.TerritoryService.FormatPlotLabel(plot) + ".";
+            pendingPick.Remove(steam);
             if (plot == standing)
             {
                 selectedPlot.Remove(steam);
-                return "Managing " + Core.TerritoryService.FormatPlotLabel(plot) + " (this castle). Sit / reopen the hunt UI.";
+                return "Default: " + Core.TerritoryService.FormatPlotLabel(plot) + " (this castle). Sit / reopen the hunt UI.";
             }
             selectedPlot[steam] = plot;
             return "Managing servants on " + Core.TerritoryService.FormatPlotLabel(plot)
-                + ". Sit a clan throne and reopen the hunt UI. Hunts go on that castle's throne.";
+                + ". Sit a clan throne and reopen the hunt UI.";
         }
 
         public static string DebugDump(int plotFilter)

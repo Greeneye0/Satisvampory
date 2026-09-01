@@ -24,6 +24,8 @@ namespace Satisvampory.Commands;
 
         internal static void ReplayPendingPick(ChatCommandContext ctx, int number)
         {
+            if (ClanThroneServants.TryPickNumber(ctx.Event.SenderCharacterEntity, ctx.Event.User.PlatformId, number, out var throneReply))
+            { ctx.Reply(throneReply); return; }
             if (!PendingItemChoiceService.TryPick(ctx.Event.User.PlatformId, number, out var pending, out var picked, out var error))
             { ctx.Reply(error); return; }
             var item = new FoundItem(picked.Prefab);
