@@ -49,11 +49,11 @@ Local file mailbox. No network socket. No give/spawn (except covering `sim` with
 - Read `res.json`
 - Poll ~0.25s, main thread only
 
-Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, `settings`, `dest`, `sim`, `fair`, `occupy`, `guest`, `cover`, `unstick`, `need`, `selftest`, `log`, `perf`, `logdump`, `servants`, `servantstash`, `thrones`, `gotothrone`.
+Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, `settings`, `dest`, `sim`, `fair`, `occupy`, `guest`, `cover`, `unstick`, `need`, `selftest`, `log`, `perf`, `logdump`, `servants`, `servantstash`, `thrones`, `gotothrone`, `hunt`.
 
 `thrones` dumps throne positions, connected players, `.s throne` picks, last rewrite (sitting/selected/from/to), last `gotothrone`, whether Request and Interactor were patched, and servant names on the last `ServantInfoEvent.Response`.
 
-`gotothrone` with `plot:N` unseats, teleports a connected player onto that plot’s throne, then sits it so the hunt map reloads (`name` filters the player; omit `plot` to list). `{"op":"gotothrone","name":"here"}` unseats and returns. Does not set the `.s throne` pick. `thrones` players include `sitPlot` and `interactBuffs`.
+`gotothrone` is debug-only movement. `hunt` with `plot:N` and `name:"1 2"` arms the next vanilla map click to `SendOnMissionEvent` those servants from that plot’s throne (fog/discovered zones stay the sitting map).
 
 `players` is the bounce gate. `selftest` includes dest-ranking assertions (`StashRouting.SelfTestDest`).
 

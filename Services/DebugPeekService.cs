@@ -126,7 +126,7 @@ namespace Satisvampory.Services
             switch (op)
             {
                 case "help":
-                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\",\"gotothrone\"],"
+                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\",\"gotothrone\",\"hunt\"],"
                         + "\"req\":\"" + Esc(ReqPath) + "\",\"res\":\"" + Esc(ResPath) + "\","
                         + "\"hint\":\"{\\\"op\\\":\\\"log\\\",\\\"name\\\":\\\"dupe\\\"}\","
                         + "\"sim\":\"dry-run covering as if you are standing on plot. apply:true actually moves\","
@@ -140,7 +140,8 @@ namespace Satisvampory.Services
                         + "\"settings\":\"cs/asm/hf/cse/conveyor/cloop for plot owner\","
                         + "\"servants\":\"list coffins/servants and loot counts (plot:N optional)\","
                         + "\"thrones\":\"list thrones with positions, connected players, .s throne picks, last hunt rewrite\","
-                        + "\"gotothrone\":\"actually move a connected player onto plot N's throne (name:here returns). Vanilla sit test.\","
+                        + "\"gotothrone\":\"debug: move a connected player onto plot N's throne (name:here returns).\","
+                        + "\"hunt\":\"select plot N servants (name:'1 2') so the next vanilla map click sends them.\","
                         + "\"servantstash\":\"stash all returned servants now (plot:N optional)\"}";
                 case "players":
                     return PeekPlayers();
@@ -182,6 +183,9 @@ namespace Satisvampory.Services
                 case "gotothrone":
                 case "movethrone":
                     return ClanThroneServants.DebugGoto(plot, name);
+                case "hunt":
+                case "huntsel":
+                    return ClanThroneServants.DebugHunt(plot, name);
                 case "servantstash":
                 case "asmstash":
                     return Core.Stash.DebugStashAllServants(plot);

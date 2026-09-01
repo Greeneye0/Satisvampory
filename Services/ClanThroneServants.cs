@@ -19,14 +19,16 @@ using Unity.Transforms;
 namespace Satisvampory.Services
 {
     /// <summary>
-    /// ClanShare throne: chat/debug moves you onto that castle's throne so vanilla hunt UI
-    /// is that plot. Do not stuff extra Burst list entries.
+    /// ClanShare throne: pick another plot's servants, then the vanilla hunt map click
+    /// (fog, discovered zones) is rewritten to SendOnMissionEvent for that plot.
     /// </summary>
     internal static class ClanThroneServants
     {
         static readonly Dictionary<ulong, int> selectedPlot = new();
         static readonly Dictionary<ulong, float3> returnPos = new();
         static readonly Dictionary<ulong, PendingPick> pendingPick = new();
+        static readonly Dictionary<ulong, List<ServantRow>> pendingHuntList = new();
+        static readonly Dictionary<ulong, PendingHunt> pendingHunt = new();
         static readonly Dictionary<int, Entity> throneByPlot = new();
         static readonly Dictionary<int, Entity> learnedThroneByPlot = new();
         static DateTime throneCacheAt;
@@ -43,11 +45,27 @@ namespace Satisvampory.Services
         static string lastPatched = "";
         static string lastGoto = "";
         static string lastSit = "";
+        static string lastSend = "";
 
         struct PendingPick
         {
             public List<int> Plots;
             public DateTime ExpiresUtc;
+        }
+
+        struct PendingHunt
+        {
+            public int Plot;
+            public List<NetworkId> Servants;
+            public List<string> Names;
+            public DateTime ExpiresUtc;
+        }
+
+        struct ServantRow
+        {
+            public string Name;
+            public NetworkId Nid;
+            public Entity Servant;
         }
 
         public static void RewriteInfoRequests(ServantInfoEventSystem_Server system)
@@ -121,7 +139,7 @@ namespace Satisvampory.Services
                 ExpiresUtc = DateTime.UtcNow + PickTtl
             };
             var sb = new StringBuilder();
-            sb.Append("ClanShare throne — pick a plot to go sit that castle's throne.\n");
+            sb.Append("ClanShare throne — pick a plot to hunt from this chair (vanilla map keeps fog).\n");
             for (var i = 0; i < ids.Count; i++)
             {
                 var plot = ids[i];
@@ -139,7 +157,7 @@ namespace Satisvampory.Services
                     .Append(names.Count == 0 ? "no servants" : string.Join(", ", names))
                     .Append('\n');
             }
-            sb.Append(".s 2  or  .s throne 2");
+            sb.Append(".s 2  then  .s hunt 1 2  then click a discovered zone");
             var text = sb.ToString();
             return text.Length <= Core.MaxChatReply ? text : text.Substring(0, Core.MaxChatReply);
         }
@@ -171,17 +189,18 @@ namespace Satisvampory.Services
             {
                 selectedPlot.Remove(steam);
                 pendingPick.Remove(steam);
-                var unseatHome = TryUnseat(character);
+                pendingHunt.Remove(steam);
+                pendingHuntList.Remove(steam);
                 if (returnPos.TryGetValue(steam, out var home) && TryTeleport(character, home, out var via))
                 {
                     returnPos.Remove(steam);
-                    return "Returned (" + via + unseatHome + "). Sit this castle's throne for its servants.";
+                    return "Returned (" + via + "). This throne's servants again.";
                 }
                 returnPos.Remove(steam);
-                return "Default: this castle's throne. Sit / reopen the hunt UI.";
+                return "Default: this castle's throne. Sit and use the vanilla hunt map.";
             }
             if (!int.TryParse(arg, out var n))
-                return "Use .s throne then .s 2, or .s throne here.";
+                return "Use .s throne then .s 2, then .s hunt 1 2, or .s throne here.";
             if (TryPickNumber(character, steam, n, out var fromIndex))
                 return fromIndex;
             return ApplyPlot(character, steam, n);
@@ -202,23 +221,74 @@ namespace Satisvampory.Services
             if (FindThrone(plot) == Entity.Null)
                 return "No throne on " + Core.TerritoryService.FormatPlotLabel(plot) + ".";
             pendingPick.Remove(steam);
+            pendingHunt.Remove(steam);
             var names = AliveNames(plot);
             var who = names.Count == 0 ? "no living servants" : string.Join(", ", names);
-            var throne = FindThrone(plot);
             if (plot == standing)
             {
                 selectedPlot.Remove(steam);
-                return "Default: " + Core.TerritoryService.FormatPlotLabel(plot) + " (this castle). " + who;
+                return "Default: " + Core.TerritoryService.FormatPlotLabel(plot) + " (this castle). Sit this throne. " + who;
             }
             selectedPlot[steam] = plot;
-            var unseat = TryUnseat(character);
-            if (character.Has<Translation>() && !returnPos.ContainsKey(steam))
-                returnPos[steam] = character.Read<Translation>().Value;
-            if (!TryTeleportToThrone(character, throne, out var via))
-                return "Could not move you to " + Core.TerritoryService.FormatPlotLabel(plot) + " (" + via + unseat + "). " + who;
-            Core.StartCoroutine(SitSoon(character, throne));
-            return "Unseated and moved to " + Core.TerritoryService.FormatPlotLabel(plot) + " (" + via + unseat
-                + "). Sitting that throne so the hunt map reloads. " + who + "  .s throne here returns.";
+            pendingHuntList[steam] = AliveRows(plot);
+            return "Managing " + Core.TerritoryService.FormatPlotLabel(plot)
+                + " from this chair. " + who
+                + "  .s hunt 1 2 then click a discovered zone on this map (fog stays vanilla).";
+        }
+
+        public static string ChatHunt(Entity character, ulong steam, string arg)
+        {
+            var plot = ManagingPlot(character, steam);
+            if (plot < 0)
+                return "Stand on a clan castle (or sit its throne). .s throne to pick another plot.";
+            var rows = AliveRows(plot);
+            pendingHuntList[steam] = rows;
+            if (string.IsNullOrWhiteSpace(arg)
+                || arg.Equals("list", StringComparison.OrdinalIgnoreCase))
+                return FormatHuntList(plot, rows);
+            if (arg.Equals("clear", StringComparison.OrdinalIgnoreCase)
+                || arg.Equals("here", StringComparison.OrdinalIgnoreCase))
+            {
+                pendingHunt.Remove(steam);
+                return "Cleared. Next map click is vanilla (this throne's servants).";
+            }
+            var picked = ParseHuntNumbers(arg, rows);
+            if (picked.Count == 0)
+                return rows.Count == 0
+                    ? "No idle servants on " + Core.TerritoryService.FormatPlotLabel(plot) + "."
+                    : "Use .s hunt 1 2 (max 3) from the numbered list.";
+            var nids = new List<NetworkId>();
+            var who = new List<string>();
+            for (var i = 0; i < picked.Count; i++)
+            {
+                nids.Add(picked[i].Nid);
+                who.Add(picked[i].Name);
+            }
+            pendingHunt[steam] = new PendingHunt
+            {
+                Plot = plot,
+                Servants = nids,
+                Names = who,
+                ExpiresUtc = DateTime.UtcNow + PickTtl
+            };
+            selectedPlot[steam] = plot;
+            return "Next click on this throne's map sends " + string.Join(", ", who)
+                + " from " + Core.TerritoryService.FormatPlotLabel(plot)
+                + ". Undiscovered zones stay fogged (vanilla map).";
+        }
+
+        public static string DebugHunt(int plot, string arg)
+        {
+            if (!TryFindConnected("", out var steam, out var character, out var playerName, out var error))
+                return "{\"error\":\"" + Esc(error) + "\"}";
+            if (plot >= 0)
+            {
+                selectedPlot[steam] = plot;
+                pendingHuntList[steam] = AliveRows(plot);
+            }
+            var text = ChatHunt(character, steam, arg);
+            return "{\"player\":\"" + Esc(playerName) + "\",\"text\":\"" + Esc(text)
+                + "\",\"lastSend\":\"" + Esc(lastSend) + "\"}";
         }
 
         public static string DebugDump(int plotFilter)
@@ -234,9 +304,10 @@ namespace Satisvampory.Services
                 .Append(",\"lastSkip\":\"").Append(Esc(lastSkip)).Append('"')
                 .Append(",\"lastGoto\":\"").Append(Esc(lastGoto)).Append('"')
                 .Append(",\"lastSit\":\"").Append(Esc(lastSit)).Append('"')
+                .Append(",\"lastSend\":\"").Append(Esc(lastSend)).Append('"')
                 .Append(",\"lastResponseCount\":").Append(lastResponseCount)
                 .Append(",\"lastResponseNames\":\"").Append(Esc(lastResponseNames)).Append('"')
-                .Append(",\"hint\":\"{\\\"op\\\":\\\"gotothrone\\\",\\\"plot\\\":86} or name:here to return\"")
+                .Append(",\"hint\":\"{\\\"op\\\":\\\"hunt\\\",\\\"plot\\\":86,\\\"name\\\":\\\"1 2\\\"} then click a vanilla map zone\"")
                 .Append(",\"picks\":[");
             var first = true;
             foreach (var kv in selectedPlot)
@@ -400,11 +471,39 @@ namespace Satisvampory.Services
 
         static void RewriteStart(Entity entity)
         {
-            if (!entity.Has<SendOnMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot, out _, out _))
+            if (!entity.Has<SendOnMissionEvent>() || !entity.Has<FromCharacter>())
                 return;
-            if (!PatchThroneId(entity, new ComponentType(Il2CppType.Of<SendOnMissionEvent>()), target, out var fromPlot))
+            var from = entity.Read<FromCharacter>();
+            if (from.User == Entity.Null || !Core.EntityManager.Exists(from.User) || !from.User.Has<User>())
                 return;
-            DestDebugLog.Note("throne", plot, 0, "send " + fromPlot + " -> " + plot);
+            var steam = from.User.Read<User>().PlatformId;
+            if (!pendingHunt.TryGetValue(steam, out var hunt) || hunt.Servants == null || hunt.Servants.Count == 0)
+                return;
+            if (DateTime.UtcNow > hunt.ExpiresUtc)
+            {
+                pendingHunt.Remove(steam);
+                return;
+            }
+            if (!TryTargetFromEvent(entity, out var target, out var plot, out _, out var skip))
+            {
+                lastSkip = skip;
+                return;
+            }
+            if (hunt.Plot >= 0)
+            {
+                var want = FindThrone(hunt.Plot);
+                if (want != Entity.Null)
+                {
+                    target = want;
+                    plot = hunt.Plot;
+                }
+            }
+            if (!PatchSend(entity, target, hunt.Servants, out var fromPlot))
+                return;
+            lastSend = string.Join(",", hunt.Names) + " plot=" + plot;
+            lastTo = plot;
+            lastFrom = fromPlot;
+            DestDebugLog.Note("throne", plot, 0, "send " + fromPlot + " -> " + plot + " " + lastSend);
         }
 
         static void RewriteAbort(Entity entity)
@@ -594,6 +693,77 @@ namespace Satisvampory.Services
             var readback = Marshal.PtrToStructure<NetworkId>(ptr);
             lastPatched += " rb=" + readback + " want=" + want;
             return true;
+        }
+
+        static unsafe bool PatchSend(Entity entity, Entity throne, List<NetworkId> servants, out int fromPlot)
+        {
+            fromPlot = -1;
+            if (throne == Entity.Null || !throne.Has<NetworkId>() || servants == null || servants.Count == 0)
+                return false;
+            var type = new ComponentType(Il2CppType.Of<SendOnMissionEvent>());
+            var raw = Core.EntityManager.GetComponentDataRawRW(entity, type.TypeIndex);
+            if (raw == null)
+                return false;
+            var ptr = new IntPtr(raw);
+            var ev = Marshal.PtrToStructure<SendOnMissionEvent>(ptr);
+            if (Core.TryGetEntityFromNetworkId(ev.Throne, out var currentThrone))
+                fromPlot = Core.TerritoryService.GetTerritoryId(currentThrone);
+            ev.Throne = throne.Read<NetworkId>();
+            ev.Servant1 = servants[0];
+            ev.Servant2 = servants.Count > 1 ? servants[1] : default;
+            ev.Servant3 = servants.Count > 2 ? servants[2] : default;
+            Marshal.StructureToPtr(ev, ptr, false);
+            lastPatched = "send rb=" + Marshal.PtrToStructure<SendOnMissionEvent>(ptr).Throne;
+            return true;
+        }
+
+        static int ManagingPlot(Entity character, ulong steam)
+        {
+            var standing = character != Entity.Null ? Core.TerritoryService.GetStandingTerritoryId(character) : -1;
+            if (standing < 0)
+                return -1;
+            if (!selectedPlot.TryGetValue(steam, out var plot) || plot < 0)
+                return standing;
+            var ids = Core.TerritoryService.GetLogisticsTerritoryIds(standing);
+            if (ids == null)
+                return standing;
+            for (var i = 0; i < ids.Count; i++)
+                if (ids[i] == plot)
+                    return plot;
+            return standing;
+        }
+
+        static string FormatHuntList(int plot, List<ServantRow> rows)
+        {
+            var sb = new StringBuilder();
+            sb.Append("Hunt from ").Append(Core.TerritoryService.FormatPlotLabel(plot))
+                .Append(" — pick up to 3, then click a discovered zone on this map.\n");
+            if (rows.Count == 0)
+                sb.Append("no idle servants");
+            for (var i = 0; i < rows.Count; i++)
+                sb.Append(i + 1).Append(") ").Append(rows[i].Name).Append('\n');
+            if (rows.Count > 0)
+                sb.Append(".s hunt 1 2");
+            var text = sb.ToString();
+            return text.Length <= Core.MaxChatReply ? text : text.Substring(0, Core.MaxChatReply);
+        }
+
+        static List<ServantRow> ParseHuntNumbers(string arg, List<ServantRow> rows)
+        {
+            var picked = new List<ServantRow>();
+            if (string.IsNullOrWhiteSpace(arg) || rows == null || rows.Count == 0)
+                return picked;
+            var parts = arg.Replace(',', ' ').Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var seen = new HashSet<int>();
+            for (var i = 0; i < parts.Length && picked.Count < 3; i++)
+            {
+                if (!int.TryParse(parts[i], out var n) || n < 1 || n > rows.Count)
+                    continue;
+                if (!seen.Add(n))
+                    continue;
+                picked.Add(rows[n - 1]);
+            }
+            return picked;
         }
 
         static IEnumerator SitSoon(Entity character, Entity throne)
@@ -1125,11 +1295,20 @@ namespace Satisvampory.Services
             }
         }
 
-        static int CountAlive(int plot) => AliveNames(plot).Count;
+        static int CountAlive(int plot) => AliveRows(plot).Count;
 
         static List<string> AliveNames(int plot)
         {
-            var names = new List<string>();
+            var rows = AliveRows(plot);
+            var names = new List<string>(rows.Count);
+            for (var i = 0; i < rows.Count; i++)
+                names.Add(rows[i].Name);
+            return names;
+        }
+
+        static List<ServantRow> AliveRows(int plot)
+        {
+            var list = new List<ServantRow>();
             var qb = new EntityQueryBuilder(Allocator.Temp)
                 .AddAll(new(Il2CppType.Of<ServantCoffinstation>(), ComponentType.AccessMode.ReadOnly));
             var query = Core.EntityManager.CreateEntityQuery(ref qb);
@@ -1149,10 +1328,15 @@ namespace Satisvampory.Services
                     if (station.State != ServantCoffinState.ServantAlive)
                         continue;
                     var servant = station.ConnectedServant.GetEntityOnServer();
-                    if (servant == Entity.Null || !Core.EntityManager.Exists(servant))
+                    if (servant == Entity.Null || !Core.EntityManager.Exists(servant) || !servant.Has<NetworkId>())
                         continue;
                     var name = station.ServantName.ToString();
-                    names.Add(string.IsNullOrWhiteSpace(name) ? "unnamed" : name);
+                    list.Add(new ServantRow
+                    {
+                        Name = string.IsNullOrWhiteSpace(name) ? "unnamed" : name,
+                        Nid = servant.Read<NetworkId>(),
+                        Servant = servant
+                    });
                 }
             }
             finally
@@ -1161,7 +1345,7 @@ namespace Satisvampory.Services
                     rows.Dispose();
                 query.Dispose();
             }
-            return names;
+            return list;
         }
     }
 }
