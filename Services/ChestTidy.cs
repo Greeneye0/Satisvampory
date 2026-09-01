@@ -1,4 +1,5 @@
 using ProjectM;
+using ProjectM.CastleBuilding;
 using ProjectM.Network;
 using Stunlock.Core;
 using System;
@@ -13,8 +14,9 @@ namespace Satisvampory.Services
     /// same dest rules as .stash, then stacks move from worse chests to better ones.
     /// ClanShare ON = whole logistics island. Never drains s#/r#, NS, salvage/trash/
     /// spoils/spawner/brazier. Matching s#/r# nameplates are dests only (Ghost Crystal
-    /// leaves General into Crystal Stone S1). Overflow is a source only. Does not honor
-    /// reserve (wrong chest should empty into the named dest).
+    /// leaves General into Crystal Stone S1). Overflow is a source only. Castle heart
+    /// and treasury-floor chests are dests, never sources. Does not honor reserve
+    /// (wrong chest should empty into the named dest).
     /// </summary>
     internal static class ChestTidy
     {
@@ -69,6 +71,8 @@ namespace Satisvampory.Services
                     foreach (var stash in Core.Stash.ChestsOnPlot(plot))
                     {
                         if (stash.Has<Refinementstation>())
+                            continue;
+                        if (stash.Equals(heart) || stash.Has<CastleHeart>())
                             continue;
                         if (!StashRouting.TryGetExternalInventory(stash, out var inv))
                             continue;
@@ -246,6 +250,13 @@ namespace Satisvampory.Services
                 rank.UsableSource = true;
                 rank.UsableDest = false;
                 rank.Label = StashRouting.LabelOverflow;
+                return rank;
+            }
+            if (stash.Has<CastleHeart>() || StashRouting.IsTreasury(stash))
+            {
+                rank.UsableSource = false;
+                if (!rank.UsableDest && rank.Class >= 3)
+                    rank.UsableDest = true;
                 return rank;
             }
             if (StashRouting.IsConveyorName(plate))
