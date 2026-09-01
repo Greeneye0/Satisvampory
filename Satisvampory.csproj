@@ -4,12 +4,12 @@
     <AssemblyName>Satisvampory</AssemblyName>
     <Product>Satisvampory</Product>
     <Description>Server QOL for V Rising: logistics, named dest, ClanShare, treasury lend, and ground scoop.</Description>
-    <Version>1.0.22</Version>
+    <Version>1.0.23</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RootNamespace>Satisvampory</RootNamespace>
-    <AssemblyVersion>1.0.22.0</AssemblyVersion>
-    <FileVersion>1.0.22.0</FileVersion>
+    <AssemblyVersion>1.0.23.0</AssemblyVersion>
+    <FileVersion>1.0.23.0</FileVersion>
     <BepInExPluginGuid>Satisvampory</BepInExPluginGuid>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <Nullable>disable</Nullable>

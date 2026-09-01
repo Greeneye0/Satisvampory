@@ -2206,7 +2206,19 @@ namespace Satisvampory.Services
                 {
                     if (!ledger.TryGetValue(k, out var owed) || owed <= 0)
                         continue;
-                    var want = owed;
+                    // Leave kit/covering on this castle when the source plot still
+                    // meets its reserve. Only pull back a reserve shortfall.
+                    Core.TerritoryService.TryGetTerritoryOwnerPlatformId(k.Source.TerritoryId, out var sourceOwnerId);
+                    var reserve = Core.PlayerSettings.GetPullReserve(sourceOwnerId, type);
+                    var haveSrc = CountVanillaOnPlot(k.Source.TerritoryId, type);
+                    if (haveSrc >= reserve)
+                    {
+                        ledger.Remove(k);
+                        continue;
+                    }
+                    var want = reserve - haveSrc;
+                    if (want > owed)
+                        want = owed;
                     if (want > remaining)
                         want = remaining;
                     var put = 0;
