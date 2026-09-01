@@ -1,133 +1,52 @@
-using ProjectM;
 using ProjectM.Shared;
-using Stunlock.Core;
 using Stunlock.Localization;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Reflection;
-using System.Text.Json;
 
-namespace Satisvampory.Services
+namespace Satisvampory.Services;
+
+internal class LocalizationService
 {
-    internal class LocalizationService
+    readonly Dictionary<string, string> localization;
+    readonly Dictionary<int, string> prefabNames;
+    static readonly HashSet<int> BookTier1 = [1455590675, -651642571];
+    static readonly HashSet<int> BookTier2 = [1150376281, 686122001];
+    const int DarkmatterPistols = -1265586439;
+
+    public LocalizationService()
     {
-        Dictionary<string, string> localization = [];
-        Dictionary<int, string> prefabNames = [];
+        localization = EmbeddedJson.Load<string, string>("Satisvampory.Localization.English.json");
+        prefabNames = EmbeddedJson.Load<int, string>("Satisvampory.Data.PrefabNames.json");
+    }
 
-        public LocalizationService()
-        {
-            LoadLocalization();
-            LoadPrefabNames();
-        }
+    public string GetLocalization(string guid) =>
+        localization.TryGetValue(guid, out var text) ? text : $"<Localization not found for {guid}>";
 
-        void LoadLocalization()
-        {
-            var resourceName = "Satisvampory.Localization.English.json";
+    public string GetLocalization(LocalizationKey key) => GetLocalization(key.Key.ToGuid().ToString());
 
-            var assembly = Assembly.GetExecutingAssembly();
-            var stream = assembly.GetManifestResourceStream(resourceName);
-            if (stream != null)
-            {
-                using (var reader = new StreamReader(stream))
-                {
-                    string jsonContent = reader.ReadToEnd();
-                    localization = JsonSerializer.Deserialize<Dictionary<string, string>>(jsonContent);
-                }
-            }
-            else
-            {
-                Console.WriteLine("Resource not found!");
-            }
-        }
+    public string GetPrefabName(PrefabGUID itemPrefabGUID)
+    {
+        if (!prefabNames.TryGetValue(itemPrefabGUID._Value, out var locKey))
+            return null;
+        var label = GetLocalization(locKey);
+        if (itemPrefabGUID._Value == DarkmatterPistols)
+            label = "Darkmatter Pistols";
+        label = Annotate(itemPrefabGUID, label);
+        if (BookTier1.Contains(itemPrefabGUID._Value)) return label + " Tier 1";
+        if (BookTier2.Contains(itemPrefabGUID._Value)) return label + " Tier 2";
+        return label;
+    }
 
-        void LoadPrefabNames()
-        {
-            var resourceName = "Satisvampory.Data.PrefabNames.json";
-
-            var assembly = Assembly.GetExecutingAssembly();
-            var stream = assembly.GetManifestResourceStream(resourceName);
-            if (stream != null)
-            {
-                using (var reader = new StreamReader(stream))
-                {
-                    string jsonContent = reader.ReadToEnd();
-                    prefabNames = JsonSerializer.Deserialize<Dictionary<int, string>>(jsonContent);
-                }
-            }
-            else
-            {
-                Console.WriteLine("Resource not found!");
-            }
-        }
-
-        public string GetLocalization(string guid)
-        {
-            if (localization.TryGetValue(guid, out var text))
-            {
-                return text;
-            }
-            return $"<Localization not found for {guid}>";
-        }
-
-        public string GetLocalization(LocalizationKey key)
-        {
-            var guid = key.Key.ToGuid().ToString();
-            return GetLocalization(guid);
-        }
-
-        public string GetPrefabName(PrefabGUID itemPrefabGUID)
-        {
-            if(!prefabNames.TryGetValue(itemPrefabGUID._Value, out var itemLocalizationHash))
-            {
-                return null;
-            }
-            var name = GetLocalization(itemLocalizationHash);
-
-            if (itemPrefabGUID._Value == -1265586439)
-                name = "Darkmatter Pistols";
-
-            if(Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(itemPrefabGUID, out var prefab))
-            {
-                if (prefab.Has<ItemData>())
-                {
-                    var itemData = prefab.Read<ItemData>();
-                    if (itemData.ItemType == ItemType.Tech)
-                    {
-                        name = "Book " + name;
-                    }
-                }
-                if (prefab.Has<JewelInstance>())
-                {
-                    var jewelInstance = prefab.Read<JewelInstance>();
-                    // For some reason tier 0 is special and includes this already in its name
-                    if (jewelInstance.TierIndex != 0)
-                        name += $" Jewel Tier {jewelInstance.TierIndex + 1}";
-                }
-                if (prefab.Has<LegendaryItemInstance>())
-                {
-                    var legendaryInstance = prefab.Read<LegendaryItemInstance>();
-                    name += $" Tier {legendaryInstance.TierIndex + 1}";
-                }
-                if (prefab.Has<ShatteredItem>())
-                {
-                    name += " Shattered";
-                }
-            }
-
-            // Disambuigation for some books
-            if (itemPrefabGUID._Value == 1455590675 || itemPrefabGUID._Value == -651642571)
-            {
-                name += " Tier 1";
-            }
-            else if (itemPrefabGUID._Value == 1150376281 || itemPrefabGUID._Value == 686122001)
-            {
-                name += " Tier 2";
-            }
-
-            return name;
-        }
-
+    static string Annotate(PrefabGUID guid, string label)
+    {
+        if (!Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(guid, out var prefab))
+            return label;
+        if (prefab.Has<ItemData>() && prefab.Read<ItemData>().ItemType == ItemType.Tech)
+            label = "Book " + label;
+        if (prefab.Has<JewelInstance>() && prefab.Read<JewelInstance>().TierIndex != 0)
+            label += $" Jewel Tier {prefab.Read<JewelInstance>().TierIndex + 1}";
+        if (prefab.Has<LegendaryItemInstance>())
+            label += $" Tier {prefab.Read<LegendaryItemInstance>().TierIndex + 1}";
+        if (prefab.Has<ShatteredItem>())
+            label += " Shattered";
+        return label;
     }
 }

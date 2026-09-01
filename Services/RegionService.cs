@@ -1,85 +1,73 @@
 using Il2CppInterop.Runtime;
 using ProjectM.Terrain;
-using System.Collections.Generic;
-using System.Linq;
-using Unity.Collections;
-using Unity.Entities;
 using Unity.Mathematics;
 using Unity.Physics;
 using Unity.Transforms;
-using UnityEngine;
 
-namespace Satisvampory.Services
+namespace Satisvampory.Services;
+
+internal class RegionService
 {
-    internal class RegionService
+    readonly record struct Hull(WorldRegionType Kind, Aabb Box, float2[] Ring);
+
+    readonly List<Hull> hulls = [];
+
+    public RegionService() => Rescan();
+
+    public void Rescan()
     {
-        struct RegionPolygon
+        hulls.Clear();
+        var builder = new EntityQueryBuilder(Allocator.Temp)
+            .AddAll(new(Il2CppType.Of<WorldRegionPolygon>(), ComponentType.AccessMode.ReadWrite));
+        var query = Core.EntityManager.CreateEntityQuery(ref builder);
+        builder.Dispose();
+        var rows = query.ToEntityArray(Allocator.Temp);
+        try
         {
-            public WorldRegionType Region;
-            public Aabb Aabb;
-            public float2[] Vertices;
-        };
-
-        List<RegionPolygon> regionPolygons = new();
-
-        public RegionService()
-        {
-            var entityQueryBuilder = new EntityQueryBuilder(Allocator.Temp)
-                .AddAll(new(Il2CppType.Of<WorldRegionPolygon>(), ComponentType.AccessMode.ReadWrite));
-
-            var query = Core.EntityManager.CreateEntityQuery(ref entityQueryBuilder);
-            entityQueryBuilder.Dispose();
-            foreach (var worldRegionPolygonEntity in query.ToEntityArray(Allocator.Temp))
+            for (var i = 0; i < rows.Length; i++)
             {
-                var wrp = worldRegionPolygonEntity.Read<WorldRegionPolygon>();
-                var vertices = Core.EntityManager.GetBuffer<WorldRegionPolygonVertex>(worldRegionPolygonEntity);
-
-                regionPolygons.Add(
-                    new RegionPolygon
-                    {
-                        Region = wrp.WorldRegion,
-                        Aabb = wrp.PolygonBounds,
-                        Vertices = vertices.ToNativeArray(allocator: Allocator.Temp).ToArray().Select(x => x.VertexPos).ToArray()
-                    });
+                var entity = rows[i];
+                var polygon = entity.Read<WorldRegionPolygon>();
+                var verts = Core.EntityManager.GetBuffer<WorldRegionPolygonVertex>(entity);
+                var ring = new float2[verts.Length];
+                for (var v = 0; v < verts.Length; v++)
+                    ring[v] = verts[v].VertexPos;
+                hulls.Add(new Hull(polygon.WorldRegion, polygon.PolygonBounds, ring));
             }
+        }
+        finally
+        {
+            rows.Dispose();
             query.Dispose();
         }
+    }
 
-        public WorldRegionType GetRegion(Entity entity)
+    public WorldRegionType GetRegion(Entity entity) => GetRegion(entity.Read<Translation>().Value);
+
+    public WorldRegionType GetRegion(float3 pos)
+    {
+        for (var i = 0; i < hulls.Count; i++)
         {
-            return GetRegion(entity.Read<Translation>().Value);
+            var hull = hulls[i];
+            if (hull.Box.Contains(pos) && OddCrossings(hull.Ring, pos.xz))
+                return hull.Kind;
         }
+        return WorldRegionType.None;
+    }
 
-        public WorldRegionType GetRegion(float3 pos)
+    static bool OddCrossings(float2[] ring, float2 point)
+    {
+        var hits = 0;
+        var n = ring.Length;
+        if (n == 0) return false;
+        for (int i = 0, prev = n - 1; i < n; prev = i++)
         {
-            foreach (var worldRegionPolygon in regionPolygons)
-            {
-                if (worldRegionPolygon.Aabb.Contains(pos))
-                {
-                    if (IsPointInPolygon(worldRegionPolygon.Vertices, pos.xz))
-                    {
-                        return worldRegionPolygon.Region;
-                    }
-                }
-            }
-            return WorldRegionType.None;
+            var a = ring[i];
+            var b = ring[prev];
+            if ((a.y > point.y) == (b.y > point.y)) continue;
+            var t = (point.y - a.y) / (b.y - a.y);
+            if (point.x < a.x + t * (b.x - a.x)) hits++;
         }
-
-        static bool IsPointInPolygon(float2[] polygon, Vector2 point)
-        {
-            int intersections = 0;
-            int vertexCount = polygon.Length;
-
-            for (int i = 0, j = vertexCount - 1; i < vertexCount; j = i++)
-            {
-                if ((polygon[i].y > point.y) != (polygon[j].y > point.y) &&
-                    (point.x < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y) / (polygon[j].y - polygon[i].y) + polygon[i].x))
-                {
-                    intersections++;
-                }
-            }
-
-            return intersections % 2 != 0;
-        }
+        return (hits & 1) == 1;
     }
 }

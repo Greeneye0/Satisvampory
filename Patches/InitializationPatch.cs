@@ -1,4 +1,3 @@
-using HarmonyLib;
 using Unity.Scenes;
 
 namespace Satisvampory.Patches;
@@ -7,9 +6,11 @@ namespace Satisvampory.Patches;
 public static class InitializationPatch
 {
     [HarmonyPostfix]
-    public static void OneShot_AfterLoad_InitializationPatch()
+    public static void AfterSceneReady()
     {
         Core.Initialize();
-        Plugin.Harmony.Unpatch(typeof(SceneSectionStreamingSystem).GetMethod("ShutdownAsynchrnonousStreamingSupport"), typeof(InitializationPatch).GetMethod("OneShot_AfterLoad_InitializationPatch"));
+        Plugin.Harmony.Unpatch(
+            typeof(SceneSectionStreamingSystem).GetMethod(nameof(SceneSectionStreamingSystem.ShutdownAsynchrnonousStreamingSupport)),
+            typeof(InitializationPatch).GetMethod(nameof(AfterSceneReady)));
     }
 }

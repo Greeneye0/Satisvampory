@@ -1,7 +1,4 @@
-using HarmonyLib;
-using ProjectM;
 using ProjectM.Gameplay.Systems;
-using Unity.Collections;
 
 namespace Satisvampory.Patches;
 
@@ -10,13 +7,19 @@ internal class CastleHeartSpawnSystemPatch
 {
     public static bool Prefix(SpawnCastleTeamSystem __instance)
     {
-        var entities = __instance._MainQuery.ToEntityArray(Allocator.Temp);
-        foreach (var castleHeartEntity in entities)
-        {
-            Core.TerritoryService.AddCastleHeart(castleHeartEntity);
-        }
-        entities.Dispose();
+        Visit(__instance._MainQuery, heart => Core.TerritoryService.AddCastleHeart(heart));
         return true;
+    }
+
+    internal static void Visit(EntityQuery query, System.Action<Entity> visit)
+    {
+        var rows = query.ToEntityArray(Allocator.Temp);
+        try
+        {
+            for (var i = 0; i < rows.Length; i++)
+                visit(rows[i]);
+        }
+        finally { rows.Dispose(); }
     }
 }
 
@@ -25,12 +28,7 @@ internal class CastleHeartDestroySystemPatch
 {
     public static bool Prefix(CastleHeartClearRaidStateSystem __instance)
     {
-        var entities = __instance._DestroyedCastleHeartQuery.ToEntityArray(Allocator.Temp);
-        foreach (var castleHeartEntity in entities)
-        {
-            Core.TerritoryService.RemoveCastleHeart(castleHeartEntity);
-        }
-        entities.Dispose();
+        CastleHeartSpawnSystemPatch.Visit(__instance._DestroyedCastleHeartQuery, heart => Core.TerritoryService.RemoveCastleHeart(heart));
         return true;
     }
 }

@@ -19,8 +19,9 @@ namespace Satisvampory.Services
     /// (2) allShared starter kit into the first NON-overflow dest (chest recipe first) with
     ///     spend-refill until treasury; manual empty of a seeded chest opts that chest
     ///     NetworkId out (no refill so unbuild works); new chest NetworkId first-fills again,
-    /// (3) occupied treasury plots: covering buffer so the standing player can place 3 of
-    ///     whichever unlocked castle blueprint is hungriest per material (1 if clan takeable
+    /// (3) occupied treasury plots (clan members only, not castle guests): covering buffer
+    ///     so the standing player can place 3 of whichever unlocked castle blueprint is
+    ///     hungriest per material (1 if clan takeable
     ///     after reserve cannot cover 3). Blood essences excluded. Named last-resort.
     /// (4) heart fuel seed / auto-feed into heart fuel slots (not a chest).
     /// No dest chest = fuel only. Kit OFF when destMode==treasury.
@@ -50,6 +51,13 @@ namespace Satisvampory.Services
         internal const int IronIngotHash = -1750550553;
         // PrefabNames 291c32e8-d894-4ff2-8715-51ed602caa0c "Stone" (gatherable rock; GroundScoop / HUD)
         internal const int StoneHash = -1531666018;
+        internal const int GlassHash = -1233716303;
+        internal const int LeatherHash = -1907572080;
+        internal const int ReinforcedPlankHash = -1397591435;
+        internal const int RadiumAlloyHash = 2116142390;
+        internal const int PrimalBloodEssenceHash = 1566989408;
+        internal const int DarkSilverIngotHash = -762000259;
+        internal const int PowerCoreHash = -1190647720;
         const int KitPlank = 288;
         const int KitStoneBrick = 456;
         const int KitCopper = 24;
@@ -59,6 +67,8 @@ namespace Satisvampory.Services
         const int KitChestPlank = 72;
         const int KitChestCopper = 24;
         const int HeartFuelStack = 500;
+        // Covering leftover-bypass is "enough to start placing", not a 1200-stone wall dump.
+        const int Covering1xCap = 200;
 
         /// <summary>
         /// Chest identity: NetworkId.Index of the stash if present, else inventory
@@ -137,7 +147,6 @@ namespace Satisvampory.Services
         static readonly HashSet<int> holdKitOverflowPlots = new();
         static readonly Dictionary<int, List<Entity>> workstationsByPlot = new();
         static List<(int blueprint, bool start, List<(int guid, int amount)> costs)> blueprintCosts;
-        static Dictionary<int, int> coveringCastle1x;
         static readonly Dictionary<string, int> destStackCount = new();
         static readonly Dictionary<string, DateTime> destEmptyHoldUntil = new();
         static readonly HashSet<string> loggedEmptyHold = new();
@@ -145,9 +154,59 @@ namespace Satisvampory.Services
         const int BuildCoverCopies = 3;
         const int EmptyHoldSeconds = 5 * 60;
         const int UnoccupiedReturnSeconds = 90;
-        const int MaxLendPullsPerTick = 8;
+        // Global safety so 30 occupied plots cannot dump thousands of stacks in one 5s tick.
+        // Per-plot cap + round-robin so the first HashSet plot does not starve everyone else.
+        // 120 = 30 plots * 4 pulls: every occupied plot gets a turn in one 5s tick.
+        // Kit (6 GUIDs) plus covering may still take more than one tick to finish stocking.
+        const int MaxLendPullsPerTick = 120;
+        const int MaxLendPullsPerPlot = 4;
         static readonly Dictionary<int, DateTime> leftAt = new();
         static int lendPullsLeft;
+        static int plotPullsLeft;
+        static int occupyCursor;
+        static int depositMaxClass = 5;
+        static readonly Dictionary<int, (DateTime At, Dictionary<int, int> One)> coveringCache = new();
+        static Dictionary<int, List<Entity>> tickTreasuryInvs;
+        static Dictionary<int, List<Entity>> tickAllSharedInvs;
+        static Dictionary<int, List<Entity>> tickStashes;
+        static Dictionary<int, Dictionary<int, int>> tickVanillaCounts;
+        static Dictionary<int, HashSet<int>> tickUnlocks;
+        static bool tickCachesOn;
+        static readonly HashSet<int> islandDirty = new();
+        static int settingsEpoch;
+        static string lastControlKey = "";
+        static bool lastTickUsedPull;
+        static bool forceHunt;
+        static bool tickBusy;
+        static DateTime nextHuntAt;
+        const int FatHuntMs = 50;
+        const float HuntMaxSeconds = 15f;
+
+        internal static void MarkDirty(int territoryId)
+        {
+            if (territoryId < TerritoryService.MIN_TERRITORY_ID || territoryId > TerritoryService.MAX_TERRITORY_ID)
+                return;
+            islandDirty.Add(territoryId);
+            coveringCache.Remove(territoryId);
+        }
+
+        internal static void BumpSettings() => settingsEpoch++;
+
+        static bool CanLendPull() => lendPullsLeft > 0 && plotPullsLeft > 0;
+
+        static void ConsumeLendPull()
+        {
+            if (lendPullsLeft > 0)
+                lendPullsLeft--;
+            if (plotPullsLeft > 0)
+                plotPullsLeft--;
+        }
+
+        static void RefundLendPull()
+        {
+            lendPullsLeft++;
+            plotPullsLeft++;
+        }
 
         internal static bool HoldKitOverflow(int plot) =>
             plot >= 0 && holdKitOverflowPlots.Contains(plot);
@@ -155,7 +214,22 @@ namespace Satisvampory.Services
         internal static Dictionary<int, int> DebugCovering1x(int plot) =>
             GetCovering1x(plot);
 
-        internal static void DebugTick() => Tick();
+        internal static void DebugTick()
+        {
+            forceHunt = true;
+            nextHuntAt = DateTime.MinValue;
+            if (tickBusy)
+                return;
+            var step = Tick();
+            try
+            {
+                while (step.MoveNext()) { }
+            }
+            finally
+            {
+                (step as IDisposable)?.Dispose();
+            }
+        }
 
         internal static int DebugUnstick(int plot)
         {
@@ -186,6 +260,48 @@ namespace Satisvampory.Services
         internal static bool DebugSticky(int plot, int guid) =>
             stickyFailed.Contains(FailKey(plot, guid));
 
+        internal static bool DebugIsOccupied(int plot) =>
+            plot >= 0 && occupiedPlots.Contains(plot);
+
+        internal static string DebugUpgrade(int plot)
+        {
+            var sb = new StringBuilder();
+            sb.Append("{\"plot\":").Append(plot);
+            if (plot < 0)
+            {
+                sb.Append(",\"error\":\"no plot\"}");
+                return sb.ToString();
+            }
+            var heart = Core.TerritoryService.GetCastleHeart(plot);
+            if (heart == Entity.Null || !Core.EntityManager.Exists(heart) || !heart.Has<CastleHeart>())
+            {
+                sb.Append(",\"error\":\"no heart\"}");
+                return sb.ToString();
+            }
+            var ch = heart.Read<CastleHeart>();
+            var map = GetHeartUpgradeCosts(plot, heart);
+            sb.Append(",\"heartLevel\":").Append(ch.Level)
+                .Append(",\"nextLevel\":").Append(ch.Level + 1)
+                .Append(",\"occupied\":").Append(DebugIsOccupied(plot) ? "true" : "false")
+                .Append(",\"costs\":[");
+            var first = true;
+            foreach (var kv in map)
+            {
+                if (!first) sb.Append(',');
+                first = false;
+                var type = new PrefabGUID(kv.Key);
+                var have = CountVanillaOnPlot(plot, type);
+                sb.Append("{\"guid\":").Append(kv.Key)
+                    .Append(",\"name\":\"").Append(EscSim(StashRouting.ItemLabel(type))).Append('"')
+                    .Append(",\"need\":").Append(kv.Value)
+                    .Append(",\"have\":").Append(have)
+                    .Append(",\"ok\":").Append(have >= kv.Value ? "true" : "false")
+                    .Append('}');
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+
         /// <summary>
         /// Dry-run covering for one item as if destPlot is occupied. apply=true actually transfers.
         /// </summary>
@@ -202,17 +318,20 @@ namespace Satisvampory.Services
                 return sb.ToString();
             }
 
+            depositMaxClass = 3;
+            try
+            {
             var destInvs = GetDestInventories(destPlot, out var destMode);
             var park = VanillaVisibleDests(destPlot, destInvs);
             if (park.Count == 0)
-                park = destInvs;
+                park = NonOverflowDests(destPlot, destInvs);
             var covering1 = GetBuildCovering1x(destPlot);
             covering1.TryGetValue(type.GuidHash, out var t1);
             var t3 = t1 * BuildCoverCopies;
-            var local = CountIn(park, type);
+            var local = CountVanillaOnPlot(destPlot, type);
             var sticky = stickyFailed.Contains(FailKey(destPlot, type.GuidHash));
             var room = DestHasRoomFor(park, type);
-            var ranked = StashRouting.OrderDepositInventories(destPlot, park, type);
+            var ranked = StashRouting.OrderDepositInventories(destPlot, park, type, 3);
             var clanIds = Core.TerritoryService.GetLogisticsTerritoryIds(destPlot);
             var occupiedLive = new List<int>();
             foreach (var id in occupiedPlots)
@@ -240,6 +359,8 @@ namespace Satisvampory.Services
                 .Append(",\"park\":").Append(park.Count)
                 .Append(",\"destInvs\":").Append(destInvs.Count)
                 .Append(",\"ranked\":").Append(ranked.Count)
+                .Append(",\"maxClass\":3")
+                .Append(",\"coveringCap\":").Append(Covering1xCap)
                 .Append(",\"room\":").Append(room ? "true" : "false")
                 .Append(",\"sticky\":").Append(sticky ? "true" : "false")
                 .Append(",\"covering1\":").Append(t1)
@@ -264,9 +385,11 @@ namespace Satisvampory.Services
             Core.TerritoryService.TryGetTerritoryOwnerPlatformId(destPlot, out var destOwner);
             sb.Append(",\"dests\":[");
             var firstDest = true;
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(destPlot))
+            foreach (var stash in StashesOnPlot(destPlot))
             {
                 if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
+                    continue;
+                if (StashRouting.IsConveyorName(StashRouting.RawName(stash)))
                     continue;
                 if (!StashRouting.TryGetExternalInventory(stash, out var inv))
                     continue;
@@ -274,7 +397,7 @@ namespace Satisvampory.Services
                 if (!inPark && !IsDest(destInvs, inv))
                     continue;
                 var has = StashRouting.InventoryHasItem(inv, type);
-                var rank = StashRouting.RankDeposit(stash, type, destOwner, has);
+                var rank = StashRouting.RankDeposit(stash, type, destOwner, has, destPlot);
                 var inRanked = false;
                 for (var r = 0; r < ranked.Count; r++)
                 {
@@ -301,6 +424,7 @@ namespace Satisvampory.Services
                 if (!firstDest) sb.Append(',');
                 firstDest = false;
                 sb.Append("{\"name\":\"").Append(EscSim(StashRouting.RawName(stash))).Append('"')
+                    .Append(",\"destName\":\"").Append(EscSim(StashRouting.DestName(stash))).Append('"')
                     .Append(",\"class\":").Append(rank.Class)
                     .Append(",\"label\":\"").Append(EscSim(rank.Label)).Append('"')
                     .Append(",\"usable\":").Append(rank.IsDepositUsable ? "true" : "false")
@@ -321,23 +445,44 @@ namespace Satisvampory.Services
             if (need <= 0 && t1 <= 0)
                 need = 40;
 
+            var leftoverBypass = occupiedSim.Count <= 1;
+            var spareByPlot = new Dictionary<int, int>();
+            for (var i = 0; i < occupiedSim.Count; i++)
+            {
+                var pid = occupiedSim[i];
+                if (pid == destPlot)
+                    continue;
+                var siblingNeed = ChestTargetForPlot(pid, type.GuidHash);
+                if (siblingNeed < 0)
+                    siblingNeed = 0;
+                spareByPlot[pid] = CountVanillaOnPlot(pid, type) - siblingNeed;
+            }
             var would = 0;
+            var wouldHonor = 0;
             var moved = 0;
-            sb.Append(",\"sources\":[");
+            sb.Append(",\"leftoverBypass\":").Append(leftoverBypass ? "true" : "false")
+                .Append(",\"sources\":[");
             var firstSrc = true;
             if (clanIds != null)
             {
                 var sgm = Core.ServerGameManager;
-                for (var pass = 0; pass < 3; pass++)
+                for (var sparePass = 0; sparePass < 2 && need > 0; sparePass++)
+                for (var pass = 0; pass < 3 && need > 0; pass++)
                 {
                     foreach (var srcPlot in clanIds)
                     {
+                        if (need <= 0)
+                            break;
                         if (srcPlot == destPlot)
                             continue;
                         var occupiedSrc = occupiedSim.Contains(srcPlot);
-                        var namedBypass = pass == 2;
-                        foreach (var stash in Core.Stash.GetStashesOnTerritory(srcPlot))
+                        var namedBypass = leftoverBypass && pass == 2;
+                        if (sparePass == 1 && !occupiedSrc)
+                            continue;
+                        foreach (var stash in StashesOnPlot(srcPlot))
                         {
+                            if (need <= 0)
+                                break;
                             if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
                                 continue;
                             var sourcePass = StashRouting.SourcePass(stash);
@@ -348,12 +493,23 @@ namespace Satisvampory.Services
                                 continue;
                             if (sourcePass != pass)
                                 continue;
+                            if (sparePass == 1 && !namedBypass)
+                            {
+                                var siblingVanilla = GetTreasuryInventories(srcPlot);
+                                if (siblingVanilla.Count == 0)
+                                    siblingVanilla = GetAllSharedInventories(srcPlot);
+                                if (!IsDest(siblingVanilla, inventory))
+                                    continue;
+                            }
 
                             Core.TerritoryService.TryGetTerritoryOwnerPlatformId(srcPlot, out var sourceOwnerId);
                             var reserve = Core.PlayerSettings.GetPullReserve(sourceOwnerId, type);
                             var skip = "";
-                            if (occupiedSrc && !namedBypass)
+                            if (sparePass == 0 && occupiedSrc && !namedBypass)
                                 skip = "occupied";
+                            else if (sparePass == 1 && !namedBypass
+                                && (!spareByPlot.TryGetValue(srcPlot, out var spare0) || spare0 <= 0))
+                                skip = "no-spare";
                             else if (sourcePass < 0)
                                 skip = "ns";
                             else if (IsDest(park, inventory) || IsDest(destInvs, inventory))
@@ -362,13 +518,28 @@ namespace Satisvampory.Services
                             var availHonor = reserve > 0 ? have - reserve : have;
                             if (availHonor < 0)
                                 availHonor = 0;
+                            var takeBypass = 0;
+                            var takeHonor = 0;
                             var take = 0;
                             if (skip.Length == 0)
                             {
-                                take = availBypass < need ? availBypass : need;
-                                if (take < 0)
-                                    take = 0;
+                                takeBypass = availBypass < need ? availBypass : need;
+                                if (takeBypass < 0)
+                                    takeBypass = 0;
+                                takeHonor = availHonor < need ? availHonor : need;
+                                if (takeHonor < 0)
+                                    takeHonor = 0;
+                                take = leftoverBypass ? takeBypass : takeHonor;
+                                if (sparePass == 1 && spareByPlot.TryGetValue(srcPlot, out var spareTake) && spareTake >= 0 && take > spareTake)
+                                    take = spareTake;
                                 would += take;
+                                wouldHonor += leftoverBypass ? takeHonor : take;
+                                if (!apply && take > 0)
+                                {
+                                    need -= take;
+                                    if (sparePass == 1)
+                                        spareByPlot[srcPlot] = spareByPlot[srcPlot] - take;
+                                }
                             }
 
                             var got = 0;
@@ -378,7 +549,11 @@ namespace Satisvampory.Services
                                 got = MoveIntoDest(destPlot, inventory, park, type, take, out destRejected);
                                 moved += got;
                                 if (got > 0)
+                                {
                                     need -= got;
+                                    if (sparePass == 1)
+                                        spareByPlot[srcPlot] = spareByPlot[srcPlot] - got;
+                                }
                             }
 
                             if (!firstSrc) sb.Append(',');
@@ -392,7 +567,10 @@ namespace Satisvampory.Services
                                 .Append(",\"availHonor\":").Append(availHonor)
                                 .Append(",\"occupied\":").Append(occupiedSrc ? "true" : "false")
                                 .Append(",\"namedBypass\":").Append(namedBypass ? "true" : "false")
+                                .Append(",\"sparePass\":").Append(sparePass == 1 ? "true" : "false")
                                 .Append(",\"skip\":\"").Append(EscSim(skip)).Append('"')
+                                .Append(",\"takeBypass\":").Append(takeBypass)
+                                .Append(",\"takeHonor\":").Append(takeHonor)
                                 .Append(",\"take\":").Append(take)
                                 .Append(",\"got\":").Append(got)
                                 .Append(",\"destRejected\":").Append(destRejected ? "true" : "false")
@@ -402,10 +580,16 @@ namespace Satisvampory.Services
                 }
             }
             sb.Append("],\"wouldMove\":").Append(would)
+                .Append(",\"wouldHonor\":").Append(wouldHonor)
                 .Append(",\"apply\":").Append(apply ? "true" : "false")
                 .Append(",\"moved\":").Append(moved)
                 .Append('}');
             return sb.ToString();
+            }
+            finally
+            {
+                depositMaxClass = 5;
+            }
         }
 
         static string EscSim(string s)
@@ -413,6 +597,145 @@ namespace Satisvampory.Services
             if (string.IsNullOrEmpty(s))
                 return "";
             return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\r", " ").Replace("\n", " ");
+        }
+
+        /// <summary>
+        /// Dry-run 30-player occupy fairness. Does not move items. guests never occupy.
+        /// </summary>
+        internal static string DebugFairness(int users)
+        {
+            if (users < 1)
+                users = 30;
+            if (users > 64)
+                users = 64;
+            var live = new List<int>();
+            for (var id = TerritoryService.MIN_TERRITORY_ID; id <= TerritoryService.MAX_TERRITORY_ID; id++)
+            {
+                var heart = Core.TerritoryService.GetCastleHeart(id);
+                if (heart == Entity.Null || !ClanTreasuryShare.ShouldShare(heart))
+                    continue;
+                live.Add(id);
+            }
+            live.Sort();
+            var occupied = new List<int>();
+            occupied.AddRange(live);
+            if (occupied.Count > users)
+                occupied.RemoveRange(users, occupied.Count - users);
+            var next = 1000;
+            while (occupied.Count < users)
+            {
+                while (occupied.Contains(next))
+                    next++;
+                occupied.Add(next++);
+            }
+            occupied.Sort();
+            var unique = new HashSet<int>(occupied);
+            var plotsPerTick = MaxLendPullsPerPlot <= 0 ? 0 : MaxLendPullsPerTick / MaxLendPullsPerPlot;
+            if (plotsPerTick > unique.Count)
+                plotsPerTick = unique.Count;
+            var ticksToServe = unique.Count == 0 || plotsPerTick <= 0
+                ? 0
+                : (unique.Count + plotsPerTick - 1) / plotsPerTick;
+            var cursor = occupyCursor < 0 ? 0 : occupyCursor;
+            var order = new List<int>(unique);
+            order.Sort();
+            var firstTick = new List<int>();
+            if (order.Count > 0)
+            {
+                var start = cursor % order.Count;
+                for (var i = 0; i < order.Count && i < plotsPerTick; i++)
+                    firstTick.Add(order[(start + i) % order.Count]);
+            }
+            var leftoverBypass = unique.Count <= 1;
+            var sb = new StringBuilder();
+            sb.Append("{\"users\":").Append(users)
+                .Append(",\"maxPullsPerTick\":").Append(MaxLendPullsPerTick)
+                .Append(",\"maxPullsPerPlot\":").Append(MaxLendPullsPerPlot)
+                .Append(",\"plotsPerTick\":").Append(plotsPerTick)
+                .Append(",\"ticksToServeAll\":").Append(ticksToServe)
+                .Append(",\"secondsToServeAll\":").Append(ticksToServe * 5)
+                .Append(",\"occupyCursor\":").Append(cursor)
+                .Append(",\"livePlots\":[");
+            for (var i = 0; i < live.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append(live[i]);
+            }
+            sb.Append("],\"uniqueOccupied\":").Append(unique.Count)
+                .Append(",\"leftoverBypass\":").Append(leftoverBypass ? "true" : "false")
+                .Append(",\"guestOccupies\":false")
+                .Append(",\"selfSortGate\":\"plotPullsLeft\"")
+                .Append(",\"firstTickServed\":[");
+            for (var i = 0; i < firstTick.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append(firstTick[i]);
+            }
+            sb.Append("],\"guest\":\"IsSameClanAsHeart required to occupy; CS-on visitor uses own clan island; chest HUD CombineMerged only if a clan member is standing\"")
+                .Append('}');
+            return sb.ToString();
+        }
+
+        internal static string DebugGuest()
+        {
+            var clanStanding = 0;
+            var guests = 0;
+            var offPlot = 0;
+            var builder = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<User>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref builder);
+            builder.Dispose();
+            NativeArray<Entity> users = default;
+            try
+            {
+                users = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < users.Length; i++)
+                {
+                    var userEntity = users[i];
+                    if (userEntity == Entity.Null || !Core.EntityManager.Exists(userEntity) || !userEntity.Has<User>())
+                        continue;
+                    var user = userEntity.Read<User>();
+                    if (!user.IsConnected)
+                        continue;
+                    var character = user.LocalCharacter.GetEntityOnServer();
+                    if (character == Entity.Null || !Core.EntityManager.Exists(character) || !character.Has<PlayerCharacter>())
+                        continue;
+                    var plot = Core.TerritoryService.GetStandingTerritoryId(character);
+                    if (plot < 0)
+                    {
+                        offPlot++;
+                        continue;
+                    }
+                    var heart = Core.TerritoryService.GetCastleHeart(plot);
+                    if (heart == Entity.Null)
+                    {
+                        offPlot++;
+                        continue;
+                    }
+                    if (Core.TerritoryService.IsSameClanAsHeart(character, heart))
+                        clanStanding++;
+                    else
+                        guests++;
+                }
+            }
+            finally
+            {
+                if (users.IsCreated)
+                    users.Dispose();
+                query.Dispose();
+            }
+            var sb = new StringBuilder();
+            sb.Append("{\"occupy\":\"ShouldShare heart + IsSameClanAsHeart (guests never occupy / covering / leftover-bypass)\"")
+                .Append(",\"build\":\"CanShareBuild standing heart + IsSameClanAsHeart\"")
+                .Append(",\"chestHud\":\"player actor IsSameClanAsHeart; else ClanMemberStandingOnHeart\"")
+                .Append(",\"logistics\":\"CS ON = actor clan island (cse standing stays local); CS OFF = standing allied only\"")
+                .Append(",\"coveringUnlocks\":\"CollectUnlocksOnPlot clan members on that plot only\"")
+                .Append(",\"clanStanding\":").Append(clanStanding)
+                .Append(",\"guestsStanding\":").Append(guests)
+                .Append(",\"offPlot\":").Append(offPlot)
+                .Append(",\"guestOccupies\":false")
+                .Append(",\"ok\":true}");
+            return sb.ToString();
         }
 
         internal static void AddWorkstation(Entity station)
@@ -491,7 +814,7 @@ namespace Satisvampory.Services
             }
         }
 
-        static bool InEmptyHold(int destPlot, Entity inventory)
+        internal static bool InEmptyHold(int destPlot, Entity inventory)
         {
             var key = DestHoldKey(destPlot, inventory);
             if (!destEmptyHoldUntil.TryGetValue(key, out var until))
@@ -526,15 +849,57 @@ namespace Satisvampory.Services
             while (true)
             {
                 yield return wait;
+                IEnumerator step = null;
                 try
                 {
-                    Tick();
+                    step = Tick();
                 }
                 catch (Exception e)
                 {
                     Core.LogException(e);
+                    continue;
+                }
+                try
+                {
+                    while (step != null)
+                    {
+                        var more = false;
+                        try
+                        {
+                            more = step.MoveNext();
+                        }
+                        catch (Exception e)
+                        {
+                            Core.LogException(e);
+                            break;
+                        }
+                        if (!more)
+                            break;
+                        yield return step.Current;
+                    }
+                }
+                finally
+                {
+                    (step as IDisposable)?.Dispose();
                 }
             }
+        }
+
+        static float HuntWaitSeconds(int huntMs)
+        {
+            if (huntMs <= FatHuntMs)
+                return IntervalSeconds;
+            var wait = IntervalSeconds * (huntMs / (float)FatHuntMs);
+            if (wait < IntervalSeconds)
+                wait = IntervalSeconds;
+            if (wait > HuntMaxSeconds)
+                wait = HuntMaxSeconds;
+            return wait;
+        }
+
+        static bool TimeToYield()
+        {
+            return Core.TerritoryService != null && Core.TerritoryService.ShouldUpdateYield();
         }
 
         static bool IsStarterKitGuid(int guid) =>
@@ -588,8 +953,8 @@ namespace Satisvampory.Services
             var g = item.GuidHash;
             if (g == 0)
                 return false;
-            // Regular Blood Essence is heart fuel (slots, not the build menu). GBE/primal
-            // are castle costs and vanilla treasury chests accept them.
+            // Vanilla treasury chests reject regular Blood Essence. It still belongs
+            // on named/generic dests (Alchemy Table etc.) and in heart fuel slots.
             return g == BloodEssenceHash;
         }
 
@@ -599,7 +964,7 @@ namespace Satisvampory.Services
                 return "";
             foreach (var dest in destInvs)
             {
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+                foreach (var stash in StashesOnPlot(plot))
                 {
                     if (StashRouting.TryGetExternalInventory(stash, out var inv) && inv.Equals(dest))
                         return StashRouting.RawName(stash);
@@ -612,18 +977,16 @@ namespace Satisvampory.Services
         {
             var list = new List<Entity>();
             Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out var ownerId);
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+            foreach (var stash in StashesOnPlot(plot))
             {
                 if (stash.Has<Refinementstation>())
                     continue;
                 var name = StashRouting.RawName(stash);
                 if (StashRouting.IsNoShareName(name) || StashRouting.IsSpecialName(name) || StashRouting.IsConveyorName(name))
                     continue;
-                if (IsTreasuryFloor(stash))
-                    continue;
                 if (!StashRouting.TryGetExternalInventory(stash, out var inv))
                     continue;
-                var generic = StashRouting.IsGenericName(name);
+                var generic = StashRouting.IsUnnamedOrGeneric(name);
                 var named = item.GuidHash != 0 && (StashRouting.ExactItemNameMatch(name, item, out _)
                     || StashRouting.CategoryMatch(name, item, ownerId, out _));
                 if (!generic && !named)
@@ -640,6 +1003,10 @@ namespace Satisvampory.Services
             var blood = GetBloodAcceptingDests(plot, type);
             if (blood.Count > 0)
                 return blood;
+            // Plot is all treasury-floor dests: still park into ranked Blood/Alchemy/generic
+            // from the covering dest list. Live 1.0.26 skipped those and HUD stayed 0/200.
+            if (defaultDests != null && defaultDests.Count > 0)
+                return StashRouting.OrderDepositInventories(plot, defaultDests, type, 3);
             return new List<Entity>();
         }
 
@@ -715,6 +1082,26 @@ namespace Satisvampory.Services
                 || CountIn(destInvs, new PrefabGUID(StoneHash)) > 0;
         }
 
+        static bool DestHasAllKitTypes(List<Entity> destInvs)
+        {
+            return CountIn(destInvs, new PrefabGUID(PlankHash)) > 0
+                && CountIn(destInvs, new PrefabGUID(StoneBrickHash)) > 0
+                && CountIn(destInvs, new PrefabGUID(CopperIngotHash)) > 0
+                && CountIn(destInvs, new PrefabGUID(IronIngotHash)) > 0
+                && CountIn(destInvs, new PrefabGUID(GemDustHash)) > 0
+                && CountIn(destInvs, new PrefabGUID(StoneHash)) > 0;
+        }
+
+        static bool PlotHasAllKitTypes(int plot)
+        {
+            return CountVanillaOnPlot(plot, new PrefabGUID(PlankHash)) > 0
+                && CountVanillaOnPlot(plot, new PrefabGUID(StoneBrickHash)) > 0
+                && CountVanillaOnPlot(plot, new PrefabGUID(CopperIngotHash)) > 0
+                && CountVanillaOnPlot(plot, new PrefabGUID(IronIngotHash)) > 0
+                && CountVanillaOnPlot(plot, new PrefabGUID(GemDustHash)) > 0
+                && CountVanillaOnPlot(plot, new PrefabGUID(StoneHash)) > 0;
+        }
+
         static int GetItemMaxStack(PrefabGUID type)
         {
             try
@@ -750,26 +1137,24 @@ namespace Satisvampory.Services
             return stack > locked ? stack : locked;
         }
 
-        static int LendStarterKitOnce(int destPlot, List<Entity> kitDest, IReadOnlyList<int> clanIds, List<int> occupiedInClan, string destMode)
+        static int LendStarterKitOnce(int destPlot, List<Entity> kitDest, IReadOnlyList<int> clanIds, HashSet<int> occupiedInClan, string destMode)
         {
             var movedAll = 0;
-            // Chest-first leftover-bypass (named last-resort + raw stack count, never leftover-subtract).
-            // Target is max(locked chest-first amount, one vanilla MaxStack). Dest-full stops.
-            // Do not pull a second extra stack beyond that one fill. Remaining 216 plank honors leftover.
-            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, PlankHash, KitBypassTarget(PlankHash, KitChestPlank), ignoreLeftoverNamed: true);
-            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, CopperIngotHash, KitBypassTarget(CopperIngotHash, KitChestCopper), ignoreLeftoverNamed: true);
-            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, IronIngotHash, KitBypassTarget(IronIngotHash, KitIron), ignoreLeftoverNamed: true);
-            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, GemDustHash, KitBypassTarget(GemDustHash, KitGemDust), ignoreLeftoverNamed: true);
-            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, StoneBrickHash, KitBypassTarget(StoneBrickHash, KitStoneBrick), ignoreLeftoverNamed: true);
-            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, StoneHash, KitBypassTarget(StoneHash, KitStone), ignoreLeftoverNamed: true);
+            var bypass = occupiedInClan == null || occupiedInClan.Count <= 1;
+            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, PlankHash, KitBypassTarget(PlankHash, KitChestPlank), ignoreLeftoverNamed: bypass);
+            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, CopperIngotHash, KitBypassTarget(CopperIngotHash, KitChestCopper), ignoreLeftoverNamed: bypass);
+            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, IronIngotHash, KitBypassTarget(IronIngotHash, KitIron), ignoreLeftoverNamed: bypass);
+            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, GemDustHash, KitBypassTarget(GemDustHash, KitGemDust), ignoreLeftoverNamed: bypass);
+            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, StoneBrickHash, KitBypassTarget(StoneBrickHash, KitStoneBrick), ignoreLeftoverNamed: bypass);
+            movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, StoneHash, KitBypassTarget(StoneHash, KitStone), ignoreLeftoverNamed: bypass);
             if (DestHasEmptySlots(kitDest))
                 movedAll += LendKitGuid(destPlot, kitDest, clanIds, occupiedInClan, destMode, PlankHash, KitPlank, ignoreLeftoverNamed: false);
             return movedAll;
         }
 
-        static int LendKitGuid(int destPlot, List<Entity> kitDest, IReadOnlyList<int> clanIds, List<int> occupiedInClan, string destMode, int guid, int target, bool ignoreLeftoverNamed)
+        static int LendKitGuid(int destPlot, List<Entity> kitDest, IReadOnlyList<int> clanIds, HashSet<int> occupiedInClan, string destMode, int guid, int target, bool ignoreLeftoverNamed)
         {
-            if (kitDest == null || kitDest.Count == 0 || guid == 0 || target <= 0 || lendPullsLeft <= 0)
+            if (kitDest == null || kitDest.Count == 0 || guid == 0 || target <= 0 || !CanLendPull())
                 return 0;
             var type = new PrefabGUID(guid);
             var local = CountIn(kitDest, type);
@@ -778,10 +1163,11 @@ namespace Satisvampory.Services
             if (!DestHasRoomFor(kitDest, type))
             {
                 Core.Log.LogInfo($"[ClanTreasuryLend] kit destPlot={destPlot} guid={guid} moved=0 dest-full local={local} target={target} dest={destMode}");
+                DestDebugLog.Miss("kit", destPlot, type, local, target, "dest-full dest=" + destMode);
                 return 0;
             }
             var need = target - local;
-            lendPullsLeft--;
+            ConsumeLendPull();
             var fail = false;
             var leftoverBlocked = 0;
             var leftoverHave = 0;
@@ -799,12 +1185,19 @@ namespace Satisvampory.Services
             }
             if (moved <= 0)
             {
+                // Keep the consumed pull: scanning clan sources is the expensive work.
                 if (fail)
                     Core.Log.LogInfo($"[ClanTreasuryLend] kit destPlot={destPlot} guid={guid} moved=0 dest-rejected-or-copy-fail local={CountIn(kitDest, type)} target={target} dest={destMode}");
                 else if (leftoverBlocked > 0)
+                {
                     Core.Log.LogInfo($"[ClanTreasuryLend] kit destPlot={destPlot} guid={guid} moved=0 no-source local={CountIn(kitDest, type)} target={target} dest={destMode} leftover={leftoverReserve} have={leftoverHave} leftover-blocked={leftoverBlocked} named-bypass={ignoreLeftoverNamed}");
+                    DestDebugLog.Miss("kit", destPlot, type, leftoverHave, target, "leftover-blocked leftover=" + leftoverReserve + " dest=" + destMode);
+                }
                 else
+                {
                     Core.Log.LogInfo($"[ClanTreasuryLend] kit destPlot={destPlot} guid={guid} moved=0 no-source local={CountIn(kitDest, type)} target={target} dest={destMode}");
+                    DestDebugLog.Miss("kit", destPlot, type, CountIn(kitDest, type), target, "no-source dest=" + destMode);
+                }
                 return 0;
             }
             pendingVerify.Add(FailKey(destPlot, guid));
@@ -815,7 +1208,7 @@ namespace Satisvampory.Services
         {
             if (inv == Entity.Null)
                 return false;
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+            foreach (var stash in StashesOnPlot(plot))
             {
                 if (!StashRouting.TryGetExternalInventory(stash, out var found) || !found.Equals(inv))
                     continue;
@@ -828,7 +1221,7 @@ namespace Satisvampory.Services
         {
             if (inv == Entity.Null)
                 return Entity.Null;
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+            foreach (var stash in StashesOnPlot(plot))
             {
                 if (StashRouting.TryGetExternalInventory(stash, out var found) && found.Equals(inv))
                     return stash;
@@ -854,6 +1247,8 @@ namespace Satisvampory.Services
                     continue;
                 var stash = StashForInventory(destPlot, inv);
                 var name = StashRouting.RawName(stash);
+                if (StashRouting.IsConveyorName(name))
+                    continue;
                 if (IsTreasuryFloor(stash) || ClanTreasuryShare.IsTreasuryLinked(stash))
                     treasury.Add(inv);
                 else if (StashRouting.IsUnnamedOrGeneric(name))
@@ -872,6 +1267,9 @@ namespace Satisvampory.Services
                 if (inv == Entity.Null || !Core.EntityManager.Exists(inv))
                     continue;
                 if (InventoryIsOverflow(destPlot, inv))
+                    continue;
+                var stash = StashForInventory(destPlot, inv);
+                if (StashRouting.IsConveyorName(StashRouting.RawName(stash)))
                     continue;
                 list.Add(inv);
             }
@@ -892,7 +1290,7 @@ namespace Satisvampory.Services
                 if (AnyHeartKey(keys, Core.PlayerSettings.IsStarterKitChestOptOut))
                     continue;
                 list.Add(inv);
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(destPlot))
+                foreach (var stash in StashesOnPlot(destPlot))
                 {
                     if (StashRouting.TryGetExternalInventory(stash, out var found) && found.Equals(inv))
                     {
@@ -923,7 +1321,7 @@ namespace Satisvampory.Services
             if (picked == Entity.Null)
                 picked = ordered[0];
             list.Add(picked);
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(destPlot))
+            foreach (var stash in StashesOnPlot(destPlot))
             {
                 if (StashRouting.TryGetExternalInventory(stash, out var inv) && inv.Equals(picked))
                 {
@@ -998,20 +1396,41 @@ namespace Satisvampory.Services
         static Dictionary<int, int> ParseHeartUpgradeCosts(CastleHeart ch)
         {
             var map = new Dictionary<int, int>();
+            var current = ch.Level;
+            var next = current + 1;
+            // Costs to REACH the next level live on that level's blob, not the current one.
+            // GetLevelData() on L2 returns empty UpgradeCosts; HUD still wants 24 Glass.
             try
             {
-                ref var levelData = ref ch.GetLevelData();
+                ref var levelData = ref ch.GetLevelData(next);
                 AddUpgradeCosts(map, levelData.UpgradeCosts);
             }
             catch (Exception e)
             {
-                Core.Log.LogWarning($"[ClanTreasuryLend] GetLevelData failed, trying blob: {e.Message}");
-                TryParseUpgradeCostsFromBlob(ch, map);
+                Core.Log.LogWarning($"[ClanTreasuryLend] GetLevelData({next}) failed: {e.Message}");
             }
+            if (map.Count == 0)
+            {
+                try
+                {
+                    ref var levelData = ref ch.GetLevelData();
+                    AddUpgradeCosts(map, levelData.UpgradeCosts);
+                }
+                catch (Exception e)
+                {
+                    Core.Log.LogWarning($"[ClanTreasuryLend] GetLevelData failed: {e.Message}");
+                }
+            }
+            if (map.Count == 0)
+                TryParseUpgradeCostsFromBlob(ch, map, next);
+            if (map.Count == 0)
+                TryParseUpgradeCostsFromBlob(ch, map, current);
+            if (map.Count == 0)
+                ApplyFallbackUpgradeCosts(current, map);
             return map;
         }
 
-        static void TryParseUpgradeCostsFromBlob(CastleHeart ch, Dictionary<int, int> map)
+        static void TryParseUpgradeCostsFromBlob(CastleHeart ch, Dictionary<int, int> map, int wantLevel)
         {
             try
             {
@@ -1019,15 +1438,51 @@ namespace Satisvampory.Services
                     return;
                 ref var blob = ref ch.Data.Value;
                 var levels = blob.Levels;
-                var idx = ch.Level;
-                if (idx < 0 || idx >= levels.Length)
-                    return;
-                ref var levelData = ref levels[idx];
-                AddUpgradeCosts(map, levelData.UpgradeCosts);
+                for (var pass = 0; pass < 2 && map.Count == 0; pass++)
+                {
+                    for (var i = 0; i < levels.Length; i++)
+                    {
+                        ref var levelData = ref levels[i];
+                        var match = pass == 0
+                            ? levelData.Level == wantLevel
+                            : i == wantLevel || i == wantLevel - 1;
+                        if (!match)
+                            continue;
+                        AddUpgradeCosts(map, levelData.UpgradeCosts);
+                        if (map.Count > 0)
+                            return;
+                    }
+                }
             }
             catch (Exception e)
             {
                 Core.Log.LogWarning($"[ClanTreasuryLend] blob UpgradeCosts failed: {e.Message}");
+            }
+        }
+
+        static void ApplyFallbackUpgradeCosts(int currentLevel, Dictionary<int, int> map)
+        {
+            // 1.1 Standard PvE: costs to leave currentLevel (HUD Upgrade Castle Heart).
+            switch (currentLevel)
+            {
+                case 1:
+                    map[LeatherHash] = 12;
+                    map[CopperIngotHash] = 12;
+                    break;
+                case 2:
+                    map[ReinforcedPlankHash] = 8;
+                    map[GlassHash] = 24;
+                    map[GreaterBloodEssenceHash] = 1;
+                    break;
+                case 3:
+                    map[RadiumAlloyHash] = 12;
+                    map[PrimalBloodEssenceHash] = 1;
+                    break;
+                case 4:
+                    map[DarkSilverIngotHash] = 12;
+                    map[PowerCoreHash] = 4;
+                    map[PrimalBloodEssenceHash] = 1;
+                    break;
             }
         }
 
@@ -1046,83 +1501,338 @@ namespace Satisvampory.Services
             }
         }
 
-        static void Tick()
+        static void BeginLendTickCaches(HashSet<int> occupied)
         {
-            if (!Core.HasInitialized)
-                return;
+            tickCachesOn = true;
+            tickTreasuryInvs = new Dictionary<int, List<Entity>>();
+            tickAllSharedInvs = new Dictionary<int, List<Entity>>();
+            tickStashes = new Dictionary<int, List<Entity>>();
+            tickVanillaCounts = new Dictionary<int, Dictionary<int, int>>();
+            StashRouting.InvalidatePlotStashMap();
+            SeedUnlocksForOccupied(occupied);
+        }
 
-            var occupied = CollectOccupiedClanSharePlots(out var connectedPlayers);
-            if (connectedPlayers == 0)
+        static void EndLendTickCaches()
+        {
+            tickCachesOn = false;
+            tickTreasuryInvs = null;
+            tickAllSharedInvs = null;
+            tickStashes = null;
+            tickVanillaCounts = null;
+            tickUnlocks = null;
+            StashRouting.InvalidatePlotStashMap();
+        }
+
+        static void InvalidateTickPlotCounts(int plot)
+        {
+            if (tickVanillaCounts != null)
+                tickVanillaCounts.Remove(plot);
+        }
+
+        static void SeedUnlocksForOccupied(HashSet<int> occupied)
+        {
+            tickUnlocks = new Dictionary<int, HashSet<int>>();
+            if (occupied == null || occupied.Count == 0)
+                return;
+            foreach (var plot in occupied)
+                tickUnlocks[plot] = new HashSet<int>();
+            var builder = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<User>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref builder);
+            builder.Dispose();
+            NativeArray<Entity> users = default;
+            try
             {
-                ReturnAllLedgers("empty-server");
+                users = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < users.Length; i++)
+                {
+                    var userEntity = users[i];
+                    if (userEntity == Entity.Null || !Core.EntityManager.Exists(userEntity) || !userEntity.Has<User>())
+                        continue;
+                    var user = userEntity.Read<User>();
+                    if (!user.IsConnected)
+                        continue;
+                    var character = user.LocalCharacter.GetEntityOnServer();
+                    if (character == Entity.Null || !Core.EntityManager.Exists(character) || !character.Has<PlayerCharacter>())
+                        continue;
+                    var plot = Core.TerritoryService.GetStandingTerritoryId(character);
+                    if (!tickUnlocks.TryGetValue(plot, out var set))
+                        continue;
+                    var heart = Core.TerritoryService.GetCastleHeart(plot);
+                    if (!Core.TerritoryService.IsSameClanAsHeart(character, heart))
+                        continue;
+                    AddUnlockedBlueprints(userEntity, set);
+                }
+            }
+            catch (Exception e)
+            {
+                Core.LogException(e);
+            }
+            finally
+            {
+                if (users.IsCreated)
+                    users.Dispose();
+                query.Dispose();
+            }
+        }
+
+        static IEnumerator Tick()
+        {
+            if (!Core.HasInitialized || tickBusy)
+                yield break;
+            tickBusy = true;
+            var hunt = false;
+            var connectedPlayers = 0;
+            var occupiedCount = 0;
+            var tickAt = DateTime.UtcNow;
+            var usedPulls = 0;
+            var skip = 1;
+            var backoff = 0;
+            try
+            {
+                var occupied = CollectOccupiedClanSharePlots(out connectedPlayers);
+                occupiedCount = occupied.Count;
+                if (connectedPlayers == 0)
+                {
+                    ReturnAllLedgers("empty-server");
+                    previouslyOccupied.Clear();
+                    leftAt.Clear();
+                    pendingVerify.Clear();
+                    occupiedPlots.Clear();
+                    holdKitOverflowPlots.Clear();
+                    lastTickUsedPull = false;
+                    nextHuntAt = DateTime.MinValue;
+                    if (!loggedEmptySkip)
+                    {
+                        Core.Log.LogInfo("[ClanTreasuryLend] empty server (0 connected players) -- zero lends, returned leftovers");
+                        DestDebugLog.Note("lend", -1, 0, "empty-server");
+                        loggedEmptySkip = true;
+                    }
+                    yield break;
+                }
+                loggedEmptySkip = false;
+                lendPullsLeft = MaxLendPullsPerTick;
+
+                foreach (var plot in occupied)
+                    leftAt.Remove(plot);
+                foreach (var plot in previouslyOccupied)
+                {
+                    if (occupied.Contains(plot) || leftAt.ContainsKey(plot))
+                        continue;
+                    leftAt[plot] = DateTime.UtcNow;
+                }
+                var due = new List<int>();
+                foreach (var kv in leftAt)
+                {
+                    if ((DateTime.UtcNow - kv.Value).TotalSeconds >= UnoccupiedReturnSeconds)
+                        due.Add(kv.Key);
+                }
+                for (var i = 0; i < due.Count; i++)
+                {
+                    ReturnPlot(due[i], "unoccupied");
+                    leftAt.Remove(due[i]);
+                }
+
                 previouslyOccupied.Clear();
-                leftAt.Clear();
-                pendingVerify.Clear();
-                if (!loggedEmptySkip)
+                occupiedPlots.Clear();
+                holdKitOverflowPlots.Clear();
+                foreach (var plot in occupied)
                 {
-                    Core.Log.LogInfo("[ClanTreasuryLend] empty server (0 connected players) -- zero lends, returned leftovers");
-                    loggedEmptySkip = true;
+                    previouslyOccupied.Add(plot);
+                    occupiedPlots.Add(plot);
+                    GetDestInventories(plot, out var occupyMode);
+                    if (occupyMode == "allShared")
+                        holdKitOverflowPlots.Add(plot);
                 }
-                return;
-            }
-            loggedEmptySkip = false;
-            lendPullsLeft = MaxLendPullsPerTick;
 
-            foreach (var plot in occupied)
-                leftAt.Remove(plot);
-            foreach (var plot in previouslyOccupied)
+                CheckStickyRetain(occupied);
+
+                var order = new List<int>(occupied);
+                order.Sort();
+                if (order.Count == 0)
+                    yield break;
+                if (occupyCursor < 0)
+                    occupyCursor = 0;
+                var start = occupyCursor % order.Count;
+                occupyCursor = (start + 1) % order.Count;
+
+                var emptyHoldDue = EmptyHoldExpired();
+                var control = BuildControlKey(occupied, emptyHoldDue);
+                var wantHunt = forceHunt || lastTickUsedPull || emptyHoldDue
+                    || control != lastControlKey || IslandDirtyFor(occupied);
+                var urgent = forceHunt || lastTickUsedPull || emptyHoldDue || control != lastControlKey;
+                forceHunt = false;
+                var now = DateTime.UtcNow;
+                if (wantHunt && !urgent && now < nextHuntAt)
+                {
+                    lastTickUsedPull = false;
+                    skip = 2;
+                    backoff = (int)Math.Ceiling((nextHuntAt - now).TotalSeconds);
+                    if (backoff < 0)
+                        backoff = 0;
+                    yield break;
+                }
+                hunt = wantHunt;
+                skip = hunt ? 0 : 1;
+                if (!hunt)
+                {
+                    lastTickUsedPull = false;
+                    yield break;
+                }
+
+                lastControlKey = control;
+                ClearDirtyFor(occupied);
+                BeginLendTickCaches(occupied);
+                if (Core.TerritoryService != null)
+                    Core.TerritoryService.StartTimer();
+                for (var i = 0; i < order.Count; i++)
+                {
+                    var plot = order[(start + i) % order.Count];
+                    plotPullsLeft = MaxLendPullsPerPlot;
+                    var lend = LendToPlot(plot, occupied);
+                    while (true)
+                    {
+                        var more = false;
+                        try
+                        {
+                            more = lend.MoveNext();
+                        }
+                        catch (Exception e)
+                        {
+                            Core.LogException(e);
+                            break;
+                        }
+                        if (!more)
+                            break;
+                        yield return lend.Current;
+                    }
+                    if (plotPullsLeft < MaxLendPullsPerPlot)
+                        continue;
+                    var sort = SelfSortPlot(plot);
+                    while (true)
+                    {
+                        var more = false;
+                        try
+                        {
+                            more = sort.MoveNext();
+                        }
+                        catch (Exception e)
+                        {
+                            Core.LogException(e);
+                            break;
+                        }
+                        if (!more)
+                            break;
+                        yield return sort.Current;
+                    }
+                    if (TimeToYield())
+                    {
+                        yield return null;
+                        Core.TerritoryService.StartTimer();
+                    }
+                }
+                usedPulls = MaxLendPullsPerTick - lendPullsLeft;
+                lastTickUsedPull = usedPulls > 0;
+            }
+            finally
             {
-                if (occupied.Contains(plot) || leftAt.ContainsKey(plot))
+                if (hunt)
+                    EndLendTickCaches();
+                var ms = (int)(DateTime.UtcNow - tickAt).TotalMilliseconds;
+                if (hunt)
+                {
+                    var wait = HuntWaitSeconds(ms);
+                    nextHuntAt = DateTime.UtcNow.AddSeconds(wait);
+                    if (wait > IntervalSeconds)
+                        backoff = (int)Math.Ceiling(wait);
+                }
+                DestDebugLog.Perf("lend", occupiedCount, usedPulls, ms,
+                    Core.WorkQueue != null ? Core.WorkQueue.QueueDepth : 0, connectedPlayers, skip, backoff);
+                tickBusy = false;
+            }
+        }
+
+        static bool EmptyHoldExpired()
+        {
+            if (destEmptyHoldUntil.Count == 0)
+                return false;
+            var now = DateTime.UtcNow;
+            foreach (var until in destEmptyHoldUntil.Values)
+            {
+                if (now >= until)
+                    return true;
+            }
+            return false;
+        }
+
+        static bool IslandDirtyFor(HashSet<int> occupied)
+        {
+            if (islandDirty.Count == 0)
+                return false;
+            foreach (var plot in occupied)
+            {
+                if (islandDirty.Contains(plot))
+                    return true;
+                var ids = Core.TerritoryService.GetLogisticsTerritoryIds(plot);
+                if (ids == null)
                     continue;
-                leftAt[plot] = DateTime.UtcNow;
+                for (var i = 0; i < ids.Count; i++)
+                {
+                    if (islandDirty.Contains(ids[i]))
+                        return true;
+                }
             }
-            var due = new List<int>();
-            foreach (var kv in leftAt)
-            {
-                if ((DateTime.UtcNow - kv.Value).TotalSeconds >= UnoccupiedReturnSeconds)
-                    due.Add(kv.Key);
-            }
-            for (var i = 0; i < due.Count; i++)
-            {
-                ReturnPlot(due[i], "unoccupied");
-                leftAt.Remove(due[i]);
-            }
+            return false;
+        }
 
-            previouslyOccupied.Clear();
-            occupiedPlots.Clear();
-            holdKitOverflowPlots.Clear();
+        static void ClearDirtyFor(HashSet<int> occupied)
+        {
             foreach (var plot in occupied)
             {
-                previouslyOccupied.Add(plot);
-                occupiedPlots.Add(plot);
-                GetDestInventories(plot, out var occupyMode);
-                if (occupyMode == "allShared")
-                    holdKitOverflowPlots.Add(plot);
-            }
-
-            CheckStickyRetain(occupied);
-
-            foreach (var plot in occupied)
-            {
-                try
-                {
-                    LendToPlot(plot, occupied);
-                }
-                catch (Exception e)
-                {
-                    Core.LogException(e);
-                }
-                if (lendPullsLeft < MaxLendPullsPerTick)
+                islandDirty.Remove(plot);
+                var ids = Core.TerritoryService.GetLogisticsTerritoryIds(plot);
+                if (ids == null)
                     continue;
-                try
-                {
-                    SelfSortPlot(plot);
-                }
-                catch (Exception e)
-                {
-                    Core.LogException(e);
-                }
+                for (var i = 0; i < ids.Count; i++)
+                    islandDirty.Remove(ids[i]);
             }
+        }
+
+        static string BuildControlKey(HashSet<int> occupied, bool emptyHoldDue)
+        {
+            var sb = new StringBuilder(128);
+            sb.Append('s').Append(settingsEpoch).Append('|');
+            sb.Append('o').Append(occupied.Count).Append('|');
+            sb.Append('b').Append(occupied.Count <= 1 ? 1 : 0).Append('|');
+            sb.Append('h').Append(emptyHoldDue ? 1 : 0).Append('|');
+            sb.Append('u').Append(leftAt.Count).Append('|');
+            var plots = new List<int>(occupied);
+            plots.Sort();
+            for (var i = 0; i < plots.Count; i++)
+            {
+                var plot = plots[i];
+                sb.Append(plot).Append(':');
+                var heart = Core.TerritoryService.GetCastleHeart(plot);
+                if (heart != Entity.Null && Core.EntityManager.Exists(heart) && heart.Has<CastleHeart>())
+                {
+                    var ch = heart.Read<CastleHeart>();
+                    sb.Append('L').Append(ch.Level);
+                    sb.Append('R').Append((int)ch.ActiveEvent);
+                }
+                Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out var ownerId);
+                sb.Append('F').Append(Core.PlayerSettings.IsHeartFeedEnabled(ownerId, plot) ? 1 : 0);
+                GetDestInventories(plot, out var destMode);
+                sb.Append(destMode == "treasury" ? 'T' : 'A');
+                var ids = Core.TerritoryService.GetLogisticsTerritoryIds(plot);
+                if (ids != null)
+                {
+                    sb.Append('i');
+                    for (var n = 0; n < ids.Count; n++)
+                        sb.Append(ids[n]).Append(',');
+                }
+                sb.Append(';');
+            }
+            return sb.ToString();
         }
 
         static void CheckStickyRetain(HashSet<int> occupied)
@@ -1164,6 +1874,7 @@ namespace Satisvampory.Services
                     reversed = ReverseToSource(destInvs, last.Source, new PrefabGUID(guid), last.Amount);
                 }
                 Core.Log.LogWarning($"[ClanTreasuryLend] FAIL sticky destPlot={destPlot} guid={guid} local=0 next-tick after move dest={destMode} lastFrom={from} reversed={reversed} -- stop this boot" + (destMode == "allShared" ? " (skip entire allShared dest plot this boot)" : ""));
+                DestDebugLog.Dupe("lend", destPlot, new PrefabGUID(guid), reversed, $"sticky local=0 dest={destMode} lastFrom={from} reversed={reversed}");
             }
         }
 
@@ -1200,6 +1911,11 @@ namespace Satisvampory.Services
                     var heart = Core.TerritoryService.GetCastleHeart(territoryId);
                     if (!ClanTreasuryShare.ShouldShare(heart))
                         continue;
+                    if (!Core.TerritoryService.IsSameClanAsHeart(character, heart))
+                    {
+                        DestDebugLog.Guest(territoryId, user.PlatformId, "not-clan");
+                        continue;
+                    }
                     occupied.Add(territoryId);
                 }
             }
@@ -1212,34 +1928,38 @@ namespace Satisvampory.Services
             return occupied;
         }
 
-        static void LendToPlot(int destPlot, HashSet<int> occupiedAll)
+        static IEnumerator LendToPlot(int destPlot, HashSet<int> occupiedAll)
         {
             var heart = Core.TerritoryService.GetCastleHeart(destPlot);
             if (heart == Entity.Null || !ClanTreasuryShare.ShouldShare(heart))
-                return;
+                yield break;
 
             var clanIds = Core.TerritoryService.GetLogisticsTerritoryIds(destPlot);
             if (clanIds == null || clanIds.Count <= 1)
-                return;
+                yield break;
 
-            var occupiedInClan = new List<int>();
+            var occupiedInClan = new HashSet<int>();
             foreach (var id in clanIds)
             {
                 if (occupiedAll.Contains(id))
                     occupiedInClan.Add(id);
             }
-            occupiedInClan.Sort();
             if (occupiedInClan.Count == 0)
-                return;
+                yield break;
 
             if (IsRaided(heart))
             {
                 if (loggedDestMode.Add(destPlot))
                     Core.Log.LogInfo($"[ClanTreasuryLend] skip destPlot={destPlot} raided ActiveEvent={heart.Read<CastleHeart>().ActiveEvent}");
-                return;
+                yield break;
             }
 
             HandleHeartFuel(destPlot, heart, clanIds, occupiedInClan);
+            if (TimeToYield())
+            {
+                yield return null;
+                Core.TerritoryService.StartTimer();
+            }
 
             var destInvs = GetDestInventories(destPlot, out var destMode);
             NoteDestEmpties(destPlot, destInvs);
@@ -1247,16 +1967,16 @@ namespace Satisvampory.Services
             {
                 if (warnedNoDest.Add(destPlot))
                     Core.Log.LogWarning($"[ClanTreasuryLend] no dest chest plot={destPlot} -- kit/upgrade skipped, fuel seed only");
-                return;
+                yield break;
             }
             destInvs = FilterEmptyHold(destPlot, destInvs);
             if (destInvs.Count == 0)
-                return;
+                yield break;
             if (destMode == "allShared" && stickyFailedAllSharedPlots.Contains(destPlot))
             {
                 if (loggedAllSharedPlotSkip.Add(destPlot))
                     Core.Log.LogWarning($"[ClanTreasuryLend] skip destPlot={destPlot} dest=allShared sticky-fail this boot -- kit GUIDs vanished, no further dumps");
-                return;
+                yield break;
             }
 
             Dictionary<int, int> upgrade = null;
@@ -1265,7 +1985,7 @@ namespace Satisvampory.Services
             if (loggedDestMode.Add(destPlot))
             {
                 Core.Log.LogInfo($"[ClanTreasuryLend] dest plot={destPlot} mode={destMode} invs={destInvs.Count} occupiedInClan={occupiedInClan.Count} (upgrade=yes; kit={(destMode == "allShared" ? "spend-refill until treasury, never overflow if other dest exists" : "first-fill plank/brick/gemdust/copper/iron/stone if dest has none, then covering")}; covering=kit mats first then hungriest unlocked blueprint per mat, 3x (1x if reserve-tight); leftover-bypass plank={KitChestPlank}+stack copper={KitChestCopper}+stack iron={KitIron}+stack gemdust={KitGemDust}+stack brick={KitStoneBrick}+stack stone={KitStone}+stack; remaining plank={KitPlank - KitChestPlank} honor leftover; named last-resort kit/upgrade/covering; dest=never-NS seeded-s# generic exact category overflow custom-last; self-sort same-plot)");
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(destPlot))
+                foreach (var stash in StashesOnPlot(destPlot))
                 {
                     if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
                         continue;
@@ -1282,8 +2002,6 @@ namespace Satisvampory.Services
             var kitCount = VanillaVisibleDests(destPlot, destInvs);
             if (kitCount.Count == 0)
                 kitCount = NonOverflowDests(destPlot, destInvs);
-            if (kitCount.Count == 0)
-                kitCount = destInvs;
             if (destMode == "allShared")
             {
                 var kitDest = FirstUsableKitDest(destPlot, kitCount);
@@ -1325,7 +2043,7 @@ namespace Satisvampory.Services
                     }
                 }
             }
-            else if (!DestHasAnyKit(kitCount) && kitCount.Count > 0)
+            else if (!PlotHasAllKitTypes(destPlot) && kitCount.Count > 0)
             {
                 var kitMoved = LendStarterKitOnce(destPlot, kitCount, clanIds, occupiedInClan, destMode);
                 if (kitMoved > 0 && loggedFirstSuccess.Add(FailKey(destPlot, PlankHash) ^ 17))
@@ -1334,7 +2052,7 @@ namespace Satisvampory.Services
 
             var parkInvs = VanillaVisibleDests(destPlot, destInvs);
             if (parkInvs.Count == 0)
-                parkInvs = destInvs;
+                parkInvs = NonOverflowDests(destPlot, destInvs);
             var covering1 = GetBuildCovering1x(destPlot);
             var covering3 = ScaleCovering(covering1, BuildCoverCopies);
             if (covering1.Count > 0 && loggedCovering.Add(destPlot))
@@ -1342,13 +2060,44 @@ namespace Satisvampory.Services
                 covering1.TryGetValue(PlankHash, out var p1);
                 covering1.TryGetValue(CopperIngotHash, out var c1);
                 covering1.TryGetValue(GreaterBloodEssenceHash, out var g1);
-                Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} build-covering mats={covering1.Count} copies={BuildCoverCopies} park={parkInvs.Count}/{destInvs.Count} plank1x={p1} copper1x={c1} gbe1x={g1} (1x leftover-bypass, 3x honor reserve)");
+                covering1.TryGetValue(BloodEssenceHash, out var be1);
+                Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} build-covering mats={covering1.Count} copies={BuildCoverCopies} park={parkInvs.Count}/{destInvs.Count} plank1x={p1} copper1x={c1} be1x={be1} gbe1x={g1} (1x leftover-bypass, 3x honor reserve)");
             }
-            LendTargetAmounts(destPlot, parkInvs, covering1, clanIds, occupiedInClan, destMode, ignoreLeftoverNamed: true);
-            LendTargetAmounts(destPlot, parkInvs, covering3, clanIds, occupiedInClan, destMode, ignoreLeftoverNamed: false);
-
+            var bypass1x = occupiedInClan == null || occupiedInClan.Count <= 1;
+            if (parkInvs.Count > 0)
+            {
+                depositMaxClass = 3;
+                try
+                {
+                    var cover1 = LendTargetAmounts(destPlot, parkInvs, covering1, clanIds, occupiedInClan, destMode, ignoreLeftoverNamed: bypass1x, stockOnPlot: true);
+                    while (cover1.MoveNext())
+                        yield return cover1.Current;
+                }
+                finally
+                {
+                    depositMaxClass = 5;
+                }
+            }
             if (upgrade != null)
-                LendTargetAmounts(destPlot, destInvs, upgrade, clanIds, occupiedInClan, destMode, ignoreLeftoverNamed: true);
+            {
+                var up = LendTargetAmounts(destPlot, destInvs, upgrade, clanIds, occupiedInClan, destMode, ignoreLeftoverNamed: bypass1x, stockOnPlot: false);
+                while (up.MoveNext())
+                    yield return up.Current;
+            }
+            if (parkInvs.Count > 0)
+            {
+                depositMaxClass = 3;
+                try
+                {
+                    var cover3 = LendTargetAmounts(destPlot, parkInvs, covering3, clanIds, occupiedInClan, destMode, ignoreLeftoverNamed: false, stockOnPlot: true);
+                    while (cover3.MoveNext())
+                        yield return cover3.Current;
+                }
+                finally
+                {
+                    depositMaxClass = 5;
+                }
+            }
         }
 
         static List<KeyValuePair<int, int>> OrderedCoveringTargets(Dictionary<int, int> targets)
@@ -1357,7 +2106,8 @@ namespace Satisvampory.Services
             if (targets == null || targets.Count == 0)
                 return result;
             // New-chest priority: build mats before fibre/hide/paintings.
-            var kitOrder = new[] { PlankHash, StoneBrickHash, GemDustHash, CopperIngotHash, IronIngotHash, StoneHash };
+            // Blood Essence is a smithy/alchemy build cost; do not bury it behind guid-sort.
+            var kitOrder = new[] { PlankHash, StoneBrickHash, GemDustHash, CopperIngotHash, IronIngotHash, StoneHash, BloodEssenceHash };
             var seen = new HashSet<int>();
             for (var i = 0; i < kitOrder.Length; i++)
             {
@@ -1367,26 +2117,29 @@ namespace Satisvampory.Services
                 seen.Add(g);
                 result.Add(new KeyValuePair<int, int>(g, n));
             }
+            var rest = new List<KeyValuePair<int, int>>();
             foreach (var kv in targets)
             {
-                if (seen.Contains(kv.Key))
+                if (seen.Contains(kv.Key) || kv.Value <= 0)
                     continue;
-                result.Add(kv);
+                rest.Add(kv);
             }
+            rest.Sort((a, b) => a.Key.CompareTo(b.Key));
+            result.AddRange(rest);
             return result;
         }
 
-        static void LendTargetAmounts(int destPlot, List<Entity> destInvs, Dictionary<int, int> targets,
-            IReadOnlyList<int> clanIds, List<int> occupiedInClan, string destMode, bool ignoreLeftoverNamed)
+        static IEnumerator LendTargetAmounts(int destPlot, List<Entity> destInvs, Dictionary<int, int> targets,
+            IReadOnlyList<int> clanIds, HashSet<int> occupiedInClan, string destMode, bool ignoreLeftoverNamed, bool stockOnPlot = false)
         {
-            if (targets == null || targets.Count == 0 || lendPullsLeft <= 0)
-                return;
+            if (targets == null || targets.Count == 0 || !CanLendPull())
+                yield break;
 
             var destFull = false;
             foreach (var kv in OrderedCoveringTargets(targets))
             {
-                if (lendPullsLeft <= 0)
-                    return;
+                if (!CanLendPull())
+                    yield break;
                 var guid = kv.Key;
                 var target = kv.Value;
                 if (guid == 0 || target <= 0)
@@ -1399,12 +2152,16 @@ namespace Satisvampory.Services
                 var useInvs = DestInvsForUpgradeItem(destPlot, type, destInvs);
                 if (useInvs.Count == 0)
                 {
-                    if (IsTreasuryRejectedBlood(type) && loggedFirstSuccess.Add(FailKey(destPlot, guid) ^ 11))
-                        Core.Log.LogWarning($"[ClanTreasuryLend] destPlot={destPlot} guid={guid} upgrade dest skipped -- no non-treasury/unnamed/name-match chest accepts this blood essence");
+                    if (IsTreasuryRejectedBlood(type))
+                    {
+                        DestDebugLog.Miss(stockOnPlot ? "covering" : "upgrade", destPlot, type, 0, target, "no-blood-dest dest=" + destMode);
+                        if (loggedFirstSuccess.Add(FailKey(destPlot, guid) ^ 11))
+                            Core.Log.LogWarning($"[ClanTreasuryLend] destPlot={destPlot} guid={guid} blood dest skipped -- no Blood/Alchemy/generic chest");
+                    }
                     continue;
                 }
 
-                var local = CountIn(useInvs, type);
+                var local = stockOnPlot ? CountVanillaOnPlot(destPlot, type) : CountIn(useInvs, type);
                 if (local >= target)
                     continue;
                 if (destFull && local == 0)
@@ -1412,13 +2169,14 @@ namespace Satisvampory.Services
                 if (local == 0 && !DestHasRoomFor(useInvs, type))
                 {
                     destFull = true;
+                    DestDebugLog.Miss(stockOnPlot ? "covering" : "upgrade", destPlot, type, local, target, "dest-full dest=" + destMode);
                     continue;
                 }
                 var need = target - local;
                 if (need <= 0)
                     continue;
 
-                lendPullsLeft--;
+                ConsumeLendPull();
                 var fail = false;
                 var leftoverBlocked = 0;
                 var leftoverHave = 0;
@@ -1426,19 +2184,34 @@ namespace Satisvampory.Services
                 var moved = PullFromSources(destPlot, useInvs, type, need, target, clanIds, occupiedInClan, destMode,
                     occupiedSpareOnly: false, allowNamed: true, allowSamePlot: false, ledgerMoves: true, ignoreLeftoverNamed, ref fail,
                     ref leftoverBlocked, ref leftoverHave, ref leftoverReserve);
-                if (fail)
-                    continue;
-                need = target - CountIn(useInvs, type);
-                if (need > 0)
-                    moved += PullFromSources(destPlot, useInvs, type, need, target, clanIds, occupiedInClan, destMode,
-                        occupiedSpareOnly: true, allowNamed: true, allowSamePlot: false, ledgerMoves: true, ignoreLeftoverNamed, ref fail,
-                        ref leftoverBlocked, ref leftoverHave, ref leftoverReserve);
+                if (!fail)
+                {
+                    var have = stockOnPlot ? CountVanillaOnPlot(destPlot, type) : CountIn(useInvs, type);
+                    need = target - have;
+                    if (need > 0)
+                        moved += PullFromSources(destPlot, useInvs, type, need, target, clanIds, occupiedInClan, destMode,
+                            occupiedSpareOnly: true, allowNamed: true, allowSamePlot: false, ledgerMoves: true, ignoreLeftoverNamed, ref fail,
+                            ref leftoverBlocked, ref leftoverHave, ref leftoverReserve);
+                }
+                if (moved <= 0)
+                {
+                    var via = stockOnPlot ? "covering" : "upgrade";
+                    if (leftoverBlocked > 0)
+                        DestDebugLog.Miss(via, destPlot, type, leftoverHave, target, "leftover-blocked leftover=" + leftoverReserve);
+                    else if (!fail)
+                        DestDebugLog.Miss(via, destPlot, type, local, target, "no-source dest=" + destMode);
+                }
 
                 if (moved <= 0 && local == 0 && !DestHasRoomFor(useInvs, type))
                     destFull = true;
 
                 if (moved > 0)
                     pendingVerify.Add(key);
+                if (TimeToYield())
+                {
+                    yield return null;
+                    Core.TerritoryService.StartTimer();
+                }
             }
         }
 
@@ -1481,8 +2254,6 @@ namespace Satisvampory.Services
                             var req = buf[r];
                             if (req.Amount <= 0 || req.PrefabGUID.GuidHash == 0)
                                 continue;
-                            if (IsTreasuryRejectedBlood(req.PrefabGUID))
-                                continue;
                             costs.Add((req.PrefabGUID.GuidHash, req.Amount));
                         }
                         if (costs.Count == 0)
@@ -1508,9 +2279,12 @@ namespace Satisvampory.Services
 
         static HashSet<int> CollectUnlocksOnPlot(int plot)
         {
+            if (tickUnlocks != null && tickUnlocks.TryGetValue(plot, out var cached))
+                return cached;
             var unlocked = new HashSet<int>();
             try
             {
+                var heart = Core.TerritoryService.GetCastleHeart(plot);
                 var builder = new EntityQueryBuilder(Allocator.Temp)
                     .AddAll(new(Il2CppType.Of<User>(), ComponentType.AccessMode.ReadOnly));
                 var query = Core.EntityManager.CreateEntityQuery(ref builder);
@@ -1531,6 +2305,8 @@ namespace Satisvampory.Services
                         if (character == Entity.Null || !Core.EntityManager.Exists(character) || !character.Has<PlayerCharacter>())
                             continue;
                         if (Core.TerritoryService.GetStandingTerritoryId(character) != plot)
+                            continue;
+                        if (!Core.TerritoryService.IsSameClanAsHeart(character, heart))
                             continue;
                         AddUnlockedBlueprints(userEntity, unlocked);
                     }
@@ -1620,20 +2396,54 @@ namespace Satisvampory.Services
 
         static Dictionary<int, int> GetCovering1x(int destPlot)
         {
+            if (destPlot >= 0
+                && coveringCache.TryGetValue(destPlot, out var cached)
+                && (DateTime.UtcNow - cached.At).TotalSeconds < 5
+                && cached.One != null)
+                return new Dictionary<int, int>(cached.One);
+
             EnsureBlueprintCostCache();
             var mod = BuildCostMod();
             if (mod <= 0 || blueprintCosts == null)
                 return new Dictionary<int, int>();
-            if (coveringCastle1x == null)
+            var unlocked = destPlot >= 0 ? CollectUnlocksOnPlot(destPlot) : new HashSet<int>();
+            var max = new Dictionary<int, int>();
+            foreach (var row in blueprintCosts)
             {
-                coveringCastle1x = new Dictionary<int, int>();
-                foreach (var row in blueprintCosts)
-                    MergeCosts(coveringCastle1x, row.costs, mod);
+                if (unlocked.Count == 0)
+                {
+                    if (!row.start)
+                        continue;
+                }
+                else if (!unlocked.Contains(row.blueprint) && !row.start)
+                    continue;
+                MergeCosts(max, row.costs, mod);
             }
-            var max = new Dictionary<int, int>(coveringCastle1x);
             if (destPlot >= 0)
                 AddPlotStationRecipeCosts(destPlot, max, mod);
-            return max;
+            if (max.Count > 0)
+            {
+                var keys = new List<int>(max.Keys);
+                for (var i = 0; i < keys.Count; i++)
+                {
+                    var g = keys[i];
+                    max[g] = CapCovering1x(max[g]);
+                }
+            }
+            if (destPlot >= 0)
+            {
+                if (coveringCache.Count > 160)
+                    coveringCache.Clear();
+                coveringCache[destPlot] = (DateTime.UtcNow, max);
+            }
+            return new Dictionary<int, int>(max);
+        }
+
+        internal static int CapCovering1x(int amount)
+        {
+            if (amount <= 0)
+                return 0;
+            return amount > Covering1xCap ? Covering1xCap : amount;
         }
 
         static void MergeCosts(Dictionary<int, int> max, List<(int guid, int amount)> costs, float mod)
@@ -1664,26 +2474,65 @@ namespace Satisvampory.Services
                 return;
             var buf = recipeEntity.ReadBuffer<RecipeRequirementBuffer>();
             var costs = new List<(int guid, int amount)>();
+            var fishNeed = 0;
             for (var r = 0; r < buf.Length; r++)
             {
                 var req = buf[r];
                 if (req.Amount <= 0 || req.Guid.GuidHash == 0)
                     continue;
-                if (IsTreasuryRejectedBlood(req.Guid))
+                var label = StashRouting.ItemLabel(req.Guid);
+                if (ItemGroupService.IsFishOrFeedPlaceholder("", label))
+                {
+                    if (req.Amount > fishNeed)
+                        fishNeed = req.Amount;
+                    continue;
+                }
+                if (!ItemGroupService.IsMachineSpendItem(req.Guid.GuidHash))
                     continue;
                 costs.Add((req.Guid.GuidHash, req.Amount));
             }
             MergeCosts(max, costs, mod);
+            if (fishNeed > 0)
+                AddFishSpend(max, mod, fishNeed);
+        }
+
+        static void AddFishSpend(Dictionary<int, int> max, float mod, int amount)
+        {
+            if (amount <= 0)
+                amount = 1;
+            var fish = ItemGroupService.GetBuiltInMembers(ItemGroupService.GroupFish);
+            var costs = new List<(int guid, int amount)>();
+            for (var i = 0; i < fish.Count; i++)
+            {
+                if (fish[i].GuidHash == 0)
+                    continue;
+                costs.Add((fish[i].GuidHash, amount));
+            }
+            MergeCosts(max, costs, mod);
+        }
+
+        static bool StationIsPrison(Entity station)
+        {
+            if (station == Entity.Null || !Core.EntityManager.Exists(station) || !station.Has<CastleWorkstation>())
+                return false;
+            var floor = station.Read<CastleWorkstation>().MatchingFloorType.ToString();
+            return floor.IndexOf("Prison", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         static void AddPlotStationRecipeCosts(int plot, Dictionary<int, int> max, float mod)
         {
+            // On-plot machines only: enabled furnace/loom recipes, prison fish,
+            // and workstation craft *inputs* that are spend-materials (ore, hide,
+            // blood, …). Skip finished weapons/armor so covering stays off ~200 GUIDs.
+            var prison = false;
             if (Core.RefinementStations != null)
             {
                 foreach (var station in Core.RefinementStations.GetAllStationsOnTerritory(plot))
                 {
                     if (station.Has<Disabled>())
                         continue;
+                    if (StationIsPrison(station))
+                        prison = true;
                     if (!station.Has<RefinementstationRecipesBuffer>())
                         continue;
                     var recipes = station.ReadBuffer<RefinementstationRecipesBuffer>();
@@ -1698,26 +2547,32 @@ namespace Satisvampory.Services
 
             if (!workstationsByPlot.ContainsKey(plot))
                 SeedWorkstationsOnPlot(plot);
-            if (!workstationsByPlot.TryGetValue(plot, out var benches))
-                return;
-            for (var i = benches.Count - 1; i >= 0; i--)
+            if (workstationsByPlot.TryGetValue(plot, out var benches))
             {
-                var station = benches[i];
-                if (station == Entity.Null || !Core.EntityManager.Exists(station))
+                for (var i = benches.Count - 1; i >= 0; i--)
                 {
-                    benches.RemoveAt(i);
-                    continue;
+                    var station = benches[i];
+                    if (station == Entity.Null || !Core.EntityManager.Exists(station))
+                    {
+                        benches.RemoveAt(i);
+                        continue;
+                    }
+                    if (station.Has<Disabled>())
+                        continue;
+                    if (StationIsPrison(station))
+                        prison = true;
+                    if (!station.Has<WorkstationRecipesBuffer>())
+                        continue;
+                    if (station.Has<RefinementstationRecipesBuffer>())
+                        continue;
+                    var recipes = station.ReadBuffer<WorkstationRecipesBuffer>();
+                    for (var r = 0; r < recipes.Length; r++)
+                        AddRecipeGuidCosts(recipes[r].RecipeGuid, max, mod);
                 }
-                if (station.Has<Disabled>())
-                    continue;
-                if (!station.Has<WorkstationRecipesBuffer>())
-                    continue;
-                if (station.Has<RefinementstationRecipesBuffer>())
-                    continue;
-                var recipes = station.ReadBuffer<WorkstationRecipesBuffer>();
-                for (var r = 0; r < recipes.Length; r++)
-                    AddRecipeGuidCosts(recipes[r].RecipeGuid, max, mod);
             }
+
+            if (prison)
+                AddFishSpend(max, mod, 1);
         }
 
         static void SeedWorkstationsOnPlot(int plot)
@@ -1764,7 +2619,7 @@ namespace Satisvampory.Services
                 Core.TerritoryService.TryGetTerritoryOwnerPlatformId(srcPlot, out var sourceOwnerId);
                 var reserve = Core.PlayerSettings.GetPullReserve(sourceOwnerId, type);
                 var have = 0;
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(srcPlot))
+                foreach (var stash in StashesOnPlot(srcPlot))
                 {
                     if (stash.Has<Refinementstation>())
                         continue;
@@ -1826,7 +2681,7 @@ namespace Satisvampory.Services
         /// named farm belts. Remaining 216 plank honors leftover.
         /// </summary>
         static int PullFromSources(int destPlot, List<Entity> destInvs, PrefabGUID type, int need, int destTarget,
-            IReadOnlyList<int> clanIds, List<int> occupiedInClan, string destMode,
+            IReadOnlyList<int> clanIds, HashSet<int> occupiedInClan, string destMode,
             bool occupiedSpareOnly, bool allowNamed, bool allowSamePlot, bool ledgerMoves, ref bool fail)
         {
             var leftoverBlocked = 0;
@@ -1838,7 +2693,7 @@ namespace Satisvampory.Services
         }
 
         static int PullFromSources(int destPlot, List<Entity> destInvs, PrefabGUID type, int need, int destTarget,
-            IReadOnlyList<int> clanIds, List<int> occupiedInClan, string destMode,
+            IReadOnlyList<int> clanIds, HashSet<int> occupiedInClan, string destMode,
             bool occupiedSpareOnly, bool allowNamed, bool allowSamePlot, bool ledgerMoves, bool ignoreLeftoverNamed, ref bool fail,
             ref int leftoverBlocked, ref int leftoverHave, ref int leftoverReserve)
         {
@@ -1874,7 +2729,7 @@ namespace Satisvampory.Services
                 if (srcPlot == destPlot && !allowSamePlot)
                     continue;
 
-                var occupiedSrc = occupiedInClan.Contains(srcPlot);
+                var occupiedSrc = occupiedInClan != null && occupiedInClan.Contains(srcPlot);
                 var namedBypass = ignoreLeftoverNamed && pass == 2 && allowNamed;
                 if (occupiedSpareOnly)
                 {
@@ -1891,7 +2746,7 @@ namespace Satisvampory.Services
 
                 Core.TerritoryService.TryGetTerritoryOwnerPlatformId(srcPlot, out var sourceOwnerId);
 
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(srcPlot))
+                foreach (var stash in StashesOnPlot(srcPlot))
                 {
                     if (need <= 0 || fail)
                         break;
@@ -1985,6 +2840,7 @@ namespace Satisvampory.Services
                                     break;
                             }
                             Core.Log.LogWarning($"[ClanTreasuryLend] FAIL copy destPlot={destPlot} guid={type.GuidHash} movedReported={moved} fromPlot={srcPlot} dest={destMode} src={Identify(stash, inventory, srcPlot)} srcAfter={srcAfter} reversedDest={reversed} -- stop this boot");
+                            DestDebugLog.Dupe("lend", destPlot, type, moved, $"copy-fail fromPlot={srcPlot} srcAfter={srcAfter} reversed={reversed} dest={destMode}");
                             return movedAll;
                         }
 
@@ -1995,6 +2851,7 @@ namespace Satisvampory.Services
                                 fail = true;
                                 MarkStickyFail(destPlot, key, destMode);
                                 Core.Log.LogWarning($"[ClanTreasuryLend] FAIL dest-rejected destPlot={destPlot} guid={type.GuidHash} take={take} fromPlot={srcPlot} dest={destMode} src={Identify(stash, inventory, srcPlot)} -- stop this boot (will not hold)");
+                                DestDebugLog.Dupe("lend", destPlot, type, take, $"dest-rejected fromPlot={srcPlot} dest={destMode}");
                                 return movedAll;
                             }
                             continue;
@@ -2002,6 +2859,8 @@ namespace Satisvampory.Services
 
                         need -= moved;
                         movedAll += moved;
+                        InvalidateTickPlotCounts(destPlot);
+                        InvalidateTickPlotCounts(srcPlot);
                         if (occupiedSpareOnly)
                             spareByPlot[srcPlot] = spareByPlot[srcPlot] - moved;
 
@@ -2012,6 +2871,7 @@ namespace Satisvampory.Services
                             lastMove[key] = new LastMove { Source = chest, Amount = moved };
                         }
 
+                        DestDebugLog.Move("lend", destPlot, type, moved, stash, Entity.Null, destMode, 0, "stays");
                         if (pass == 2 && loggedNamedBorrow.Add(key))
                             Core.Log.LogInfo($"[ClanTreasuryLend] named-chest borrow destPlot={destPlot} guid={type.GuidHash} moved={moved} from={chest} dest={destMode} (treasury/unnamed exhausted; return to this NetworkId)");
                         if (loggedFirstSuccess.Add(key))
@@ -2032,10 +2892,8 @@ namespace Satisvampory.Services
             var moved = 0;
             var attempted = false;
             var sgm = Core.ServerGameManager;
-            var ordered = StashRouting.OrderDepositInventories(destPlot, destInvs, type);
-            // Covering/HUD lend: empty nameplate treasury used to rank Class 6 (prefab
-            // "Small Chest") so planks had zero dests while copper used "Ore Ingots".
-            // Named match first, then any remaining park chest with room.
+            var ordered = StashRouting.OrderDepositInventories(destPlot, destInvs, type, depositMaxClass);
+            // Named match first. Blank-plate park dests only (never dump into "Leather").
             if (destInvs != null)
             {
                 for (var i = 0; i < destInvs.Count; i++)
@@ -2054,13 +2912,27 @@ namespace Satisvampory.Services
                             break;
                         }
                     }
-                    if (!already)
+                    if (already)
+                        continue;
+                    var stash = StashForInventory(destPlot, inv);
+                    if (stash == Entity.Null || !Core.EntityManager.Exists(stash))
+                    {
+                        ordered.Add(inv);
+                        continue;
+                    }
+                    var plate = StashRouting.RawName(stash);
+                    if (StashRouting.IsConveyorName(plate))
+                        continue;
+                    if (string.IsNullOrWhiteSpace(plate) || StashRouting.IsUnnamedOrGeneric(plate))
                         ordered.Add(inv);
                 }
             }
             if (ordered.Count == 0 && destInvs != null && destInvs.Count > 0
                 && loggedFirstSuccess.Add(FailKey(destPlot, type.GuidHash) ^ 21))
+            {
                 Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} guid={type.GuidHash} no-ranked-dest park={destInvs.Count} -- fallback empty");
+                DestDebugLog.Miss("lend", destPlot, type, 0, amount, "no-ranked-dest park=" + destInvs.Count);
+            }
             foreach (var dest in ordered)
             {
                 if (remaining <= 0)
@@ -2073,7 +2945,7 @@ namespace Satisvampory.Services
                     continue;
                 remaining -= got;
                 moved += got;
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(destPlot))
+                foreach (var stash in StashesOnPlot(destPlot))
                 {
                     if (!StashRouting.TryGetExternalInventory(stash, out var inv) || !inv.Equals(dest))
                         continue;
@@ -2121,7 +2993,7 @@ namespace Satisvampory.Services
 
             if (src.HasNet)
             {
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(src.TerritoryId))
+                foreach (var stash in StashesOnPlot(src.TerritoryId))
                 {
                     if (stash.Has<Refinementstation>())
                         continue;
@@ -2141,7 +3013,7 @@ namespace Satisvampory.Services
         {
             var list = new List<Entity>();
             var sgm = Core.ServerGameManager;
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(territoryId))
+            foreach (var stash in StashesOnPlot(territoryId))
             {
                 if (stash.Has<Refinementstation>())
                     continue;
@@ -2339,7 +3211,7 @@ namespace Satisvampory.Services
             if (inventory == Entity.Null || !Core.EntityManager.Exists(inventory))
                 return System.Array.Empty<string>();
             var sgm = Core.ServerGameManager;
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(destPlot))
+            foreach (var stash in StashesOnPlot(destPlot))
             {
                 if (stash.Has<Refinementstation>())
                     continue;
@@ -2552,13 +3424,46 @@ namespace Satisvampory.Services
             return room;
         }
 
-        static void HandleHeartFuel(int destPlot, Entity heart, IReadOnlyList<int> clanIds, List<int> occupiedInClan)
+        /// <summary>
+        /// Room in empty unlocked fuel slots (one stack cap). Locked slots stay empty.
+        /// </summary>
+        static int HeartFuelEmptySlotNeed(Entity heart, List<Entity> fuelInvs)
+        {
+            var be = BloodEssenceType();
+            var room = 0;
+            var sgm = Core.ServerGameManager;
+            foreach (var inv in fuelInvs)
+            {
+                if (inv == Entity.Null || !Core.EntityManager.Exists(inv))
+                    continue;
+                if (!sgm.TryGetBuffer<InventoryBuffer>(inv, out var buf))
+                    continue;
+                var unlocked = UnlockedFuelSlotCount(heart, inv, buf.Length);
+                for (var i = 0; i < unlocked && i < buf.Length; i++)
+                {
+                    var slot = buf[i];
+                    if (slot.ItemType.GuidHash != 0 && slot.Amount > 0)
+                        continue;
+                    var cap = HeartFuelStack;
+                    if (slot.MaxAmountOverride > 0 && slot.MaxAmountOverride < cap)
+                        cap = slot.MaxAmountOverride;
+                    if (cap > 0)
+                        room += cap;
+                }
+            }
+            if (room > HeartFuelStack)
+                room = HeartFuelStack;
+            return room;
+        }
+
+        static void HandleHeartFuel(int destPlot, Entity heart, IReadOnlyList<int> clanIds, HashSet<int> occupiedInClan)
         {
             var keys = HeartFuelKeys(heart);
             if (keys.Length == 0)
             {
                 if (loggedHeartFuel.Add(destPlot))
                     Core.Log.LogWarning($"[ClanTreasuryLend] destPlot={destPlot} heart has no NetworkId -- skip fuel seed/opt-out");
+                DestDebugLog.Miss("heart", destPlot, BloodEssenceType(), 0, HeartFuelStack, "no-heart-net");
                 return;
             }
             Core.TerritoryService.TryGetTerritoryOwnerPlatformId(destPlot, out var ownerId);
@@ -2571,93 +3476,78 @@ namespace Satisvampory.Services
             {
                 if (loggedHeartFuel.Add(destPlot))
                     Core.Log.LogWarning($"[ClanTreasuryLend] destPlot={destPlot} no heart fuel inventory (RestrictedType Blood Essence)");
+                DestDebugLog.Miss("heart", destPlot, BloodEssenceType(), 0, HeartFuelStack, "no-fuel-inv");
                 return;
             }
 
             var fuel = CountHeartFuel(fuelInvs, heart);
+            var type = BloodEssenceType();
+            var destMode = "heartFuel";
+            var fuelBypass = occupiedInClan == null || occupiedInClan.Count <= 1;
 
-            if (opted)
+            // .s hf ON means fill. Dump-opt-out only sticks while auto-feed is OFF
+            // (so unbuild/empty is possible). Turning feed on clears it.
+            if (feedOn && opted)
             {
-                if (fuel > 0)
+                Core.PlayerSettings.SetHeartFuelOptOut(false, keys);
+                opted = false;
+                if (loggedHeartFuel.Add(destPlot + 100000))
+                    Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart fuel opt-out cleared (.s hf ON)");
+            }
+
+            if (!feedOn)
+            {
+                if (opted)
+                    return;
+                if (seeded && fuel <= 0)
                 {
-                    Core.PlayerSettings.SetHeartFuelOptOut(false, keys);
-                    opted = false;
-                    if (loggedHeartFuel.Add(destPlot + 100000))
-                        Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart fuel opt-out cleared (player added BE fuel={fuel})");
+                    Core.PlayerSettings.SetHeartFuelOptOut(true, keys);
+                    if (loggedHeartFuel.Add(destPlot + 200000))
+                        Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart emptied after seed -- opted-out until .s hf ON or they add BE");
+                    return;
                 }
-                else
+                if (seeded || fuel > 0)
                     return;
             }
 
-            // Seeded + empty means they dumped fuel. Opt out immediately (not a one-tick window).
-            // Auto-feed must never restock a fully empty heart.
-            if (seeded && fuel <= 0)
+            var need = HeartFuelTopOffNeed(heart, fuelInvs);
+            if (fuel <= 0 || need <= 0)
+                need += HeartFuelEmptySlotNeed(heart, fuelInvs);
+            if (need <= 0)
+                return;
+            if (!CanLendPull())
+                return;
+            ConsumeLendPull();
+
+            var fail = false;
+            var leftoverBlocked = 0;
+            var leftoverHave = 0;
+            var leftoverReserve = 0;
+            var moved = PullFromSources(destPlot, fuelInvs, type, need, HeartFuelStack, clanIds, occupiedInClan, destMode,
+                occupiedSpareOnly: false, allowNamed: true, allowSamePlot: true, ledgerMoves: false, ignoreLeftoverNamed: fuelBypass, ref fail,
+                ref leftoverBlocked, ref leftoverHave, ref leftoverReserve);
+            if (!fail)
             {
-                Core.PlayerSettings.SetHeartFuelOptOut(true, keys);
-                if (loggedHeartFuel.Add(destPlot + 200000))
-                    Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart emptied after seed -- opted-out, no re-seed/auto-feed until they add BE");
-                return;
+                var still = HeartFuelTopOffNeed(heart, fuelInvs) + (CountHeartFuel(fuelInvs, heart) <= 0 ? HeartFuelEmptySlotNeed(heart, fuelInvs) : 0);
+                if (still > 0)
+                    moved += PullFromSources(destPlot, fuelInvs, type, still, HeartFuelStack, clanIds, occupiedInClan, destMode,
+                        occupiedSpareOnly: true, allowNamed: true, allowSamePlot: true, ledgerMoves: false, ignoreLeftoverNamed: fuelBypass, ref fail,
+                        ref leftoverBlocked, ref leftoverHave, ref leftoverReserve);
             }
-
-            var type = BloodEssenceType();
-            var destMode = "heartFuel";
-            if (!seeded && fuel <= 0)
+            if (moved > 0)
             {
-                var need = HeartFuelStack;
-                var fail = false;
-                var leftoverBlocked = 0;
-                var leftoverHave = 0;
-                var leftoverReserve = 0;
-                var moved = PullFromSources(destPlot, fuelInvs, type, need, HeartFuelStack, clanIds, occupiedInClan, destMode,
-                    occupiedSpareOnly: false, allowNamed: true, allowSamePlot: true, ledgerMoves: false, ignoreLeftoverNamed: true, ref fail,
-                    ref leftoverBlocked, ref leftoverHave, ref leftoverReserve);
-                if (!fail)
-                {
-                    need = HeartFuelStack - CountHeartFuel(fuelInvs, heart);
-                    if (need > 0)
-                        moved += PullFromSources(destPlot, fuelInvs, type, need, HeartFuelStack, clanIds, occupiedInClan, destMode,
-                            occupiedSpareOnly: true, allowNamed: true, allowSamePlot: true, ledgerMoves: false, ignoreLeftoverNamed: true, ref fail,
-                            ref leftoverBlocked, ref leftoverHave, ref leftoverReserve);
-                }
-                if (moved > 0)
-                {
-                    Core.PlayerSettings.MarkHeartFuelSeeded(keys);
-                    if (loggedFirstSuccess.Add(FailKey(destPlot, BloodEssenceHash)))
-                        Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart fuel SEED moved={moved} (not returned)");
-                }
-                else if (loggedHeartFuel.Add(destPlot + 300000))
-                {
-                    var takeable = leftoverHave > leftoverReserve ? leftoverHave - leftoverReserve : leftoverHave;
-                    if (leftoverBlocked > 0)
-                        takeable = leftoverHave;
-                    Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart fuel SEED moved=0 leftover-blocked={leftoverBlocked} leftover={leftoverReserve} have={leftoverHave} takeable={takeable} fail={fail}");
-                }
-                return;
+                Core.PlayerSettings.MarkHeartFuelSeeded(keys);
+                DestDebugLog.Move("heart", destPlot, type, moved, Entity.Null, heart, "heartFuel", leftoverReserve, "stays");
+                if (loggedFirstSuccess.Add(FailKey(destPlot, BloodEssenceHash)))
+                    Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart fuel moved={moved} feedOn={feedOn}");
             }
-
-            if (!feedOn || opted)
-                return;
-
-            // 1.6.1.28: top off each UNLOCKED existing BE stack to 500. Do not use
-            // CountHeartFuel>=500 as a total cap (428+500+500 was skipping). Do not
-            // fill empty unlocked slots. Do not add into locked slots. destTarget
-            // stays HeartFuelStack only as occupied-sibling source keep, not dest cap.
-            var top = HeartFuelTopOffNeed(heart, fuelInvs);
-            if (top <= 0)
-                return;
-
-            var failFeed = false;
-            var fed = PullFromSources(destPlot, fuelInvs, type, top, HeartFuelStack, clanIds, occupiedInClan, destMode,
-                occupiedSpareOnly: false, allowNamed: false, allowSamePlot: true, ledgerMoves: false, ref failFeed);
-            if (!failFeed)
+            else
             {
-                top = HeartFuelTopOffNeed(heart, fuelInvs);
-                if (top > 0)
-                    fed += PullFromSources(destPlot, fuelInvs, type, top, HeartFuelStack, clanIds, occupiedInClan, destMode,
-                        occupiedSpareOnly: true, allowNamed: false, allowSamePlot: true, ledgerMoves: false, ref failFeed);
+                DestDebugLog.Miss("heart", destPlot, type, leftoverHave, need,
+                    (fail ? "dest-rejected-or-copy-fail" : leftoverBlocked > 0 ? "leftover-blocked leftover=" + leftoverReserve : "no-source") + " feedOn=" + feedOn);
+                if (loggedHeartFuel.Add(destPlot + 300000))
+                    Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart fuel moved=0 leftover-blocked={leftoverBlocked} leftover={leftoverReserve} have={leftoverHave} fail={fail} feedOn={feedOn}");
             }
-            if (fed > 0 && loggedFirstSuccess.Add(FailKey(destPlot, BloodEssenceHash) ^ 1))
-                Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart auto-feed moved={fed} (stack top-off, first-success)");
         }
 
         static bool IsDest(List<Entity> destInvs, Entity inventory)
@@ -2694,10 +3584,24 @@ namespace Satisvampory.Services
 
         static int CountVanillaOnPlot(int plot, PrefabGUID type)
         {
+            if (tickVanillaCounts != null
+                && tickVanillaCounts.TryGetValue(plot, out var cached)
+                && cached.TryGetValue(type.GuidHash, out var hit))
+                return hit;
             var invs = GetTreasuryInventories(plot);
             if (invs.Count == 0)
                 invs = GetAllSharedInventories(plot);
-            return CountIn(invs, type);
+            var n = CountIn(invs, type);
+            if (tickVanillaCounts != null)
+            {
+                if (!tickVanillaCounts.TryGetValue(plot, out cached) || cached == null)
+                {
+                    cached = new Dictionary<int, int>();
+                    tickVanillaCounts[plot] = cached;
+                }
+                cached[type.GuidHash] = n;
+            }
+            return n;
         }
 
         static int CountIn(List<Entity> invs, PrefabGUID type)
@@ -2718,18 +3622,18 @@ namespace Satisvampory.Services
 
         const int SelfSortMovesPerTick = 24;
 
-        static void SelfSortPlot(int plot)
+        static IEnumerator SelfSortPlot(int plot)
         {
             var heart = Core.TerritoryService.GetCastleHeart(plot);
             if (heart == Entity.Null || IsRaided(heart))
-                return;
+                yield break;
             Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out var ownerId);
             GetDestInventories(plot, out var destMode);
             var skipKit = destMode == "allShared";
             var sgm = Core.ServerGameManager;
 
             var chests = new List<(Entity stash, Entity inv)>();
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+            foreach (var stash in StashesOnPlot(plot))
             {
                 if (stash.Has<Refinementstation>())
                     continue;
@@ -2740,7 +3644,7 @@ namespace Satisvampory.Services
                 chests.Add((stash, inv));
             }
             if (chests.Count < 2)
-                return;
+                yield break;
 
             var items = new List<PrefabGUID>();
             var seen = new HashSet<int>();
@@ -2761,7 +3665,7 @@ namespace Satisvampory.Services
                 }
             }
             if (items.Count == 0)
-                return;
+                yield break;
 
             var moves = 0;
             foreach (var item in items)
@@ -2845,6 +3749,7 @@ namespace Satisvampory.Services
                             if (takeBack > 0)
                                 sgm.TryRemoveInventoryItem(dstInv, item, takeBack);
                             Core.Log.LogWarning($"[Satisvampory] self-sort copy-fail plot={plot} guid={item.GuidHash} reversed={takeBack}");
+                            DestDebugLog.Dupe("self-sort", plot, item, got, "copy-fail reversed=" + takeBack);
                             continue;
                         }
                         if (got <= 0)
@@ -2854,6 +3759,11 @@ namespace Satisvampory.Services
                         StashRouting.LogDestPick(dstRank.Label, plot, item, StashRouting.RawName(dstStash), "self-sort");
                         DestDebugLog.Move("self-sort", plot, item, got, srcStash, dstStash, dstRank.Label, reserve, "stays");
                     }
+                }
+                if (TimeToYield())
+                {
+                    yield return null;
+                    Core.TerritoryService.StartTimer();
                 }
             }
             if (moves > 0)
@@ -2874,22 +3784,45 @@ namespace Satisvampory.Services
 
         static List<Entity> GetTreasuryInventories(int territoryId)
         {
+            if (tickCachesOn && tickTreasuryInvs != null
+                && tickTreasuryInvs.TryGetValue(territoryId, out var cached))
+                return cached;
             var list = new List<Entity>();
             AddPlotInventories(territoryId, list, treasuryOnly: true);
+            if (tickCachesOn && tickTreasuryInvs != null)
+                tickTreasuryInvs[territoryId] = list;
             return list;
         }
 
         static List<Entity> GetAllSharedInventories(int territoryId)
         {
+            if (tickCachesOn && tickAllSharedInvs != null
+                && tickAllSharedInvs.TryGetValue(territoryId, out var cached))
+                return cached;
             var list = new List<Entity>();
             AddPlotInventories(territoryId, list, treasuryOnly: false);
+            if (tickCachesOn && tickAllSharedInvs != null)
+                tickAllSharedInvs[territoryId] = list;
+            return list;
+        }
+
+        static List<Entity> StashesOnPlot(int territoryId)
+        {
+            if (tickCachesOn && tickStashes != null
+                && tickStashes.TryGetValue(territoryId, out var cached))
+                return cached;
+            var list = new List<Entity>();
+            foreach (var stash in Core.Stash.GetStashesOnTerritory(territoryId))
+                list.Add(stash);
+            if (tickCachesOn && tickStashes != null)
+                tickStashes[territoryId] = list;
             return list;
         }
 
         static void AddPlotInventories(int territoryId, List<Entity> list, bool treasuryOnly)
         {
             var sgm = Core.ServerGameManager;
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(territoryId))
+            foreach (var stash in StashesOnPlot(territoryId))
             {
                 if (stash.Has<Refinementstation>())
                     continue;

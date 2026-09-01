@@ -49,12 +49,13 @@ If ClanShare is **ON**, dest/source is the **clan island**. If **OFF**, standing
 | Command | Scope | What |
 | --- | --- | --- |
 | `.stash` | You; dest plot or clan | Dump inventory except hotbar into named/matching chests |
+| `.s tidy` | Plot, or clan island if `.s cs` on | Restack existing chests onto better dests (named/category first). Does not drain `s#`/`r#`, `NS`, salvage/trash. Overflow and spoils are sources only. Does not honor reserve. |
 | `.s ss` | You | Allow double-click sort / double-tap R to stash |
 | `.pull plank 50` | You; source plot or clan | Take items into your bags. **Does not honor reserve** |
 | `.s cr` | You | Right-click recipe craft-pull. **Honors reserve** |
 | `.s dpl` | You | Don’t pull the last stack (default **ON**) |
-| `.fi "Blood Essence"` / `.s fi …` | You; search plot or clan | Find item |
-| `.fc sal` | You | Find chests by name |
+| `.fi "Blood Essence"` / `.s fi …` | You; search plot or clan | Find item. Always shows the plot you are standing on. ClanShare ON: groups by plot + heart level and marks current as `(here)` |
+| `.fc sal` | You | Find chests by name. Same plot / `(here)` labels as `.fi` when ClanShare is ON |
 | `.s sp` | You | Silent pull (no “from where” chat) |
 | `.s ssh` | You | Silent stash |
 | `.s rrglobal` | You | Allow **off-plot** stash/RR. Default **OFF**. Does not shrink on-plot ClanShare dest |
@@ -97,8 +98,8 @@ Quote names with spaces. If a name is ambiguous, pick with **`.s 2`** or **`.s p
 | `.s cse` | **Plot**, heart **owner only** | Exclude or include **this** plot from ClanShare. Standing on an excluded plot is local-only |
 | `.s sal` | **Plot** (clanmate of heart owner) | Feed chests named `salvage` into the devourer. Default **OFF** per plot. Needs **`.sg sal`** allow |
 | `.s hf` | **Plot** | Heart Blood Essence auto-feed. Default **ON** until you turn it off |
-| `.s asm` | You | Servants auto-stash / `spoils` |
-| `.s co` | You | Conveyors (`s#` / `r#`) |
+| `.s asm` | You | Servants auto-stash mission loot with the same dest rules as `.stash` / RR (named dest ranking, then overflow). ClanShare ON: clan island except `.s cse`. Player default **OFF**; `.sg asm` must also be on |
+| `.s co` | You | Conveyors (`s#` / `r#`). Chest `s#` fills seeded `r#` chests (honor reserve). Same-group `s#r#` cycles need **`.sg convloop`** |
 | `.s us` | You | Chests named `spawner` |
 | `.s bz` | You | Chests named `brazier` |
 | `.s settings` | You + standing castle | Show your toggles and this castle’s reserve |
@@ -119,6 +120,7 @@ Needs `save-data\Settings\adminlist.txt` SteamID64 **and** console `adminauth`.
 | `.sg cr` | Allow craft-pull |
 | `.sg asm` | Allow servant auto-stash |
 | `.sg co` | Allow conveyors |
+| `.sg convloop` / `.sg cloop` | Allow s# chest → r# chest **loops** (dest is also s# on the same group). Default **OFF**. Chest→chest without a cycle works even when this is off |
 | `.sg sal` | Allow devourer salvage |
 | `.sg us` | Allow `spawner` chests |
 | `.sg bz` | Allow `brazier` chests |

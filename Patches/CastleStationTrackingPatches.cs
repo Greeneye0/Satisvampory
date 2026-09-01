@@ -1,7 +1,4 @@
-using HarmonyLib;
-using ProjectM;
-using ProjectM.CastleBuilding;
-using Unity.Collections;
+using Satisvampory.Services;
 
 namespace Satisvampory.Patches;
 
@@ -10,21 +7,53 @@ internal class CastleStationSpawnSystemPatch
 {
     public static bool Prefix(CastleHasItemsOnSpawnSystem __instance)
     {
-        var entities = __instance.__query_60442477_0.ToEntityArray(Allocator.Temp);
-        foreach (var castleConnectionEntity in entities)
-        {
-            if (castleConnectionEntity.Has<Bonfire>()) Core.BrazierService.AddBrazier(castleConnectionEntity);
-            if (castleConnectionEntity.Has<Refinementstation>()) Core.RefinementStations.AddRefinementStation(castleConnectionEntity);
-            if (castleConnectionEntity.Has<Salvagestation>()) Core.SalvageService.AddSalvageStation(castleConnectionEntity);
-            if (castleConnectionEntity.Has<UnitSpawnerstation>()) Core.UnitSpawnerstationService.AddUnitSpawnerStation(castleConnectionEntity);
-            if (castleConnectionEntity.Has<WorkstationRecipesBuffer>())
-                Satisvampory.Services.ClanTreasuryLend.AddWorkstation(castleConnectionEntity);
-
-            // A newly built/rebuilt station means its territory has work to (re)evaluate.
-            Core.WorkQueue?.EnqueueOwner(castleConnectionEntity);
-        }
-        entities.Dispose();
+        Track(__instance.__query_60442477_0, spawn: true);
         return true;
+    }
+
+    internal static void Track(EntityQuery query, bool spawn)
+    {
+        var rows = query.ToEntityArray(Allocator.Temp);
+        try
+        {
+            for (var i = 0; i < rows.Length; i++)
+                Register(rows[i], spawn);
+        }
+        finally
+        {
+            rows.Dispose();
+        }
+    }
+
+    static void Register(Entity station, bool spawn)
+    {
+        if (station.Has<Bonfire>())
+        {
+            if (spawn) Core.BrazierService.AddBrazier(station);
+            else Core.BrazierService.RemoveBrazier(station);
+        }
+        if (station.Has<Refinementstation>())
+        {
+            if (spawn) Core.RefinementStations.AddRefinementStation(station);
+            else Core.RefinementStations.RemoveRefinementStation(station);
+        }
+        if (station.Has<Salvagestation>())
+        {
+            if (spawn) Core.SalvageService.AddSalvageStation(station);
+            else Core.SalvageService.RemoveSalvageStation(station);
+        }
+        if (station.Has<UnitSpawnerstation>())
+        {
+            if (spawn) Core.UnitSpawnerstationService.AddUnitSpawnerStation(station);
+            else Core.UnitSpawnerstationService.RemoveUnitSpawnerStation(station);
+        }
+        if (station.Has<WorkstationRecipesBuffer>())
+        {
+            if (spawn) ClanTreasuryLend.AddWorkstation(station);
+            else ClanTreasuryLend.RemoveWorkstation(station);
+        }
+        if (spawn)
+            Core.WorkQueue?.EnqueueOwner(station);
     }
 }
 
@@ -33,17 +62,7 @@ internal class CastleStationDestroySystemPatch
 {
     public static bool Prefix(CastleHasItemsOnDestroySystem __instance)
     {
-        var entities = __instance._DestroyConnectedCastleItem.ToEntityArray(Allocator.Temp);
-        foreach (var castleConnectionEntity in entities)
-        {
-            if (castleConnectionEntity.Has<Bonfire>()) Core.BrazierService.RemoveBrazier(castleConnectionEntity);
-            if (castleConnectionEntity.Has<Refinementstation>()) Core.RefinementStations.RemoveRefinementStation(castleConnectionEntity);
-            if (castleConnectionEntity.Has<Salvagestation>()) Core.SalvageService.RemoveSalvageStation(castleConnectionEntity);
-            if (castleConnectionEntity.Has<UnitSpawnerstation>()) Core.UnitSpawnerstationService.RemoveUnitSpawnerStation(castleConnectionEntity);
-            if (castleConnectionEntity.Has<WorkstationRecipesBuffer>())
-                Satisvampory.Services.ClanTreasuryLend.RemoveWorkstation(castleConnectionEntity);
-        }
-        entities.Dispose();
+        CastleStationSpawnSystemPatch.Track(__instance._DestroyConnectedCastleItem, spawn: false);
         return true;
     }
 }

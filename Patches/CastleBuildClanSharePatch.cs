@@ -24,8 +24,11 @@ namespace Satisvampory.Patches
                 return false;
             if (!Core.HasInitialized)
                 return false;
-            heart = ClanTreasuryShare.HeartFromTarget(character);
-            return ClanTreasuryShare.ShouldShare(heart);
+            var standing = Core.TerritoryService.GetStandingTerritoryId(character);
+            heart = standing >= 0 ? Core.TerritoryService.GetCastleHeart(standing) : Entity.Null;
+            if (!ClanTreasuryShare.ShouldShare(heart))
+                return false;
+            return Core.TerritoryService.IsSameClanAsHeart(character, heart);
         }
 
         [HarmonyPatch(typeof(GetPlacementResourcesResult), nameof(GetPlacementResourcesResult.HasEnoughResources))]

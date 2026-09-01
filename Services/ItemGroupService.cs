@@ -135,6 +135,29 @@ namespace Satisvampory.Services
             return item.GuidHash != 0 && GreaterBloodEssenceHash != 0 && item.GuidHash == GreaterBloodEssenceHash;
         }
 
+        public static bool TryGetDestGroup(int guidHash, out string group)
+        {
+            return destGroupByHash.TryGetValue(guidHash, out group) && !string.IsNullOrEmpty(group);
+        }
+
+        /// <summary>
+        /// Ingredients / machine fuel (ore, fish, blood, planks, …). Not finished
+        /// weapons, armor, jewels, or relics — those bloated covering to 200+ GUIDs.
+        /// </summary>
+        public static bool IsMachineSpendItem(int guidHash)
+        {
+            if (guidHash == 0 || !TryGetDestGroup(guidHash, out var group))
+                return false;
+            return group != GroupWeapons && group != GroupArmor && group != GroupJewels
+                && group != GroupMagic && group != GroupBags && group != GroupSaddles
+                && group != GroupRelics && group != GroupSoulshards;
+        }
+
+        public static bool IsFishOrFeedPlaceholder(string prefab, string loc)
+        {
+            return IsRecipePlaceholder(prefab, loc);
+        }
+
         public static bool IsGbeAliasText(string s)
         {
             if (string.IsNullOrWhiteSpace(s))

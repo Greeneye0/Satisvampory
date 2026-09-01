@@ -275,7 +275,7 @@ internal static class LegacyPrefixAlias
     public static void Help(ChatCommandContext ctx)
     {
         ctx.Reply("Use <color=white>.s help</color>.");
-        LogisticsCommands.ShowHelp(ctx);
+        CastleCommands.ShowHelp(ctx);
     }
 }
 

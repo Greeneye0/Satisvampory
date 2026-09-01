@@ -72,6 +72,7 @@ namespace Satisvampory.Services
             var guid = 0;
             string name = "";
             var apply = false;
+            var users = 30;
             try
             {
                 using var doc = JsonDocument.Parse(text);
@@ -91,6 +92,8 @@ namespace Satisvampory.Services
                 if (root.TryGetProperty("apply", out var applyEl)
                     && (applyEl.ValueKind == JsonValueKind.True || (applyEl.ValueKind == JsonValueKind.String && applyEl.GetString() == "true")))
                     apply = true;
+                if (root.TryGetProperty("users", out var usersEl) && usersEl.ValueKind == JsonValueKind.Number)
+                    users = usersEl.GetInt32();
             }
             catch (Exception e)
             {
@@ -108,7 +111,7 @@ namespace Satisvampory.Services
             string body;
             try
             {
-                body = Dispatch(op, plot, guid, name, apply);
+                body = Dispatch(op, plot, guid, name, apply, users);
             }
             catch (Exception e)
             {
@@ -118,22 +121,42 @@ namespace Satisvampory.Services
             TryDeleteReq();
         }
 
-        static string Dispatch(string op, int plot, int guid, string name, bool apply)
+        static string Dispatch(string op, int plot, int guid, string name, bool apply, int users = 30)
         {
             switch (op)
             {
                 case "help":
-                    return "{\"ops\":[\"help\",\"players\",\"plot\",\"item\",\"covering\",\"dest\",\"sim\",\"cover\",\"unstick\",\"need\"],"
+                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\"],"
                         + "\"req\":\"" + Esc(ReqPath) + "\",\"res\":\"" + Esc(ResPath) + "\","
-                        + "\"hint\":\"{\\\"op\\\":\\\"sim\\\",\\\"plot\\\":125,\\\"name\\\":\\\"plank\\\"}\","
+                        + "\"hint\":\"{\\\"op\\\":\\\"log\\\",\\\"name\\\":\\\"dupe\\\"}\","
                         + "\"sim\":\"dry-run covering as if you are standing on plot. apply:true actually moves\","
-                        + "\"cover\":\"force a covering tick now\",\"unstick\":\"clear sticky-fail for plot\"}";
+                        + "\"log\":\"tail rolling Satisvampory.log (name=filter kind/via/item, plot=N)\","
+                        + "\"perf\":\"last lend-tick timings\",\"logdump\":\"write ring to debug/log.txt\","
+                        + "\"fair\":\"30-player occupy round-robin budget (users:N)\","
+                        + "\"guest\":\"castle-guest isolation contract\","
+                        + "\"cover\":\"force a covering tick now\",\"unstick\":\"clear sticky-fail for plot\","
+                        + "\"plots\":\"all claimed plots (level, owner, cse, occupied, destMode)\","
+                        + "\"upgrade\":\"heart upgrade costs vs have on plot\","
+                        + "\"settings\":\"cs/asm/hf/cse/conveyor/cloop for plot owner\","
+                        + "\"servants\":\"list coffins/servants and loot counts (plot:N optional)\","
+                        + "\"servantstash\":\"stash all returned servants now (plot:N optional)\"}";
                 case "players":
                     return PeekPlayers();
+                case "plots":
+                    return PeekPlots();
                 case "plot":
                     if (plot < 0)
                         plot = FirstStandingPlot();
                     return PeekPlot(plot);
+                case "upgrade":
+                case "heartupgrade":
+                    if (plot < 0)
+                        plot = FirstStandingPlot();
+                    return ClanTreasuryLend.DebugUpgrade(plot);
+                case "settings":
+                    if (plot < 0)
+                        plot = FirstStandingPlot();
+                    return PeekSettings(plot);
                 case "item":
                     return PeekItem(plot, guid, name);
                 case "covering":
@@ -150,10 +173,34 @@ namespace Satisvampory.Services
                     return "{\"ticked\":true,\"plot\":" + (plot < 0 ? FirstStandingPlot() : plot) + "}";
                 case "unstick":
                     return "{\"cleared\":" + ClanTreasuryLend.DebugUnstick(plot) + ",\"plot\":" + plot + "}";
+                case "servants":
+                    return Core.Stash.DebugListServants(plot);
+                case "servantstash":
+                case "asmstash":
+                    return Core.Stash.DebugStashAllServants(plot);
                 case "need":
                     if (plot < 0)
                         plot = FirstStandingPlot();
                     return PeekNeed(plot);
+                case "fair":
+                case "occupy":
+                    return ClanTreasuryLend.DebugFairness(users);
+                case "guest":
+                    return ClanTreasuryLend.DebugGuest();
+                case "log":
+                case "logs":
+                    return DestDebugLog.MailboxTail(plot, name, 80);
+                case "perf":
+                    return DestDebugLog.MailboxPerf();
+                case "logdump":
+                    return DestDebugLog.MailboxDump(Path.Combine(Dir, "log.txt"));
+                case "selftest":
+                    return "{\"dest\":" + StashRouting.SelfTestDest()
+                        + ",\"coveringCap1200\":" + ClanTreasuryLend.CapCovering1x(1200)
+                        + ",\"coveringCap40\":" + ClanTreasuryLend.CapCovering1x(40)
+                        + ",\"coveringCapOk\":" + (ClanTreasuryLend.CapCovering1x(1200) == 200 && ClanTreasuryLend.CapCovering1x(40) == 40 ? "true" : "false")
+                        + ",\"fair\":" + ClanTreasuryLend.DebugFairness(users <= 0 ? 30 : users)
+                        + "}";
                 default:
                     return "{\"error\":\"unknown op\"}";
             }
@@ -267,6 +314,90 @@ namespace Satisvampory.Services
             return list;
         }
 
+        static string PeekPlots()
+        {
+            var sb = new StringBuilder();
+            sb.Append("{\"plots\":[");
+            var first = true;
+            for (var id = TerritoryService.MIN_TERRITORY_ID; id <= TerritoryService.MAX_TERRITORY_ID; id++)
+            {
+                var heart = Core.TerritoryService.GetCastleHeart(id);
+                if (heart == Entity.Null || !Core.EntityManager.Exists(heart))
+                    continue;
+                var level = -1;
+                if (heart.Has<CastleHeart>())
+                    level = heart.Read<CastleHeart>().Level;
+                Core.TerritoryService.TryGetTerritoryOwnerPlatformId(id, out var ownerId);
+                var treas = 0;
+                var chests = 0;
+                foreach (var stash in Core.Stash.GetStashesOnTerritory(id))
+                {
+                    if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
+                        continue;
+                    chests++;
+                    if (ClanTreasuryShare.IsTreasuryLinked(stash))
+                        treas++;
+                }
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append("{\"plot\":").Append(id)
+                    .Append(",\"heartLevel\":").Append(level)
+                    .Append(",\"owner\":\"").Append(ownerId).Append('"')
+                    .Append(",\"cse\":").Append(Core.PlayerSettings.IsTerritoryClanShareExcluded(id) ? "true" : "false")
+                    .Append(",\"occupied\":").Append(ClanTreasuryLend.DebugIsOccupied(id) ? "true" : "false")
+                    .Append(",\"treasuryChests\":").Append(treas)
+                    .Append(",\"chests\":").Append(chests)
+                    .Append(",\"destMode\":\"").Append(treas > 0 ? "treasury" : "allShared").Append('"')
+                    .Append('}');
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+
+        static string PeekSettings(int plot)
+        {
+            var sb = new StringBuilder();
+            sb.Append("{\"plot\":").Append(plot);
+            if (plot < 0)
+            {
+                sb.Append(",\"error\":\"no plot\"}");
+                return sb.ToString();
+            }
+            var heart = Core.TerritoryService.GetCastleHeart(plot);
+            ulong ownerId = 0;
+            var ownerName = "";
+            var cs = false;
+            var asm = false;
+            var conv = false;
+            if (heart != Entity.Null && Core.EntityManager.Exists(heart) && heart.Has<UserOwner>())
+            {
+                var userEnt = heart.Read<UserOwner>().Owner.GetEntityOnServer();
+                if (userEnt != Entity.Null && Core.EntityManager.Exists(userEnt) && userEnt.Has<User>())
+                {
+                    var user = userEnt.Read<User>();
+                    ownerId = user.PlatformId;
+                    ownerName = user.CharacterName.ToString();
+                    cs = Core.TerritoryService.IsClanShareOn(user);
+                    asm = Core.PlayerSettings.IsAutoStashMissionsEnabled(ownerId);
+                    conv = Core.PlayerSettings.IsConveyorEnabled(ownerId);
+                }
+            }
+            var hf = Core.PlayerSettings.IsHeartFeedEnabled(ownerId, plot);
+            var sal = Core.PlayerSettings.GetPlotSalvageFlag(ownerId, plot);
+            sb.Append(",\"owner\":\"").Append(ownerId).Append('"')
+                .Append(",\"name\":\"").Append(Esc(ownerName)).Append('"')
+                .Append(",\"cs\":").Append(cs ? "true" : "false")
+                .Append(",\"cse\":").Append(Core.PlayerSettings.IsTerritoryClanShareExcluded(plot) ? "true" : "false")
+                .Append(",\"asm\":").Append(asm ? "true" : "false")
+                .Append(",\"hf\":").Append(hf ? "true" : "false")
+                .Append(",\"salvage\":").Append(sal ? "true" : "false")
+                .Append(",\"conveyor\":").Append(conv ? "true" : "false")
+                .Append(",\"convloop\":").Append(Core.PlayerSettings.IsConveyorLoopsAllowed() ? "true" : "false")
+                .Append(",\"occupied\":").Append(ClanTreasuryLend.DebugIsOccupied(plot) ? "true" : "false")
+                .Append('}');
+            return sb.ToString();
+        }
+
         static string PeekPlayers()
         {
             var sb = new StringBuilder();
@@ -341,7 +472,7 @@ namespace Satisvampory.Services
                             .Append("\",\"n\":").Append(buf[i].Amount).Append('}');
                     }
                 }
-                chests.Add("{\"name\":\"" + Esc(name) + "\",\"net\":\"" + Esc(net)
+                chests.Add("{\"name\":\"" + Esc(name) + "\",\"destName\":\"" + Esc(StashRouting.DestName(stash)) + "\",\"net\":\"" + Esc(net)
                     + "\",\"treasuryLinked\":" + (linked ? "true" : "false")
                     + ",\"matchingFloor\":\"" + Esc(match)
                     + "\",\"unnamed\":" + (StashRouting.IsUnnamedOrGeneric(name) ? "true" : "false")
@@ -376,14 +507,20 @@ namespace Satisvampory.Services
             one.TryGetValue(ClanTreasuryLend.PlankHash, out var plank);
             one.TryGetValue(ClanTreasuryLend.CopperIngotHash, out var copper);
             one.TryGetValue(ClanTreasuryLend.GreaterBloodEssenceHash, out var gbe);
+            one.TryGetValue(ClanTreasuryLend.BloodEssenceHash, out var be);
             one.TryGetValue(ClanTreasuryLend.StoneBrickHash, out var brick);
+            one.TryGetValue(ClanTreasuryLend.StoneHash, out var stone);
+            one.TryGetValue(ClanTreasuryLend.GemDustHash, out var gemdust);
             var sb = new StringBuilder();
             sb.Append("{\"plot\":").Append(plot)
                 .Append(",\"mats\":").Append(one.Count)
                 .Append(",\"plank1x\":").Append(plank)
                 .Append(",\"copper1x\":").Append(copper)
+                .Append(",\"be1x\":").Append(be)
                 .Append(",\"gbe1x\":").Append(gbe)
                 .Append(",\"brick1x\":").Append(brick)
+                .Append(",\"stone1x\":").Append(stone)
+                .Append(",\"gemdust1x\":").Append(gemdust)
                 .Append('}');
             return sb.ToString();
         }

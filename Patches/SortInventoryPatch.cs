@@ -1,114 +1,72 @@
-using HarmonyLib;
-using Satisvampory;
-using ProjectM;
-using ProjectM.Behaviours;
-using ProjectM.Network;
-using Steamworks;
-using System;
-using System.Collections.Generic;
-using Unity.Collections;
-using Unity.Entities;
 
-namespace Satisvampory.Patches
+namespace Satisvampory.Patches;
+
+[HarmonyPatch]
+public class SortSingleInventorySystemPatch
 {
-    [HarmonyPatch]
-    public class SortSingleInventorySystemPatch
+    static readonly Dictionary<ulong, double> stashArmed = new();
+    static readonly Dictionary<ulong, double> trashArmed = new();
+
+    [HarmonyPatch(typeof(SortSingleInventorySystem), nameof(SortSingleInventorySystem.OnUpdate))]
+    [HarmonyPrefix]
+    static void Prefix(SortSingleInventorySystem __instance) => Drain(__instance);
+
+    static void Drain(SortSingleInventorySystem system)
     {
-        // Would be better as a circular buffer but in general this will be one element so doesn't really matter
-        static List<(ulong, double)> lastSort = [];
-        static List<(ulong, double)> lastTrashSort = [];
-
-        [HarmonyPatch(typeof(SortSingleInventorySystem), nameof(SortSingleInventorySystem.OnUpdate))]
-        [HarmonyPrefix]
-        static void Prefix(SortSingleInventorySystem __instance)
+        var rows = system._EventQuery.ToEntityArray(Allocator.Temp);
+        try
         {
-            var entities = __instance._EventQuery.ToEntityArray(Allocator.Temp);
-            try
-            {
-                // Do a first pass of removing old entries from the lastSort list
-                var serverTime = Core.ServerTime;
-                for (int i = lastSort.Count - 1; i >= 0; i--)
-                {
-                    var lastSortTime = lastSort[i].Item2;
-                    if ((serverTime - lastSortTime) >= 1)
-                        lastSort.RemoveAt(i);
-                }
+            var now = Core.ServerTime;
+            DropStale(stashArmed, now);
+            DropStale(trashArmed, now);
+            for (var i = 0; i < rows.Length; i++)
+                Handle(rows[i], now);
+        }
+        finally { rows.Dispose(); }
+    }
 
-                for (int i = lastTrashSort.Count - 1; i >= 0; i--)
-                {
-                    var lastSortTime = lastTrashSort[i].Item2;
-                    if ((serverTime - lastSortTime) >= 1)
-                        lastTrashSort.RemoveAt(i);
-                }
+    static void Handle(Entity entity, double now)
+    {
+        if (entity.Equals(Entity.Null)) return;
+        var from = entity.Read<FromCharacter>();
+        var sort = entity.Read<SortSingleInventoryEvent>();
+        var steam = from.User.Read<User>().PlatformId;
+        if (sort.Inventory == from.Character.Read<NetworkId>())
+        {
+            if (Core.PlayerSettings.IsSortStashEnabled(steam) && Armed(stashArmed, steam, now))
+                Core.Stash.StashCharacterInventory(from.Character);
+            return;
+        }
+        if (!Armed(trashArmed, steam, now)) return;
+        var plot = Core.TerritoryService.GetTerritoryId(from.Character);
+        foreach (var trash in Core.Stash.GetAllTrashStashes(plot))
+        {
+            if (trash.Read<NetworkId>() != sort.Inventory) continue;
+            Core.Trash.EmptyTrash(from.Character, trash);
+            break;
+        }
+    }
 
-                foreach (Entity entity in entities)
-                {
-                    if (entity.Equals(Entity.Null)) continue;
+    static bool Armed(Dictionary<ulong, double> clicks, ulong steam, double now)
+    {
+        if (clicks.TryGetValue(steam, out var armedAt) && now - armedAt < 1)
+        {
+            clicks.Remove(steam);
+            return true;
+        }
+        clicks[steam] = now;
+        return false;
+    }
 
-                    var fromCharacter = entity.Read<FromCharacter>();
-
-                    var sort = entity.Read<SortSingleInventoryEvent>();
-                    
-                    var playerInventoryNetworkId = fromCharacter.Character.Read<NetworkId>();
-                    var steamId = fromCharacter.User.Read<User>().PlatformId;
-
-                    if (sort.Inventory == playerInventoryNetworkId)
-                    {
-                        if (!Core.PlayerSettings.IsSortStashEnabled(steamId)) continue;
-
-                        var found = false;
-                        for (int i = lastSort.Count - 1; i >= 0; i--)
-                        {
-                            if (lastSort[i].Item1 != steamId) continue;
-
-                            Core.Stash.StashCharacterInventory(fromCharacter.Character);
-                            lastSort.RemoveAt(i);
-                            found = true;
-                            break;
-                        }
-
-                        if (!found)
-                        {
-                            lastSort.Add((steamId, serverTime));
-                        }
-                    }
-                    else
-                    {
-                        // Maybe trash
-                        var found = false;
-                        for (int i = lastTrashSort.Count - 1; i >= 0; i--)
-                        {
-                            if (lastTrashSort[i].Item1 != steamId) continue;
-
-                            lastTrashSort.RemoveAt(i);
-                            found = true;
-
-                            // Check if its a trash container
-                            var territoryIndex = Core.TerritoryService.GetTerritoryId(fromCharacter.Character);
-                            foreach (var trashContainer in Core.Stash.GetAllTrashStashes(territoryIndex))
-                            {
-                                if (trashContainer.Read<NetworkId>() != sort.Inventory) continue;
-                                Core.Trash.EmptyTrash(fromCharacter.Character, trashContainer);
-                                break;
-                            }
-                            break;
-                        }
-
-                        if (!found)
-                        {
-                            lastTrashSort.Add((steamId, serverTime));
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Core.Log.LogError(ex);
-            }
-            finally
-            {
-                entities.Dispose();
-            }
-        }       
+    static void DropStale(Dictionary<ulong, double> clicks, double now)
+    {
+        if (clicks.Count == 0) return;
+        List<ulong> stale = null;
+        foreach (var kv in clicks)
+            if (now - kv.Value >= 1)
+                (stale ??= new List<ulong>()).Add(kv.Key);
+        if (stale == null) return;
+        for (var i = 0; i < stale.Count; i++)
+            clicks.Remove(stale[i]);
     }
 }

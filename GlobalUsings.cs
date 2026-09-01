@@ -1,0 +1,9 @@
+global using System.Collections.Generic;
+global using HarmonyLib;
+global using ProjectM;
+global using ProjectM.Network;
+global using ProjectM.CastleBuilding;
+global using Stunlock.Core;
+global using Unity.Collections;
+global using Unity.Entities;
+global using VampireCommandFramework;

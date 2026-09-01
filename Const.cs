@@ -1,12 +1,9 @@
-using Stunlock.Core;
 
-namespace Satisvampory
+namespace Satisvampory;
+
+static class Const
 {
-    internal static class Const
-    {
-        public const string RECEIVER_REGEX = @"r(\d+)";
-        public const string SENDER_REGEX = @"s(\d+)";
-
-        public static readonly PrefabGUID Buff_InCombat_PvPVampire = new PrefabGUID(697095869);
-    }
+    public static readonly PrefabGUID Buff_InCombat_PvPVampire = new(697095869);
+    public static string RECEIVER_REGEX => Services.BeltTokens.Receiver;
+    public static string SENDER_REGEX => Services.BeltTokens.Sender;
 }

@@ -1,130 +1,58 @@
 using Il2CppInterop.Runtime;
-using ProjectM;
-using ProjectM.CastleBuilding;
-using System.Collections.Generic;
 using System.Text.RegularExpressions;
-using Unity.Collections;
-using Unity.Entities;
 
 namespace Satisvampory.Services
 {
-    internal class RefinementStationsService
+    internal sealed class RefinementStationsService
     {
+        readonly HeartBoundIndex index;
+        readonly Regex receiveToken;
+        readonly Regex sendToken;
 
-        readonly Regex receiverRegex;
-        readonly Regex senderRegex;
+        static ComponentType[] QueryTypes =>
+        [
+            ComponentType.ReadOnly(Il2CppType.Of<Team>()),
+            ComponentType.ReadOnly(Il2CppType.Of<CastleHeartConnection>()),
+            ComponentType.ReadOnly(Il2CppType.Of<Refinementstation>()),
+            ComponentType.ReadOnly(Il2CppType.Of<NameableInteractable>()),
+            ComponentType.ReadOnly(Il2CppType.Of<UserOwner>()),
+            ComponentType.ReadOnly(Il2CppType.Of<RefinementstationRecipesBuffer>()),
+            ComponentType.ReadOnly(Il2CppType.Of<CastleWorkstation>()),
+        ];
 
-        readonly Dictionary<Entity, List<Entity>> refinementStationsByHeart = [];
-
-        public RefinementStationsService() 
+        public RefinementStationsService()
         {
-            var entityQueryBuilder = new EntityQueryBuilder(Allocator.Temp)
-            .AddAll(ComponentType.ReadOnly(Il2CppType.Of<Team>()))
-            .AddAll(ComponentType.ReadOnly(Il2CppType.Of<CastleHeartConnection>()))
-            .AddAll(ComponentType.ReadOnly(Il2CppType.Of<Refinementstation>()))
-            .AddAll(ComponentType.ReadOnly(Il2CppType.Of<NameableInteractable>()))
-            .AddAll(ComponentType.ReadOnly(Il2CppType.Of<UserOwner>()))
-            .AddAll(ComponentType.ReadOnly(Il2CppType.Of<RefinementstationRecipesBuffer>()))
-            .AddAll(ComponentType.ReadOnly(Il2CppType.Of<CastleWorkstation>()))
-            .WithOptions(EntityQueryOptions.IncludeDisabled);
-
-            var stationsQuery = Core.EntityManager.CreateEntityQuery(ref entityQueryBuilder);
-            entityQueryBuilder.Dispose();
-            var stationArray = stationsQuery.ToEntityArray(Allocator.Temp);
-            try
-            {
-                foreach (var station in stationArray)
-                    AddRefinementStation(station);
-            }
-            finally
-            {
-                stationArray.Dispose();
-            }
-            stationsQuery.Dispose();
-
-            receiverRegex = new Regex(Const.RECEIVER_REGEX, RegexOptions.Compiled);
-            senderRegex = new Regex(Const.SENDER_REGEX, RegexOptions.Compiled);
+            receiveToken = new Regex(Const.RECEIVER_REGEX, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            sendToken = new Regex(Const.SENDER_REGEX, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+            index = HeartBoundIndex.Scan(includeDisabled: true, QueryTypes);
         }
 
-        internal void AddRefinementStation(Entity stationEntity)
-        {
-            var castleHeartEntity = stationEntity.Read<CastleHeartConnection>().CastleHeartEntity.GetEntityOnServer();
+        internal void AddRefinementStation(Entity station) => index.Track(station);
+        internal void RemoveRefinementStation(Entity station) => index.Untrack(station);
 
-            if (!refinementStationsByHeart.TryGetValue(castleHeartEntity, out var list))
+        public IEnumerable<(int group, Entity station)> GetAllReceivingStations(int territoryId) =>
+            NamedGroups(receiveToken, territoryId);
+
+        public IEnumerable<(int group, Entity station)> GetAllSendingStations(int territoryId) =>
+            NamedGroups(sendToken, territoryId);
+
+        public IEnumerable<Entity> GetAllStationsOnTerritory(int territoryId) => index.OnTerritory(territoryId);
+
+        IEnumerable<(int group, Entity station)> NamedGroups(Regex token, int territoryId)
+        {
+            foreach (var station in index.OnTerritory(territoryId))
             {
-                list = [];
-                refinementStationsByHeart.Add(castleHeartEntity, list);
-            }
-            list.Add(stationEntity);
-        }
-
-        internal void RemoveRefinementStation(Entity stationEntity)
-        {
-            var castleHeartEntity = stationEntity.Read<CastleHeartConnection>().CastleHeartEntity.GetEntityOnServer();
-
-            if (!refinementStationsByHeart.TryGetValue(castleHeartEntity, out var list)) return;
-
-            list.Remove(stationEntity);
-        }
-
-        public IEnumerable<(int group, Entity station)> GetAllReceivingStations(int territoryId)
-        {
-            foreach (var result in GetAllGroupStations(receiverRegex, territoryId))
-            {
-                yield return result;
-            }
-        }
-
-        public IEnumerable<(int group, Entity station)> GetAllSendingStations(int territoryId)
-        {
-            foreach(var result in GetAllGroupStations(senderRegex, territoryId))
-            {
-                yield return result;
-            }
-        }
-
-        public IEnumerable<Entity> GetAllStationsOnTerritory(int territoryId)
-        {
-            var castleHeartEntity = Core.TerritoryService.GetCastleHeart(territoryId);
-            if (castleHeartEntity == Entity.Null) yield break;
-            if (!refinementStationsByHeart.TryGetValue(castleHeartEntity, out var list)) yield break;
-
-            for (var i = list.Count - 1; i >= 0; i--)
-            {
-                var stationEntity = list[i];
-                if (!Core.EntityManager.Exists(stationEntity))
-                {
-                    list.RemoveAt(i);
+                if (!station.Has<NameableInteractable>())
                     continue;
-                }
-                yield return stationEntity;
-            }
-        }
-
-        IEnumerable<(int group, Entity station)> GetAllGroupStations(Regex groupRegex, int territoryId)
-        {
-
-            var castleHeartEntity = Core.TerritoryService.GetCastleHeart(territoryId);
-            if (!refinementStationsByHeart.TryGetValue(castleHeartEntity, out var list)) yield break;
-
-            for (var i = list.Count - 1; i >= 0; i--)
-            {
-                var stationEntity = list[i];
-                if (!Core.EntityManager.Exists(stationEntity))
-                {
-                    list.RemoveAt(i);
+                var plate = station.Read<NameableInteractable>().Name.ToString();
+                if (string.IsNullOrEmpty(plate))
                     continue;
-                }
-                if (stationEntity.Has<Disabled>()) continue;
-                var name = stationEntity.Read<NameableInteractable>().Name.ToString().ToLower();
-                foreach (Match match in groupRegex.Matches(name))
+                foreach (Match hit in token.Matches(plate))
                 {
-                    var group = int.Parse(match.Groups[1].Value);
-                    yield return (group, stationEntity);
+                    if (int.TryParse(hit.Groups[1].Value, out var group))
+                        yield return (group, station);
                 }
             }
         }
-
-
     }
 }

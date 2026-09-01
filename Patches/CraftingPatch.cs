@@ -1,159 +1,127 @@
-using HarmonyLib;
-using Satisvampory.Services;
-using ProjectM;
-using ProjectM.Network;
+using System;
 using ProjectM.Shared;
-using Stunlock.Core;
-using Unity.Collections;
-using Unity.Entities;
+using Satisvampory.Services;
 
 namespace Satisvampory.Patches;
 
 public class CraftingPatch
 {
+    static bool CraftPullOn(FromCharacter from, out Entity character)
+    {
+        character = from.Character;
+        return Core.PlayerSettings.IsCraftPullEnabled(from.User.Read<User>().PlatformId);
+    }
+
+    static void Visit(EntityQuery query, Action<Entity> visit)
+    {
+        var rows = query.ToEntityArray(Allocator.Temp);
+        try
+        {
+            for (var i = 0; i < rows.Length; i++)
+                visit(rows[i]);
+        }
+        finally
+        {
+            rows.Dispose();
+        }
+    }
+
+    static bool AlreadyQueued(Entity station, PrefabGUID recipe)
+    {
+        if (!station.Has<QueuedWorkstationCraftAction>())
+            return true;
+        var queued = Core.EntityManager.GetBuffer<QueuedWorkstationCraftAction>(station);
+        for (var i = 0; i < queued.Length; i++)
+        {
+            if (queued[i].RecipeGuid.Equals(recipe))
+                return true;
+        }
+        return false;
+    }
+
+    static void RepairIfDamaged(Entity character, Entity item, PrefabGUID prefab)
+    {
+        if (!item.Has<Durability>())
+            return;
+        var durability = item.Read<Durability>();
+        if (durability.Value >= durability.MaxDurability)
+            return;
+        PullService.HandleRepairPull(character, durability.RepairRecipe, durability.Value / durability.MaxDurability, prefab);
+    }
+
     [HarmonyPatch(typeof(StopCraftingSystem), nameof(StopCraftingSystem.OnUpdate))]
-    public static class StopCraftingSystemPatch
+    public static class StopCraftHook
     {
         public static void Prefix(StopCraftingSystem __instance)
         {
-            var entities = __instance._EventQuery.ToEntityArray(Allocator.Temp);
-            try
+            Visit(__instance._EventQuery, entity =>
             {
-                foreach (Entity entity in entities)
-                {
-                    if (entity.Has<StopCraftItemEvent>() && entity.Has<FromCharacter>())
-                    {
-                        var fromCharacter = entity.Read<FromCharacter>();
-                        ulong steamId = fromCharacter.User.Read<User>().PlatformId;
-                        if (!Core.PlayerSettings.IsCraftPullEnabled(steamId)) continue;
-
-                        var stopCraftEvent = entity.Read<StopCraftItemEvent>();
-                        Entity station = fromCharacter.Character.Read<Interactor>().Target; // station entity
-
-                        if (!station.Has<QueuedWorkstationCraftAction>()) continue;
-
-                        PrefabGUID prefabGUID = stopCraftEvent.RecipeGuid;
-
-                        var alreadyCraftingRecipe = false;
-                        var queuedActions = Core.EntityManager.GetBuffer<QueuedWorkstationCraftAction>(station);
-                        foreach (var action in queuedActions)
-                        {
-                            if (action.RecipeGuid.Equals(prefabGUID))
-                            {
-                                alreadyCraftingRecipe = true;
-                                break;
-                            }
-                        }
-                        if (alreadyCraftingRecipe)
-                            continue;
-                        
-                        PullService.HandleRecipePull(fromCharacter.Character, station, prefabGUID);
-                    }
-                }
-            }
-            finally
-            {
-                entities.Dispose();
-            }
+                if (!entity.Has<StopCraftItemEvent>() || !entity.Has<FromCharacter>())
+                    return;
+                var from = entity.Read<FromCharacter>();
+                if (!CraftPullOn(from, out var character))
+                    return;
+                var station = character.Read<Interactor>().Target;
+                var recipe = entity.Read<StopCraftItemEvent>().RecipeGuid;
+                if (AlreadyQueued(station, recipe))
+                    return;
+                PullService.HandleRecipePull(character, station, recipe);
+            });
         }
     }
 
     [HarmonyPatch(typeof(ForgeSystem_Events), nameof(ForgeSystem_Events.OnUpdate))]
-    public static class ForgeSystem_EventsPatch
+    public static class ForgeHook
     {
         public static void Prefix(ForgeSystem_Events __instance)
         {
-            var entities = __instance._CancelRepairEventQuery.ToEntityArray(Allocator.Temp);
-            try
+            Visit(__instance._CancelRepairEventQuery, entity =>
             {
-                foreach (Entity entity in entities)
-                {
-                    var fromCharacter = entity.Read<FromCharacter>();
-                    ulong steamId = fromCharacter.User.Read<User>().PlatformId;
-                    if (!Core.PlayerSettings.IsCraftPullEnabled(steamId)) continue;
-
-                    Entity station = fromCharacter.Character.Read<Interactor>().Target; // station entity
-
-                    if (!station.Has<Forge_Shared>()) continue;
-
-                    Forge_Shared forge_Shared = station.Read<Forge_Shared>();
-                    Entity itemEntity = forge_Shared.ItemEntity._Entity;
-
-                    if (forge_Shared.State.Equals(ForgeState.Repairing)) continue;
-                    if (itemEntity.Has<ShatteredItem>())
-                    {
-                        PullService.HandleForgePull(fromCharacter.Character, station, itemEntity);
-                    }
-                    else if (itemEntity.Has<UpgradeableLegendaryItem>())
-                    {
-                        PullService.HandleForgeUpgradePull(fromCharacter.Character, station, itemEntity);
-                    }
-                }
-            }
-            finally
-            {
-                entities.Dispose();
-            }
+                var from = entity.Read<FromCharacter>();
+                if (!CraftPullOn(from, out var character))
+                    return;
+                var station = character.Read<Interactor>().Target;
+                if (!station.Has<Forge_Shared>())
+                    return;
+                var forge = station.Read<Forge_Shared>();
+                if (forge.State.Equals(ForgeState.Repairing))
+                    return;
+                var item = forge.ItemEntity._Entity;
+                if (item.Has<ShatteredItem>())
+                    PullService.HandleForgePull(character, station, item);
+                else if (item.Has<UpgradeableLegendaryItem>())
+                    PullService.HandleForgeUpgradePull(character, station, item);
+            });
         }
     }
 
     [HarmonyPatch(typeof(RepairItemSystem), nameof(RepairItemSystem.OnUpdate))]
-    public static class RepairItemSystemPatch
+    public static class RepairHook
     {
         public static void Prefix(RepairItemSystem __instance)
         {
-            NativeArray<Entity> entities = __instance._RepairItemEventQuery.ToEntityArray(Allocator.Temp);
-            try
+            Visit(__instance._RepairItemEventQuery, entity =>
             {
-                foreach (Entity entity in entities)
-                {
-                    RepairItemEvent repairItemEvent = entity.Read<RepairItemEvent>();
-                    int slot = repairItemEvent.Slot;
-                    FromCharacter fromCharacter = entity.Read<FromCharacter>();
-                    if (InventoryUtilities.TryGetInventoryEntity(Core.EntityManager, fromCharacter.Character, out Entity inventory) && Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(inventory, out var inventoryBuffer))
-                    {
-                        if (inventoryBuffer[slot].ItemEntity._Entity.Has<Durability>())
-                        {
-                            Durability durability = inventoryBuffer[slot].ItemEntity._Entity.Read<Durability>();
-                            if (durability.Value < durability.MaxDurability)
-                            {
-                                float repairNeeded = durability.Value/durability.MaxDurability;
-                                PullService.HandleRepairPull(fromCharacter.Character, durability.RepairRecipe, repairNeeded, inventoryBuffer[slot].ItemType);
-                            }
-                        }
-                    }     
-                }
-            }
-            finally
+                var ev = entity.Read<RepairItemEvent>();
+                var from = entity.Read<FromCharacter>();
+                if (!InventoryUtilities.TryGetInventoryEntity(Core.EntityManager, from.Character, out var inventory))
+                    return;
+                if (!Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(inventory, out var slots))
+                    return;
+                var row = slots[ev.Slot];
+                RepairIfDamaged(from.Character, row.ItemEntity._Entity, row.ItemType);
+            });
+
+            Visit(__instance._RepairEquippedItemEventQuery, entity =>
             {
-                entities.Dispose();
-            }
-            entities = __instance._RepairEquippedItemEventQuery.ToEntityArray(Allocator.Temp);
-            try
-            {
-                foreach (Entity entity in entities)
-                {
-                    var repairItemEvent = entity.Read<RepairEquippedItemEvent>();
-                    var equipmentSlot = repairItemEvent.EquipmentType;
-                    var fromCharacter = entity.Read<FromCharacter>();
-                    var equipment = fromCharacter.Character.Read<Equipment>();
-                    if (equipment.GetEquipmentEntity(equipmentSlot)._Entity.Has<Durability>())
-                    {
-                        var item = equipment.GetEquipmentEntity(equipmentSlot).GetEntityOnServer();
-                        var durability = item.Read<Durability>();
-                        if (durability.Value < durability.MaxDurability)
-                        {
-                            var repairNeeded = durability.Value / durability.MaxDurability;
-                            var itemPrefab = item.Read<PrefabGUID>();
-                            PullService.HandleRepairPull(fromCharacter.Character, durability.RepairRecipe, repairNeeded, itemPrefab);
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                entities.Dispose();
-            }
+                var ev = entity.Read<RepairEquippedItemEvent>();
+                var from = entity.Read<FromCharacter>();
+                var gear = from.Character.Read<Equipment>().GetEquipmentEntity(ev.EquipmentType);
+                var item = gear.GetEntityOnServer();
+                if (!item.Has<PrefabGUID>())
+                    return;
+                RepairIfDamaged(from.Character, item, item.Read<PrefabGUID>());
+            });
         }
     }
 }

@@ -40,6 +40,13 @@ namespace Satisvampory.Services
         {
             if (target == Entity.Null || !Core.EntityManager.Exists(target))
                 return Entity.Null;
+            if (target.Has<PlayerCharacter>())
+            {
+                var standing = Core.TerritoryService.GetStandingTerritoryId(target);
+                if (standing >= 0)
+                    return Core.TerritoryService.GetCastleHeart(standing);
+                return Entity.Null;
+            }
             if (target.Has<CastleHeartConnection>())
             {
                 var connected = target.Read<CastleHeartConnection>().CastleHeartEntity.GetEntityOnServer();
@@ -479,7 +486,12 @@ namespace Satisvampory.Services
                 if (Core.ServerGameManager.TryGetBuffer<SharedCastleInventories>(heart, out var srcs))
                 {
                     for (var i = 0; i < srcs.Length; i++)
-                        nAdded += AddSharedItemBuffer(srcs[i].InventorySource, local);
+                    {
+                        var src = srcs[i].InventorySource;
+                        if (src == Entity.Null || !Core.EntityManager.Exists(src))
+                            continue;
+                        nAdded += AddSharedItemBuffer(src, local);
+                    }
                 }
             }
             catch (Exception e)
@@ -915,15 +927,28 @@ namespace Satisvampory.Services
             return count + extra;
         }
 
+        static DateTime bagAvailAt;
+        static Entity bagAvailChar;
+        static readonly Dictionary<int, int> bagAvail = new();
+        static readonly Dictionary<int, int> buildAvail = new();
         static DateTime buildAvailAt;
         static Entity buildAvailHeart;
         static Entity buildAvailChar;
-        static readonly Dictionary<int, int> buildAvail = new();
+
+        struct PlotCountCache
+        {
+            public DateTime At;
+            public Dictionary<int, int> Counts;
+        }
+        static readonly Dictionary<int, PlotCountCache> plotAvail = new();
 
         internal static void InvalidateBuildAvailable()
         {
-            buildAvailAt = DateTime.MinValue;
+            bagAvailAt = DateTime.MinValue;
+            bagAvail.Clear();
             buildAvail.Clear();
+            buildAvailAt = DateTime.MinValue;
+            plotAvail.Clear();
         }
 
         static void AddStacks(Entity inventory, Dictionary<int, int> dest)
@@ -945,52 +970,74 @@ namespace Satisvampory.Services
             }
         }
 
+        static Dictionary<int, int> EnsurePlotCounts(int plotId)
+        {
+            var now = DateTime.UtcNow;
+            if (plotAvail.TryGetValue(plotId, out var cached)
+                && (now - cached.At).TotalSeconds < 0.25 && cached.Counts != null)
+                return new Dictionary<int, int>(cached.Counts);
+
+            var counts = new Dictionary<int, int>();
+            var sgm = Core.ServerGameManager;
+            foreach (var stash in Core.Stash.GetStashesOnTerritory(plotId))
+            {
+                if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
+                    continue;
+                if (!sgm.TryGetBuffer<AttachedBuffer>(stash, out var buffer))
+                    continue;
+                foreach (var attachedBuffer in buffer)
+                {
+                    var inventory = attachedBuffer.Entity;
+                    if (inventory == Entity.Null || !Core.EntityManager.Exists(inventory))
+                        continue;
+                    if (!inventory.Has<PrefabGUID>())
+                        continue;
+                    if (!inventory.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
+                        continue;
+                    AddStacks(inventory, counts);
+                }
+            }
+            plotAvail[plotId] = new PlotCountCache { At = now, Counts = counts };
+            return new Dictionary<int, int>(counts);
+        }
+
         static void EnsureBuildAvailable(Entity standingHeart, Entity character)
         {
             var now = DateTime.UtcNow;
             if (standingHeart == buildAvailHeart && character == buildAvailChar
                 && (now - buildAvailAt).TotalSeconds < 0.25 && buildAvail.Count > 0)
                 return;
-            buildAvailHeart = standingHeart;
-            buildAvailChar = character;
-            buildAvailAt = now;
-            buildAvail.Clear();
 
-            var sgm = Core.ServerGameManager;
-            if (character != Entity.Null && Core.EntityManager.Exists(character)
-                && InventoryUtilities.TryGetInventoryEntity(Core.EntityManager, character, out var bag)
-                && bag != Entity.Null)
-                AddStacks(bag, buildAvail);
+            if (character != bagAvailChar || (now - bagAvailAt).TotalSeconds >= 0.25)
+            {
+                bagAvail.Clear();
+                bagAvailChar = character;
+                bagAvailAt = now;
+                if (character != Entity.Null && Core.EntityManager.Exists(character)
+                    && InventoryUtilities.TryGetInventoryEntity(Core.EntityManager, character, out var bag)
+                    && bag != Entity.Null)
+                    AddStacks(bag, bagAvail);
+            }
+
+            buildAvail.Clear();
+            foreach (var kv in bagAvail)
+                buildAvail[kv.Key] = kv.Value;
 
             var standingId = TerritoryIdFromHeart(standingHeart);
             if (standingId < 0)
+            {
+                buildAvailHeart = standingHeart;
+                buildAvailChar = character;
+                buildAvailAt = now;
                 return;
+            }
             var ids = Core.TerritoryService.GetLogisticsTerritoryIds(standingId);
             if (ids == null || ids.Count == 0)
                 ids = new[] { standingId };
 
-            var plotCounts = new Dictionary<int, int>();
             foreach (var id in ids)
             {
-                plotCounts.Clear();
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(id))
-                {
-                    if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
-                        continue;
-                    if (!sgm.TryGetBuffer<AttachedBuffer>(stash, out var buffer))
-                        continue;
-                    foreach (var attachedBuffer in buffer)
-                    {
-                        var inventory = attachedBuffer.Entity;
-                        if (inventory == Entity.Null || !Core.EntityManager.Exists(inventory))
-                            continue;
-                        if (!inventory.Has<PrefabGUID>())
-                            continue;
-                        if (!inventory.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
-                            continue;
-                        AddStacks(inventory, plotCounts);
-                    }
-                }
+                var plotCounts = EnsurePlotCounts(id);
                 Core.TerritoryService.TryGetTerritoryOwnerPlatformId(id, out var sourceOwnerId);
                 foreach (var kv in plotCounts)
                 {
@@ -1009,6 +1056,9 @@ namespace Satisvampory.Services
                         buildAvail[kv.Key] = n;
                 }
             }
+            buildAvailHeart = standingHeart;
+            buildAvailChar = character;
+            buildAvailAt = now;
         }
 
         static int CountBuildAvailable(Entity standingHeart, Entity character, PrefabGUID type)
@@ -1056,7 +1106,10 @@ namespace Satisvampory.Services
                         continue;
                     var have = CountBuildAvailableAliased(standingHeart, character, type);
                     if (have < needed)
+                    {
+                        DestDebugLog.Miss("build", TerritoryIdFromHeart(standingHeart), type, have, needed, "has-enough");
                         return false;
+                    }
                 }
                 return true;
             }

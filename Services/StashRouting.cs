@@ -93,7 +93,8 @@ namespace Satisvampory.Services
 
         /// <summary>
         /// Dest quality name: nameplate if set, else prefab/EntityName (never entity.ToString()).
-        /// Blank Jewel Storage ranks as "Jewel Storage", not unnamed class 3.
+        /// Blank nameplate is still generic (class 3); prefab "Jewel Storage" does not
+        /// steal covering dests from unnamed treasury chests.
         /// </summary>
         public static string DestName(Entity stash)
         {
@@ -146,8 +147,22 @@ namespace Satisvampory.Services
             if (string.IsNullOrWhiteSpace(name))
                 return true;
             var t = name.Trim();
-            return t.Equals("Chest", StringComparison.OrdinalIgnoreCase)
-                || t.Equals("Container", StringComparison.OrdinalIgnoreCase);
+            if (t.Equals("Chest", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Container", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Empty", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("General", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Misc", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Miscellaneous", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Everything", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Everything Else", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("All", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Other", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Others", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Extra", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Dump", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("Stuff", StringComparison.OrdinalIgnoreCase))
+                return true;
+            return false;
         }
 
         public static bool IsOverflowName(string name)
@@ -562,6 +577,14 @@ namespace Satisvampory.Services
                 return true;
             }
             var itemTokens = itemName.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
+            // "Blood" is Blood Essence, not Greater/Primal. Rank above Alchemy category.
+            if (tokens.Count == 1 && itemTokens.Length == 2
+                && itemTokens[0] == "blood" && itemTokens[1] == "essence"
+                && VariantsOverlap(tokens[0], "blood"))
+            {
+                specificity = itemName.Length + 20;
+                return true;
+            }
             if (tokens.Count == itemTokens.Length)
             {
                 var all = true;
@@ -762,8 +785,7 @@ namespace Satisvampory.Services
         }
 
         /// <summary>
-        /// Empty nameplate whose DestName is only a chest prefab ("Small Chest") is a generic
-        /// dump. "Jewel Storage" still ranks as jewels (remaining token "jewel").
+        /// Prefab/nameplate that is only chest size words ("Small Chest") is generic.
         /// </summary>
         static bool IsFurnitureChestName(string name)
         {
@@ -790,34 +812,106 @@ namespace Satisvampory.Services
         }
 
         /// <summary>
-        /// Rank unnamed using the nameplate first. Blank plate + furniture prefab = generic.
-        /// Blank plate + "Jewel Storage" stays a jewel dest.
+        /// Rank unnamed from the nameplate. A blank plate is always generic so covering
+        /// can land on unnamed treasury chests; prefab DestName does not restrict them.
+        /// Named "Jewel Storage" still ranks as jewels.
         /// </summary>
-        static bool IsUnnamedDest(string plate, string destName)
+        internal static bool IsUnnamedDest(string plate, string destName)
         {
             if (IsOverflowDestName(plate) || IsOverflowDestName(destName))
                 return false;
             if (string.IsNullOrWhiteSpace(plate))
-            {
-                if (string.IsNullOrWhiteSpace(destName) || IsUnnamedOrGeneric(destName) || IsFurnitureChestName(destName))
-                    return true;
-                return false;
-            }
+                return true;
             return IsUnnamedOrGeneric(plate) || IsUnnamedOrGeneric(destName);
+        }
+
+        internal static string SelfTestDest()
+        {
+            var blankJewel = IsUnnamedDest("", "Jewel Storage");
+            var blankEmpty = IsUnnamedDest("", "");
+            var blankFurniture = IsUnnamedDest("", "Small Chest");
+            var namedLeather = IsUnnamedDest("Leather", "Leather");
+            var overflow = IsUnnamedDest("", "overflow");
+            var namedJewel = IsUnnamedDest("jewels", "Jewel Storage");
+            var blankMatch = RankMatchName("", "Jewel Storage");
+            var namedMatch = RankMatchName("jewels", "Jewel Storage");
+            var matchOk = blankMatch.Length == 0 && namedMatch == "Jewel Storage";
+            var emptyGeneric = IsGenericName("Empty") && IsUnnamedDest("Empty", "Jewel Storage");
+            var blankClass = RankClassUnmatched("", "Jewel Storage", false);
+            var emptyClass = RankClassUnmatched("Empty", "Jewel Storage", false);
+            var leatherClass = RankClassUnmatched("Leather", "Leather", false);
+            var classOk = blankClass == 3 && emptyClass == 3 && leatherClass == 6;
+            var generalClass = RankClassUnmatched("General", "Jewel Storage", false);
+            var elseClass = RankClassUnmatched("Everything Else", "Jewel Storage", false);
+            var catchAll = IsGenericName("General") && IsGenericName("Everything Else") && generalClass == 3 && elseClass == 3;
+            var passBlank = SourcePassFromName("", false);
+            var passLeather = SourcePassFromName("Leather", false);
+            var passBelt = SourcePassFromName("Planks R0S0", true);
+            var passOre = SourcePassFromName("Ore & Ingots", false);
+            var passOverflow = SourcePassFromName("Spoils Overflow", false);
+            var passOk = passBlank == 0 && passLeather == 1 && passBelt == 2 && passOre == 1 && passOverflow == 0;
+            var beltNotDest = IsConveyorName("Planks R0S0") && !IsConveyorName("Ore & Ingots") && !IsConveyorName("General");
+            var ok = blankJewel && blankEmpty && blankFurniture && !namedLeather && !overflow && !namedJewel && matchOk && emptyGeneric && classOk && catchAll && passOk && beltNotDest;
+            return "{\"blankJewel\":" + (blankJewel ? "true" : "false")
+                + ",\"blankEmpty\":" + (blankEmpty ? "true" : "false")
+                + ",\"blankFurniture\":" + (blankFurniture ? "true" : "false")
+                + ",\"namedLeather\":" + (namedLeather ? "true" : "false")
+                + ",\"overflow\":" + (overflow ? "true" : "false")
+                + ",\"namedJewel\":" + (namedJewel ? "true" : "false")
+                + ",\"blankMatchEmpty\":" + (blankMatch.Length == 0 ? "true" : "false")
+                + ",\"namedMatchJewel\":" + (namedMatch == "Jewel Storage" ? "true" : "false")
+                + ",\"emptyGeneric\":" + (emptyGeneric ? "true" : "false")
+                + ",\"blankClass\":" + blankClass
+                + ",\"emptyClass\":" + emptyClass
+                + ",\"leatherClass\":" + leatherClass
+                + ",\"generalClass\":" + generalClass
+                + ",\"elseClass\":" + elseClass
+                + ",\"passBlank\":" + passBlank
+                + ",\"passLeather\":" + passLeather
+                + ",\"passBelt\":" + passBelt
+                + ",\"passOre\":" + passOre
+                + ",\"passOverflow\":" + passOverflow
+                + ",\"beltNotDest\":" + (beltNotDest ? "true" : "false")
+                + ",\"ok\":" + (ok ? "true" : "false") + "}";
+        }
+
+        /// <summary>
+        /// Dest class when exact/category miss (blank plate never inherits prefab category).
+        /// </summary>
+        internal static int RankClassUnmatched(string plate, string destName, bool hasItem)
+        {
+            if (IsOverflowDestName(plate) || IsOverflowDestName(destName))
+                return 5;
+            if (IsUnnamedDest(plate, destName))
+                return 3;
+            return hasItem ? 4 : 6;
+        }
+
+        /// <summary>
+        /// Exact/category matching name. Blank nameplate does not inherit prefab DestName
+        /// (Jewel Storage / Woodworking Storage) so covering treats it as generic.
+        /// </summary>
+        internal static string RankMatchName(string plate, string destName)
+        {
+            if (string.IsNullOrWhiteSpace(plate))
+                return "";
+            return destName ?? "";
         }
 
         public static DepositRank RankDeposit(Entity stash, PrefabGUID item, ulong ownerId, bool hasItem, int standingPlot = -1)
         {
             var plate = RawName(stash);
-            var name = DestName(stash);
+            var destName = DestName(stash);
+            var name = destName;
+            var matchName = RankMatchName(plate, destName);
             var local = standingPlot >= 0 && Core.TerritoryService.GetTerritoryId(stash) == standingPlot;
             var rank = new DepositRank { Class = 99, Label = SkipLabel(plate), Seeded = hasItem, Treasury = IsTreasury(stash), Local = local };
             if (IsNoShareName(plate))
                 return rank;
 
             var overflowDest = IsOverflowDestName(name) || IsOverflowDestName(plate);
-            // Brazier/spawner stay non-dest. Overflow/spoils/salvage/trash are last-resort dests.
-            if ((IsSpecialName(name) || IsSpecialName(plate)) && !overflowDest)
+            // Special identity is the nameplate. Blank plate does not inherit a prefab "salvage" token.
+            if ((IsSpecialName(plate) || (!string.IsNullOrWhiteSpace(plate) && IsSpecialName(name))) && !overflowDest)
             {
                 rank.Class = 90;
                 rank.Label = LabelCustomLast;
@@ -826,8 +920,8 @@ namespace Satisvampory.Services
 
             var specExact = 0;
             var specCat = 0;
-            var exact = !overflowDest && item.GuidHash != 0 && ExactItemNameMatch(name, item, out specExact);
-            var category = !overflowDest && !exact && item.GuidHash != 0 && CategoryMatch(name, item, ownerId, out specCat);
+            var exact = !overflowDest && item.GuidHash != 0 && ExactItemNameMatch(matchName, item, out specExact);
+            var category = !overflowDest && !exact && item.GuidHash != 0 && CategoryMatch(matchName, item, ownerId, out specCat);
             var unnamed = !overflowDest && IsUnnamedDest(plate, name);
 
             // 1.6.1.38: seeded s# (has this item) first only if unnamed/generic OR name matches.
@@ -855,22 +949,20 @@ namespace Satisvampory.Services
                 rank.Label = LabelCategory;
                 return rank;
             }
-            if (unnamed)
+            var unmatched = RankClassUnmatched(plate, destName, hasItem);
+            rank.Class = unmatched;
+            if (unmatched == 3)
             {
-                rank.Class = 3;
                 rank.Spec = rank.Treasury ? 1 : 0;
                 rank.Label = LabelGeneric;
                 return rank;
             }
-            if (!overflowDest)
+            if (unmatched == 5)
             {
-                // Named custom (seeded) beats overflow. Empty custom is not a dest.
-                rank.Class = hasItem ? 4 : 6;
-                rank.Label = LabelCustomLast;
+                rank.Label = LabelOverflow;
                 return rank;
             }
-            rank.Class = 5;
-            rank.Label = LabelOverflow;
+            rank.Label = LabelCustomLast;
             return rank;
         }
 
@@ -908,12 +1000,13 @@ namespace Satisvampory.Services
         public static SortRank RankSort(Entity stash, PrefabGUID item, ulong ownerId, bool hasItem)
         {
             var plate = RawName(stash);
-            var name = DestName(stash);
+            var destName = DestName(stash);
+            var name = destName;
+            var matchName = RankMatchName(plate, destName);
             var r = new SortRank { Class = 9, Label = SkipLabel(plate), Seeded = hasItem };
             if (IsNoShareName(plate))
                 return r;
             // Never drain s#/r#. Overflow/spoils are last-resort RR dests, not self-sort dests.
-            // Conveyor/special/overflow identity is nameplate; dest quality matching uses DestName.
             if (IsConveyorName(plate) || IsSpecialName(plate) || IsOverflowDestName(plate))
             {
                 r.Class = 8;
@@ -922,7 +1015,7 @@ namespace Satisvampory.Services
                 r.Label = IsOverflowDestName(plate) ? LabelOverflow : (IsConveyorName(plate) ? LabelSender : LabelCustomLast);
                 return r;
             }
-            if (item.GuidHash != 0 && ExactItemNameMatch(name, item, out var specExact))
+            if (item.GuidHash != 0 && ExactItemNameMatch(matchName, item, out var specExact))
             {
                 r.Class = 0;
                 r.Spec = specExact;
@@ -931,7 +1024,7 @@ namespace Satisvampory.Services
                 r.Label = LabelNameMatch;
                 return r;
             }
-            if (item.GuidHash != 0 && CategoryMatch(name, item, ownerId, out var specCat))
+            if (item.GuidHash != 0 && CategoryMatch(matchName, item, ownerId, out var specCat))
             {
                 r.Class = 1;
                 r.Spec = specCat;
@@ -943,23 +1036,30 @@ namespace Satisvampory.Services
             r.Class = 3;
             r.UsableDest = false;
             r.UsableSource = true;
-            r.Label = IsGenericName(name) ? LabelGeneric : LabelCustomLast;
+            r.Label = (string.IsNullOrWhiteSpace(plate) || IsGenericName(plate)) ? LabelGeneric : LabelCustomLast;
             return r;
         }
 
         /// <summary>
-        /// lend/.pull source: -1 NS skip, 0 unnamed/treasury, 1 named non-conveyor, 2 s#/r# last-resort.
+        /// lend/.pull source: -1 NS, 0 unnamed/generic/overflow, 1 named (even on treasury floor),
+        /// 2 s#/r# last-resort. Named treasury dests are not pass 0.
         /// </summary>
+        internal static int SourcePassFromName(string plate, bool conveyor)
+        {
+            if (IsNoShareName(plate))
+                return -1;
+            if (conveyor)
+                return 2;
+            if (string.IsNullOrWhiteSpace(plate) || IsGenericName(plate) || IsUnnamedOrGeneric(plate)
+                || IsOverflowDestName(plate))
+                return 0;
+            return 1;
+        }
+
         public static int SourcePass(Entity stash)
         {
             var name = RawName(stash);
-            if (IsNoShareName(name))
-                return -1;
-            if (IsConveyorName(name))
-                return 2;
-            if (IsGenericName(name) || IsTreasury(stash))
-                return 0;
-            return 1;
+            return SourcePassFromName(name, IsConveyorName(name));
         }
 
         public static bool TryGetExternalInventory(Entity stash, out Entity inventory)
@@ -1015,19 +1115,47 @@ namespace Satisvampory.Services
             return result;
         }
 
-        public static List<Entity> OrderDepositInventories(int plot, List<Entity> destInvs, PrefabGUID item)
+        static Dictionary<int, Dictionary<Entity, Entity>> plotInvStash;
+        static DateTime plotInvStashAt;
+
+        internal static void InvalidatePlotStashMap()
+        {
+            plotInvStash = null;
+            plotInvStashAt = DateTime.MinValue;
+        }
+
+        static Dictionary<Entity, Entity> InvToStash(int plot)
+        {
+            var now = DateTime.UtcNow;
+            if (plotInvStash == null || (now - plotInvStashAt).TotalSeconds >= 0.25)
+            {
+                plotInvStash = new Dictionary<int, Dictionary<Entity, Entity>>();
+                plotInvStashAt = now;
+            }
+            if (plotInvStash.TryGetValue(plot, out var cached))
+                return cached;
+            var map = new Dictionary<Entity, Entity>();
+            foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+            {
+                if (stash == Entity.Null || !Core.EntityManager.Exists(stash))
+                    continue;
+                if (!TryGetExternalInventory(stash, out var inv))
+                    continue;
+                if (inv == Entity.Null || !Core.EntityManager.Exists(inv))
+                    continue;
+                map[inv] = stash;
+            }
+            plotInvStash[plot] = map;
+            return map;
+        }
+
+        public static List<Entity> OrderDepositInventories(int plot, List<Entity> destInvs, PrefabGUID item, int maxClass = 5)
         {
             var result = new List<Entity>();
             if (destInvs == null || destInvs.Count == 0)
                 return result;
             Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out var ownerId);
-            var stashOf = new Dictionary<Entity, Entity>();
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
-            {
-                if (!TryGetExternalInventory(stash, out var inv))
-                    continue;
-                stashOf[inv] = stash;
-            }
+            var stashOf = InvToStash(plot);
             var ranked = new List<(DepositRank rank, Entity inv)>();
             foreach (var inv in destInvs)
             {
@@ -1036,14 +1164,22 @@ namespace Satisvampory.Services
                 Entity stash;
                 if (!stashOf.TryGetValue(inv, out stash))
                     stash = Entity.Null;
+                if (stash == Entity.Null || !Core.EntityManager.Exists(stash))
+                {
+                    // Heart-fuel / attached invs are real dests with no chest nameplate.
+                    var orphan = new DepositRank { Class = 3, Label = LabelGeneric, Local = true };
+                    if (orphan.IsDepositUsable && orphan.Class <= maxClass)
+                        ranked.Add((orphan, inv));
+                    continue;
+                }
                 var name = RawName(stash);
+                if (IsConveyorName(name))
+                    continue;
                 if (IsNoShareName(name) && loggedNs.Add(plot + ":" + name))
                     LogDestPick(SkipLabel(name), plot, item, name, "deposit-filter");
                 var has = InventoryHasItem(inv, item);
-                var rank = stash == Entity.Null
-                    ? new DepositRank { Class = 6, Label = LabelCustomLast }
-                    : RankDeposit(stash, item, ownerId, has);
-                if (!rank.IsDepositUsable)
+                var rank = RankDeposit(stash, item, ownerId, has, plot);
+                if (!rank.IsDepositUsable || rank.Class > maxClass)
                     continue;
                 ranked.Add((rank, inv));
             }

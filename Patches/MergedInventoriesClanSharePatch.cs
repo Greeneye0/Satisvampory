@@ -17,7 +17,7 @@ namespace Satisvampory.Patches
     /// </summary>
     public static class MergedInventoriesClanSharePatch
     {
-        static bool TryBeginShare(Entity standingHeart, bool includeCastleSharedInventories)
+        static bool TryBeginShare(Entity standingHeart, bool includeCastleSharedInventories, Entity actor = default)
         {
             if (ClanTreasuryShare.Suppress)
                 return false;
@@ -25,7 +25,11 @@ namespace Satisvampory.Patches
                 return false;
             if (!Core.HasInitialized)
                 return false;
-            return ClanTreasuryShare.ShouldShare(standingHeart);
+            if (!ClanTreasuryShare.ShouldShare(standingHeart))
+                return false;
+            if (actor != Entity.Null && Core.EntityManager.Exists(actor) && actor.Has<PlayerCharacter>())
+                return Core.TerritoryService.IsSameClanAsHeart(actor, standingHeart);
+            return Core.TerritoryService.ClanMemberStandingOnHeart(standingHeart);
         }
 
         static MethodBase FindRemove(params Type[] args)
@@ -41,7 +45,7 @@ namespace Satisvampory.Patches
                 bool includeCurrentInteractingInventory, bool includeCastleSharedInventories,
                 ref NativeArray<InventoryBuffer> __result)
             {
-                if (!TryBeginShare(castleHeartEntity, includeCastleSharedInventories))
+                if (!TryBeginShare(castleHeartEntity, includeCastleSharedInventories, target))
                     return true;
 
                 ClanTreasuryShare.Suppress = true;
@@ -76,7 +80,7 @@ namespace Satisvampory.Patches
                     return true;
 
                 var heart = ClanTreasuryShare.HeartFromTarget(target);
-                if (!TryBeginShare(heart, includeCastleSharedInventories))
+                if (!TryBeginShare(heart, includeCastleSharedInventories, target))
                     return true;
 
                 ClanTreasuryShare.Suppress = true;
@@ -110,7 +114,7 @@ namespace Satisvampory.Patches
                 PrefabGUID type, int amount, ref int remainder,
                 bool includeCurrentInteractingInventory, bool includeCastleSharedInventories, bool destroyItem)
             {
-                if (!TryBeginShare(castleHeartEntity, includeCastleSharedInventories))
+                if (!TryBeginShare(castleHeartEntity, includeCastleSharedInventories, target))
                     return true;
 
                 ClanTreasuryShare.Suppress = true;
@@ -146,7 +150,7 @@ namespace Satisvampory.Patches
                 PrefabGUID type, int amount, ref int remainder, ref Entity itemEntity,
                 bool includeCurrentInteractingInventory, bool includeCastleSharedInventories, bool destroyItem)
             {
-                if (!TryBeginShare(castleHeartEntity, includeCastleSharedInventories))
+                if (!TryBeginShare(castleHeartEntity, includeCastleSharedInventories, target))
                     return true;
 
                 ClanTreasuryShare.Suppress = true;
@@ -186,7 +190,7 @@ namespace Satisvampory.Patches
                     return true;
 
                 var heart = ClanTreasuryShare.HeartFromTarget(target);
-                if (!TryBeginShare(heart, includeCastleSharedInventories))
+                if (!TryBeginShare(heart, includeCastleSharedInventories, target))
                     return true;
 
                 ClanTreasuryShare.Suppress = true;
@@ -226,7 +230,7 @@ namespace Satisvampory.Patches
                     return true;
 
                 var heart = ClanTreasuryShare.HeartFromTarget(target);
-                if (!TryBeginShare(heart, includeCastleSharedInventories))
+                if (!TryBeginShare(heart, includeCastleSharedInventories, target))
                     return true;
 
                 ClanTreasuryShare.Suppress = true;
