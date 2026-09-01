@@ -139,7 +139,7 @@ namespace Satisvampory.Services
                         + "\"upgrade\":\"heart upgrade costs vs have on plot\","
                         + "\"settings\":\"cs/asm/hf/cse/conveyor/cloop for plot owner\","
                         + "\"servants\":\"list coffins/servants and loot counts (plot:N optional)\","
-                        + "\"thrones\":\"list thrones and ClanShare-visible servant counts (plot:N optional)\","
+                        + "\"thrones\":\"list thrones, .s throne picks, last hunt rewrite and response names\","
                         + "\"servantstash\":\"stash all returned servants now (plot:N optional)\"}";
                 case "players":
                     return PeekPlayers();

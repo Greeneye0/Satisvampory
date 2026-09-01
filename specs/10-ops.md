@@ -51,6 +51,8 @@ Local file mailbox. No network socket. No give/spawn (except covering `sim` with
 
 Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, `settings`, `dest`, `sim`, `fair`, `occupy`, `guest`, `cover`, `unstick`, `need`, `selftest`, `log`, `perf`, `logdump`, `servants`, `servantstash`, `thrones`.
 
+`thrones` also dumps `.s throne` picks, last rewrite (sitting/selected/from/to), whether Request and Interactor were patched, and servant names on the last `ServantInfoEvent.Response`.
+
 `players` is the bounce gate. `selftest` includes dest-ranking assertions (`StashRouting.SelfTestDest`).
 
 `.s peek [plot]` writes a live plot dump to `res.json` (admin).

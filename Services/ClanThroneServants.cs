@@ -2,6 +2,7 @@ using Il2CppInterop.Runtime;
 using ProjectM;
 using ProjectM.CastleBuilding;
 using ProjectM.Network;
+using ProjectM.Shared;
 using ProjectM.Shared.Systems;
 using System;
 using System.Collections.Generic;
@@ -23,6 +24,16 @@ namespace Satisvampory.Services
         static readonly Dictionary<int, Entity> throneByPlot = new();
         static DateTime throneCacheAt;
         static readonly TimeSpan PickTtl = TimeSpan.FromMinutes(2);
+        static readonly List<(Entity character, Entity target, NetworkId nid)> interactRestore = new();
+        static readonly List<Entity> infoEntities = new();
+        static string lastSkip = "";
+        static int lastSitting = -1;
+        static int lastSelected = -1;
+        static int lastFrom = -1;
+        static int lastTo = -1;
+        static int lastResponseCount = -1;
+        static string lastResponseNames = "";
+        static string lastPatched = "";
 
         struct PendingPick
         {
@@ -32,9 +43,24 @@ namespace Satisvampory.Services
 
         public static void RewriteInfoRequests(ServantInfoEventSystem_Server system)
         {
+            interactRestore.Clear();
+            infoEntities.Clear();
             if (system == null || !Core.HasInitialized)
                 return;
             RewriteQuery(system._RequestQuery, RewriteInfo);
+        }
+
+        public static void AfterInfoUpdate()
+        {
+            try
+            {
+                CaptureResponse();
+            }
+            catch (Exception e)
+            {
+                Core.LogException(e);
+            }
+            RestoreInteract();
         }
 
         public static void RewriteMissionEvents(ServantMissionActionSystem system)
@@ -172,21 +198,50 @@ namespace Satisvampory.Services
 
         public static string DebugDump(int plotFilter)
         {
+            RefreshThroneCache();
             var sb = new StringBuilder();
-            sb.Append("{\"plot\":").Append(plotFilter).Append(",\"thrones\":[");
+            sb.Append("{\"plot\":").Append(plotFilter)
+                .Append(",\"lastSitting\":").Append(lastSitting)
+                .Append(",\"lastSelected\":").Append(lastSelected)
+                .Append(",\"lastFrom\":").Append(lastFrom)
+                .Append(",\"lastTo\":").Append(lastTo)
+                .Append(",\"lastPatched\":\"").Append(Esc(lastPatched)).Append('"')
+                .Append(",\"lastSkip\":\"").Append(Esc(lastSkip)).Append('"')
+                .Append(",\"lastResponseCount\":").Append(lastResponseCount)
+                .Append(",\"lastResponseNames\":\"").Append(Esc(lastResponseNames)).Append('"')
+                .Append(",\"picks\":[");
             var first = true;
-            foreach (var kv in AllThrones())
+            foreach (var kv in selectedPlot)
+            {
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append("{\"steam\":").Append(kv.Key).Append(",\"plot\":").Append(kv.Value).Append('}');
+            }
+            sb.Append("],\"thrones\":[");
+            first = true;
+            foreach (var kv in throneByPlot)
             {
                 if (plotFilter >= 0 && kv.Key != plotFilter)
                     continue;
                 if (!first) sb.Append(',');
                 first = false;
+                var nid = kv.Value.Has<NetworkId>() ? kv.Value.Read<NetworkId>().ToString() : "";
                 sb.Append("{\"plot\":").Append(kv.Key)
                     .Append(",\"alive\":").Append(CountAlive(kv.Key))
+                    .Append(",\"nid\":\"").Append(Esc(nid)).Append('"')
+                    .Append(",\"useThrone\":").Append(kv.Value.Has<UseThrone>() ? "true" : "false")
+                    .Append(",\"missions\":").Append(kv.Value.Has<ActiveServantMission>() ? "true" : "false")
                     .Append('}');
             }
             sb.Append("]}");
             return sb.ToString();
+        }
+
+        static string Esc(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return "";
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
 
         static void RewriteQuery(EntityQuery query, Action<Entity> rewrite)
@@ -216,16 +271,37 @@ namespace Satisvampory.Services
 
         static void RewriteInfo(Entity entity)
         {
-            if (!entity.Has<ServantInfoEvent.Request>() || !TryTargetFromEvent(entity, out var target, out var plot))
+            infoEntities.Add(entity);
+            if (!entity.Has<ServantInfoEvent.Request>())
+            {
+                lastSkip = "no-request";
                 return;
-            if (!PatchThroneId(entity, new ComponentType(Il2CppType.Of<ServantInfoEvent.Request>()), target, out var fromPlot))
+            }
+            if (!TryTargetFromEvent(entity, out var target, out var plot, out var sitting, out var skip))
+            {
+                lastSkip = skip;
                 return;
-            DestDebugLog.Note("throne", plot, 0, "info " + fromPlot + " -> " + plot);
+            }
+            lastSitting = sitting;
+            lastSelected = plot;
+            var patchedReq = PatchThroneId(entity, new ComponentType(Il2CppType.Of<ServantInfoEvent.Request>()), target, out var fromPlot);
+            var patchedInteract = false;
+            if (entity.Has<FromCharacter>())
+            {
+                var character = entity.Read<FromCharacter>().Character;
+                patchedInteract = RetargetInteract(character, target);
+            }
+            lastFrom = fromPlot;
+            lastTo = plot;
+            lastPatched = "req=" + patchedReq + " interact=" + patchedInteract;
+            lastSkip = "";
+            if (patchedReq || patchedInteract)
+                DestDebugLog.Note("throne", plot, 0, "info " + fromPlot + " -> " + plot + " " + lastPatched);
         }
 
         static void RewriteStart(Entity entity)
         {
-            if (!entity.Has<SendOnMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot))
+            if (!entity.Has<SendOnMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot, out _, out _))
                 return;
             if (!PatchThroneId(entity, new ComponentType(Il2CppType.Of<SendOnMissionEvent>()), target, out var fromPlot))
                 return;
@@ -234,38 +310,126 @@ namespace Satisvampory.Services
 
         static void RewriteAbort(Entity entity)
         {
-            if (!entity.Has<AbortMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot))
+            if (!entity.Has<AbortMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot, out _, out _))
                 return;
             if (!PatchThroneId(entity, new ComponentType(Il2CppType.Of<AbortMissionEvent>()), target, out var fromPlot))
                 return;
             DestDebugLog.Note("throne", plot, 0, "abort " + fromPlot + " -> " + plot);
         }
 
-        static bool TryTargetFromEvent(Entity entity, out Entity target, out int plot)
+        static bool TryTargetFromEvent(Entity entity, out Entity target, out int plot, out int sitting, out string skip)
         {
             target = Entity.Null;
             plot = -1;
+            sitting = -1;
+            skip = "ok";
             if (!entity.Has<FromCharacter>())
+            {
+                skip = "no-from";
                 return false;
+            }
             var from = entity.Read<FromCharacter>();
             var character = from.Character;
             if (character == Entity.Null || !Core.EntityManager.Exists(character) || !from.User.Has<User>())
+            {
+                skip = "no-character";
                 return false;
+            }
             var steam = from.User.Read<User>().PlatformId;
+            sitting = Core.TerritoryService.GetStandingTerritoryId(character);
+            lastSitting = sitting;
             if (!selectedPlot.TryGetValue(steam, out plot) || plot < 0)
+            {
+                skip = "no-pick steam=" + steam;
+                lastSelected = -1;
                 return false;
-            var sitting = Core.TerritoryService.GetStandingTerritoryId(character);
+            }
+            lastSelected = plot;
             if (sitting < 0)
+            {
+                skip = "not-on-plot";
                 return false;
+            }
             var ids = Core.TerritoryService.GetLogisticsTerritoryIds(sitting);
             var ok = false;
             if (ids != null)
                 for (var i = 0; i < ids.Count; i++)
                     if (ids[i] == plot) { ok = true; break; }
             if (!ok)
+            {
+                skip = "pick-not-on-island plot=" + plot;
                 return false;
+            }
             target = FindThrone(plot);
-            return target != Entity.Null && Core.EntityManager.Exists(target) && target.Has<NetworkId>();
+            if (target == Entity.Null || !Core.EntityManager.Exists(target) || !target.Has<NetworkId>())
+            {
+                skip = "no-throne plot=" + plot;
+                return false;
+            }
+            skip = "";
+            return true;
+        }
+
+        static unsafe bool RetargetInteract(Entity character, Entity target)
+        {
+            if (character == Entity.Null || !Core.EntityManager.Exists(character) || !character.Has<Interactor>())
+                return false;
+            var type = new ComponentType(Il2CppType.Of<Interactor>());
+            var raw = Core.EntityManager.GetComponentDataRawRW(character, type.TypeIndex);
+            if (raw == null)
+                return false;
+            var ptr = new IntPtr(raw);
+            var nidPtr = IntPtr.Add(ptr, 8);
+            var tgtPtr = IntPtr.Add(ptr, 20);
+            var oldNid = Marshal.PtrToStructure<NetworkId>(nidPtr);
+            var oldTarget = Marshal.PtrToStructure<Entity>(tgtPtr);
+            if (oldTarget == target)
+                return false;
+            interactRestore.Add((character, oldTarget, oldNid));
+            Marshal.StructureToPtr(target.Read<NetworkId>(), nidPtr, false);
+            Marshal.StructureToPtr(target, tgtPtr, false);
+            return true;
+        }
+
+        static unsafe void RestoreInteract()
+        {
+            for (var i = 0; i < interactRestore.Count; i++)
+            {
+                var save = interactRestore[i];
+                if (save.character == Entity.Null || !Core.EntityManager.Exists(save.character) || !save.character.Has<Interactor>())
+                    continue;
+                var type = new ComponentType(Il2CppType.Of<Interactor>());
+                var raw = Core.EntityManager.GetComponentDataRawRW(save.character, type.TypeIndex);
+                if (raw == null)
+                    continue;
+                var ptr = new IntPtr(raw);
+                Marshal.StructureToPtr(save.nid, IntPtr.Add(ptr, 8), false);
+                Marshal.StructureToPtr(save.target, IntPtr.Add(ptr, 20), false);
+            }
+            interactRestore.Clear();
+        }
+
+        static void CaptureResponse()
+        {
+            lastResponseCount = -1;
+            lastResponseNames = "";
+            for (var i = 0; i < infoEntities.Count; i++)
+            {
+                var entity = infoEntities[i];
+                if (entity == Entity.Null || !Core.EntityManager.Exists(entity) || !entity.Has<ServantInfoEvent.Response>())
+                    continue;
+                var response = entity.Read<ServantInfoEvent.Response>();
+                lastResponseCount = response.Result.Length;
+                var sb = new StringBuilder();
+                for (var e = 0; e < response.Result.Length && e < 12; e++)
+                {
+                    if (e > 0) sb.Append(',');
+                    sb.Append(response.Result[e].Name.ToString());
+                }
+                lastResponseNames = sb.ToString();
+                DestDebugLog.Note("throne", lastTo, 0, "response n=" + lastResponseCount + " " + lastResponseNames + " patched=" + lastPatched);
+            }
+            infoEntities.Clear();
         }
 
         static unsafe bool PatchThroneId(Entity entity, ComponentType type, Entity target, out int fromPlot)

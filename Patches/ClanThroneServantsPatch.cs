@@ -26,6 +26,13 @@ namespace Satisvampory.Patches
                 Core.LogException(e);
             }
         }
+
+        static void Postfix()
+        {
+            if (!Core.HasInitialized)
+                return;
+            ClanThroneServants.AfterInfoUpdate();
+        }
     }
 
     [HarmonyPatch(typeof(ServantMissionActionSystem), nameof(ServantMissionActionSystem.OnUpdate))]

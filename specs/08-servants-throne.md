@@ -20,7 +20,7 @@ ClanShare ON: numbered picker for which clan plot the **throne hunt UI** manages
 - `.s throne here` resets to this castle.
 - Reopen the hunt panel after picking.
 - Vanilla listing stays Burst-safe (no extra entries). ServantInfo / hunt events are retargeted at that plot’s real throne.
-- Find thrones by `ActiveServantMission` buffer first, then ECS `UseThrone` tag (not authoring `UseThroneComponent`). Skip player entities. Patch `Request.Throne` NetworkId in-place (do not Marshal-write the whole event).
+- Find thrones by `ActiveServantMission` buffer first, then ECS `UseThrone` tag (not authoring `UseThroneComponent`). Skip player entities. Patch `Request.Throne` NetworkId in-place (do not Marshal-write the whole event). Also retarget the sitter’s `Interactor.Target` for that update (vanilla may use the seat, not Request.Throne). Restore after. Debug mailbox `thrones` records last response names.
 - ClanShare off or plot excluded: sit **this** throne to manage its servants. Picker is a no-op / explains that.
 
 May manage from plot A only if A and the target throne are both on the character’s ClanShare island.
