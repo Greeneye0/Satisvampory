@@ -114,11 +114,11 @@ namespace Satisvampory.Services
                 ExpiresUtc = DateTime.UtcNow + PickTtl
             };
             var sb = new StringBuilder();
-            sb.Append("ClanShare throne — default is this castle. Pick a number, then sit / reopen hunt UI.\n");
+            sb.Append("ClanShare throne — hunt panel is this seat. Chat lists each plot.\n");
             for (var i = 0; i < ids.Count; i++)
             {
                 var plot = ids[i];
-                var n = CountAlive(plot);
+                var names = AliveNames(plot);
                 var mark = "";
                 if (plot == standing && usingDefault)
                     mark = " <color=yellow>(here, default)</color>";
@@ -126,11 +126,11 @@ namespace Satisvampory.Services
                     mark = " <color=yellow>(here)</color>";
                 if (plot == managing && !usingDefault)
                     mark += " <color=green>(managing)</color>";
-                var noThrone = FindThrone(plot) == Entity.Null ? " <color=red>(no throne)</color>" : "";
                 sb.Append(i + 1).Append(") ")
                     .Append(Core.TerritoryService.FormatPlotLabel(plot))
-                    .Append("  servants ").Append(n)
-                    .Append(mark).Append(noThrone).Append('\n');
+                    .Append(mark).Append("  ")
+                    .Append(names.Count == 0 ? "no servants" : string.Join(", ", names))
+                    .Append('\n');
             }
             sb.Append(".s 2  or  .s throne 2");
             var text = sb.ToString();
@@ -194,8 +194,10 @@ namespace Satisvampory.Services
                 return "Default: " + Core.TerritoryService.FormatPlotLabel(plot) + " (this castle). Sit / reopen the hunt UI.";
             }
             selectedPlot[steam] = plot;
-            return "Managing servants on " + Core.TerritoryService.FormatPlotLabel(plot)
-                + ". Sit a clan throne and reopen the hunt UI.";
+            var names = AliveNames(plot);
+            var who = names.Count == 0 ? "no living servants" : string.Join(", ", names);
+            return "Plot " + Core.TerritoryService.FormatPlotLabel(plot) + ": " + who
+                + ". In-game Choose a Servant stays this castle (vanilla). Overlay later.";
         }
 
         public static string DebugDump(int plotFilter)
@@ -496,6 +498,8 @@ namespace Satisvampory.Services
                     return false;
             }
             Marshal.StructureToPtr(want, ptr, false);
+            var readback = Marshal.PtrToStructure<NetworkId>(ptr);
+            lastPatched += " rb=" + readback + " want=" + want;
             return true;
         }
 
@@ -601,9 +605,11 @@ namespace Satisvampory.Services
             }
         }
 
-        static int CountAlive(int plot)
+        static int CountAlive(int plot) => AliveNames(plot).Count;
+
+        static List<string> AliveNames(int plot)
         {
-            var n = 0;
+            var names = new List<string>();
             var qb = new EntityQueryBuilder(Allocator.Temp)
                 .AddAll(new(Il2CppType.Of<ServantCoffinstation>(), ComponentType.AccessMode.ReadOnly));
             var query = Core.EntityManager.CreateEntityQuery(ref qb);
@@ -623,8 +629,10 @@ namespace Satisvampory.Services
                     if (station.State != ServantCoffinState.ServantAlive)
                         continue;
                     var servant = station.ConnectedServant.GetEntityOnServer();
-                    if (servant != Entity.Null && Core.EntityManager.Exists(servant))
-                        n++;
+                    if (servant == Entity.Null || !Core.EntityManager.Exists(servant))
+                        continue;
+                    var name = station.ServantName.ToString();
+                    names.Add(string.IsNullOrWhiteSpace(name) ? "unnamed" : name);
                 }
             }
             finally
@@ -633,7 +641,7 @@ namespace Satisvampory.Services
                     rows.Dispose();
                 query.Dispose();
             }
-            return n;
+            return names;
         }
     }
 }

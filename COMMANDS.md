@@ -97,7 +97,7 @@ Quote names with spaces. If a name is ambiguous, pick with **`.s 2`** or **`.s p
 | Command | Scope | What |
 | --- | --- | --- |
 | `.s cs` / `.s gs` | **Clan** | ClanShare on/off for **all members, all plots**. Default **OFF** (this clan may already be ON). Items move between clan castles |
-| `.s throne` then `.s 2` | **You** | ClanShare ON: numbered picker for which clan plot the **throne hunt UI** manages. Default is the throne you are at. Reopen the hunt panel after picking. `.s throne here` resets to this castle |
+| `.s throne` then `.s 2` | **You** | ClanShare ON: numbered picker listing each plot’s servants in **chat**. Default is this castle. The in-game Choose a Servant panel stays the seat you are on (vanilla; overlay later) |
 | `.s cse` | **Plot**, heart **owner only** | Exclude or include **this** plot from ClanShare. Standing on an excluded plot is local-only |
 | `.s sal` | **Plot** (clanmate of heart owner) | Feed chests named `salvage` into the devourer. Default **OFF** per plot. Needs **`.sg sal`** allow |
 | `.s hf` | **Plot** | Heart Blood Essence auto-feed. Default **ON** until you turn it off |

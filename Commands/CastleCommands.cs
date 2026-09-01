@@ -92,7 +92,7 @@ namespace Satisvampory.Commands
                 ctx.Reply("This plot is now <color=green>INCLUDED</color> in ClanShare (clan-wide CS still has to be ON).");
         }
 
-        [Command(name: "throne", usage: ".s throne [n|here]", description: "ClanShare: numbered picker for which clan plot the throne hunt UI manages. Default is the castle you are sitting on.")]
+        [Command(name: "throne", usage: ".s throne [n|here]", description: "ClanShare: numbered picker listing each plot's servants in chat. In-game Choose a Servant stays this castle.")]
         public static void ThronePlotCmd(ChatCommandContext ctx, string plot = null)
         {
             if (!Core.HasInitialized)
