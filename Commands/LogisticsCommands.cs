@@ -131,6 +131,10 @@ namespace Satisvampory.Commands;
         public static void GlobalAutoStashMissions(ChatCommandContext ctx)
             => LogisticsCommands.ReplyOnOff(ctx, "Global AutoStash for missions", Core.PlayerSettings.ToggleAutoStashMissions());
 
+        [Command(name: "repeathunt", shortHand: "rh", usage: ".sg rh", description: "When ON, servants automatically go back out on the same hunt after they return. Default OFF.", adminOnly: true)]
+        public static void GlobalRepeatHunt(ChatCommandContext ctx)
+            => LogisticsCommands.ReplyOnOff(ctx, "Repeat hunts", Core.PlayerSettings.ToggleRepeatHunt());
+
         [Command(name: "conveyor", shortHand: "co", usage: ".sg co", description: "Toggles the ability of sender/receiver's to move items around.", adminOnly: true)]
         public static void GlobalConveyor(ChatCommandContext ctx) => LogisticsCommands.FlipWake(ctx, "Global Conveyor", Core.PlayerSettings.ToggleConveyor());
 
@@ -160,7 +164,7 @@ namespace Satisvampory.Commands;
             => LogisticsCommands.ReplyOnOff(ctx, "Global Trash", Core.PlayerSettings.ToggleTrash());
 
         [Command(name: "settings", shortHand: "s", usage: ".sg s", description: "Displays current settings.", adminOnly: true)]
-        public static void ShowGlobal(ChatCommandContext ctx) { var g = Core.PlayerSettings.GetGlobalSettings(); ctx.Reply("Satisvampory server flags:\nSortStash " + LogisticsCommands.OnOff(g.SortStash) + "\nPull " + LogisticsCommands.OnOff(g.Pull) + "\nCraftPull " + LogisticsCommands.OnOff(g.CraftPull) + "\nAutoStashMissions " + LogisticsCommands.OnOff(g.AutoStashMissions) + "\nConveyor " + LogisticsCommands.OnOff(g.Conveyor) + "\nConveyorLoops " + LogisticsCommands.OnOff(g.ConveyorLoops) + " (default OFF; .sg convloop)\nSalvage " + LogisticsCommands.OnOff(g.Salvage) + "\nUnitSpawner " + LogisticsCommands.OnOff(g.UnitSpawner) + "\nBrazier " + LogisticsCommands.OnOff(g.Brazier) + "\nNamed " + LogisticsCommands.OnOff(g.Named) + "\nTrash " + LogisticsCommands.OnOff(g.Trash)); }
+        public static void ShowGlobal(ChatCommandContext ctx) { var g = Core.PlayerSettings.GetGlobalSettings(); ctx.Reply("Satisvampory server flags:\nSortStash " + LogisticsCommands.OnOff(g.SortStash) + "\nPull " + LogisticsCommands.OnOff(g.Pull) + "\nCraftPull " + LogisticsCommands.OnOff(g.CraftPull) + "\nAutoStashMissions " + LogisticsCommands.OnOff(g.AutoStashMissions) + "\nRepeatHunt " + LogisticsCommands.OnOff(g.RepeatHunt) + " (default OFF; .sg rh)\nConveyor " + LogisticsCommands.OnOff(g.Conveyor) + "\nConveyorLoops " + LogisticsCommands.OnOff(g.ConveyorLoops) + " (default OFF; .sg convloop)\nSalvage " + LogisticsCommands.OnOff(g.Salvage) + "\nUnitSpawner " + LogisticsCommands.OnOff(g.UnitSpawner) + "\nBrazier " + LogisticsCommands.OnOff(g.Brazier) + "\nNamed " + LogisticsCommands.OnOff(g.Named) + "\nTrash " + LogisticsCommands.OnOff(g.Trash)); }
     }
 
     public static class InventoryCommands

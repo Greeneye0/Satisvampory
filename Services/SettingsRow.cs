@@ -90,6 +90,8 @@ namespace Satisvampory.Services
         public Dictionary<string, int> ScoopCaps { get; set; }
         public Dictionary<string, string> ScoopCapNames { get; set; }
         public bool AppliedSgAllOn { get; set; }
+        // Admin .sg rh. Default OFF. Not flipped on by SgAllOn.
+        public bool RepeatHunt { get; set; }
     }
 
 }

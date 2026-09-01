@@ -11,19 +11,16 @@ When a servant returns from a mission, dump loot with the **same dest ranking** 
 
 Do not give servant loot a different dest order than stash.
 
-## `.s throne` / `.s hunt` (ClanShare hunt from this chair)
+## Repeat hunts (`.sg rh`)
 
-Do **not** clone the hunt map. Fog of war, undiscovered zones, and zone clicks stay the **vanilla** throne map (same interaction). Satisvampory is server-only. **HuntClock 1.2** draws a castle-switch popup on that map (not a second map) and arms `.s hunt` / mailbox `hunt` for the next vanilla click. Snapshot: `debug/thrones-client.json`.
+Admin **`.sg rh` / `.sg repeathunt`**. Default **OFF**. Server-wide. Not turned on by `SgAllOn`.
 
-ClanShare ON: sit **this** castle’s throne. Pick another clan plot’s servants. Click a **discovered** zone on this map. The server rewrites `SendOnMissionEvent` to that plot’s real throne + those servants (`MissionDataID` / `MapZoneId` stay the vanilla click).
+When ON: each time a hunt **returns**, surviving (not dead, not injured) servants are sent again on the **same** zone / mission / throne after a short delay. Dead or injured servants are skipped. If none can go, no resend. Raided hearts do not resend.
 
-- `.s throne` lists each plot’s living servants. Pick with `.s 2` (pending pick TTL **2 minutes**). Default is this castle.
-- `.s hunt` lists idle servants on the managed plot. `.s hunt 1 2` (max 3) arms the next map click. `.s hunt` with no numbers lists. `.s throne here` back to vanilla this-throne send.
-- Do **not** Harmony-patch `GetResponseEntries` / extra servant entries (Burst abort on sit). Do not teleport-as-product (sit bind stays on this chair; standing snaps home).
-- Never treat a **castle heart** as a throne (`ActiveServantMission` lives on the heart).
-- Debug mailbox `thrones` / `hunt` (`plot:N`, `name:"1 2"`) arms the same rewrite. `gotothrone` is debug-only movement.
-- ClanShare off or plot excluded: sit **this** throne; picker is a no-op.
+On every return (repeat on or off), the castle **heart owner** (if connected) gets a system chat line: who came back, loot stacks, or who **died** / injured. Then auto-stash runs as today.
 
-May manage from plot A only if A and the target throne are both on the character’s ClanShare island.
+Do not Harmony-patch Burst `GetResponseEntries`. Remember the hunt from `SendOnMissionEvent` (after any throne rewrite). Abort clears that memory.
 
-Castle guests do not get clan-wide throne management.
+## `.s throne` / `.s hunt`
+
+Optional ClanShare helper to send another plot’s servants from this chair (vanilla map click). Not required for repeat hunts. No client overlay.

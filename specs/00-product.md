@@ -46,7 +46,7 @@ Plot salvage (`.s sal`) default **OFF**.
 - **Treasury lend**: starter kit, covering buffer, next-level heart-upgrade costs, heart fuel ([03-covering-lend.md](03-covering-lend.md)).
 - Named **`s#` / `r#` conveyors**, salvage / spawner / brazier / trash chests ([06-conveyors-stations.md](06-conveyors-stations.md)).
 - **Ground scoop** into bags ([07-scoop.md](07-scoop.md)).
-- Servant mission auto-stash and ClanShare **hunt-from-this-chair** (vanilla map fog/discovered clicks; server `SendOnMissionEvent`) ([08-servants-throne.md](08-servants-throne.md)). Overlay castle-switch, if any, is HuntClock (client), not this DLL.
+- Servant auto-stash, return chat (loot or death), and optional **repeat hunts** (`.sg rh`) ([08-servants-throne.md](08-servants-throne.md)).
 - Per-castle **reserve**, **production cap**, and **item groups** ([09-settings.md](09-settings.md)).
 
 ## Non-goals

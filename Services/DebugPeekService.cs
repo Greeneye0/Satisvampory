@@ -40,7 +40,6 @@ namespace Satisvampory.Services
                 try
                 {
                     Tick();
-                    ClanThroneServants.WriteClientSnapshot();
                 }
                 catch (Exception e)
                 {

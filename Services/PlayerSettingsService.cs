@@ -36,6 +36,10 @@ namespace Satisvampory.Services;
 
         public bool ToggleAutoStashMissions(ulong playerId = WorldId) => FlipFlag(playerId, static s => s.AutoStashMissions, static (s, v) => { s.AutoStashMissions = v; return s; });
 
+        public bool IsRepeatHuntEnabled() => TryRow(WorldId, out var world) && world.RepeatHunt;
+
+        public bool ToggleRepeatHunt() => FlipFlag(WorldId, static s => s.RepeatHunt, static (s, v) => { s.RepeatHunt = v; return s; });
+
         public bool IsConveyorEnabled(ulong playerId) => ReadFlag(playerId, static s => s.Conveyor, requireGlobal: true);
 
         public bool IsSalvageEnabled(ulong playerId) => ReadFlag(playerId, static s => s.Salvage, requireGlobal: true);

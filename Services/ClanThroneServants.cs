@@ -529,44 +529,56 @@ namespace Satisvampory.Services
 
         static void RewriteStart(Entity entity)
         {
-            if (!entity.Has<SendOnMissionEvent>() || !entity.Has<FromCharacter>())
+            if (!entity.Has<SendOnMissionEvent>())
                 return;
-            var from = entity.Read<FromCharacter>();
-            if (from.User == Entity.Null || !Core.EntityManager.Exists(from.User) || !from.User.Has<User>())
-                return;
-            var steam = from.User.Read<User>().PlatformId;
-            if (!pendingHunt.TryGetValue(steam, out var hunt) || hunt.Servants == null || hunt.Servants.Count == 0)
-                return;
-            if (DateTime.UtcNow > hunt.ExpiresUtc)
+            try
             {
-                pendingHunt.Remove(steam);
-                return;
-            }
-            if (!TryTargetFromEvent(entity, out var target, out var plot, out _, out var skip))
-            {
-                lastSkip = skip;
-                return;
-            }
-            if (hunt.Plot >= 0)
-            {
-                var want = FindThrone(hunt.Plot);
-                if (want != Entity.Null)
+                if (!entity.Has<FromCharacter>())
+                    return;
+                var from = entity.Read<FromCharacter>();
+                if (from.User == Entity.Null || !Core.EntityManager.Exists(from.User) || !from.User.Has<User>())
+                    return;
+                var steam = from.User.Read<User>().PlatformId;
+                if (!pendingHunt.TryGetValue(steam, out var hunt) || hunt.Servants == null || hunt.Servants.Count == 0)
+                    return;
+                if (DateTime.UtcNow > hunt.ExpiresUtc)
                 {
-                    target = want;
-                    plot = hunt.Plot;
+                    pendingHunt.Remove(steam);
+                    return;
                 }
+                if (!TryTargetFromEvent(entity, out var target, out var plot, out _, out var skip))
+                {
+                    lastSkip = skip;
+                    return;
+                }
+                if (hunt.Plot >= 0)
+                {
+                    var want = FindThrone(hunt.Plot);
+                    if (want != Entity.Null)
+                    {
+                        target = want;
+                        plot = hunt.Plot;
+                    }
+                }
+                if (!PatchSend(entity, target, hunt.Servants, out var fromPlot))
+                    return;
+                lastSend = string.Join(",", hunt.Names) + " plot=" + plot;
+                lastTo = plot;
+                lastFrom = fromPlot;
+                DestDebugLog.Note("throne", plot, 0, "send " + fromPlot + " -> " + plot + " " + lastSend);
             }
-            if (!PatchSend(entity, target, hunt.Servants, out var fromPlot))
-                return;
-            lastSend = string.Join(",", hunt.Names) + " plot=" + plot;
-            lastTo = plot;
-            lastFrom = fromPlot;
-            DestDebugLog.Note("throne", plot, 0, "send " + fromPlot + " -> " + plot + " " + lastSend);
+            finally
+            {
+                RepeatHunts.Remember(entity);
+            }
         }
 
         static void RewriteAbort(Entity entity)
         {
-            if (!entity.Has<AbortMissionEvent>() || !TryTargetFromEvent(entity, out var target, out var plot, out _, out _))
+            if (!entity.Has<AbortMissionEvent>())
+                return;
+            RepeatHunts.ForgetAbort(entity);
+            if (!TryTargetFromEvent(entity, out var target, out var plot, out _, out _))
                 return;
             if (!PatchThroneId(entity, new ComponentType(Il2CppType.Of<AbortMissionEvent>()), target, out var fromPlot))
                 return;

@@ -4,6 +4,7 @@ using ProjectM.Network;
 using ProjectM.Shared.Systems;
 using System;
 using System.Collections.Generic;
+using Unity.Collections;
 using Unity.Entities;
 using Satisvampory.Services;
 using System.Reflection;
@@ -63,5 +64,20 @@ public static class ServantMissionFinishMissionsPatch
         AccessTools.Method(typeof(ServantMissionUpdateSystem), "FinishMissions")
         ?? AccessTools.DeclaredMethod(typeof(ServantMissionUpdateSystem), "FinishMissions");
 
-    static void Postfix(ServantMissionUpdateSystem __instance) { if (__instance != null) ServantMissionUpdateSystemPatch.TryStash(__instance, "finish"); }
+    static void Prefix(NativeList<ServantMissionUpdateSystem.MissionIdentifier> finishedMissisons)
+    {
+        if (!Core.HasInitialized)
+            return;
+        try { RepeatHunts.SnapshotFinishing(finishedMissisons); }
+        catch (Exception e) { Core.Log.LogError("RepeatHunt snapshot: " + e); }
+    }
+
+    static void Postfix(ServantMissionUpdateSystem __instance)
+    {
+        if (__instance == null)
+            return;
+        try { RepeatHunts.AfterReturn(); }
+        catch (Exception e) { Core.Log.LogError("RepeatHunt return: " + e); }
+        ServantMissionUpdateSystemPatch.TryStash(__instance, "finish");
+    }
 }
