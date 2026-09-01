@@ -15,6 +15,7 @@ namespace Satisvampory.Services
     internal sealed class HeartBoundIndex
     {
         readonly Dictionary<Entity, List<Entity>> buckets = new();
+        readonly HashSet<Entity> tracked = new();
         readonly bool skipDisabled;
 
         public HeartBoundIndex(bool skipDisabledWhenListing = true)
@@ -59,20 +60,26 @@ namespace Satisvampory.Services
         {
             if (station == Entity.Null || !Core.EntityManager.Exists(station))
                 return;
+            if (!tracked.Add(station))
+                return;
             var heart = HeartOf(station);
             if (heart == Entity.Null)
+            {
+                tracked.Remove(station);
                 return;
+            }
             if (!buckets.TryGetValue(heart, out var list))
             {
                 list = new List<Entity>();
                 buckets[heart] = list;
             }
-            if (!list.Contains(station))
-                list.Add(station);
+            list.Add(station);
         }
 
         public void Untrack(Entity station)
         {
+            if (!tracked.Remove(station))
+                return;
             var heart = HeartOf(station);
             if (heart == Entity.Null || !buckets.TryGetValue(heart, out var list))
                 return;
@@ -82,55 +89,37 @@ namespace Satisvampory.Services
         public void Rebuild(bool includeDisabled, params ComponentType[] required)
         {
             buckets.Clear();
+            tracked.Clear();
             var rebuilt = Scan(includeDisabled, required);
             foreach (var kv in rebuilt.buckets)
                 buckets[kv.Key] = kv.Value;
+            foreach (var station in rebuilt.tracked)
+                tracked.Add(station);
         }
 
         public IEnumerable<Entity> OnTerritory(int territoryId)
         {
             var heart = Core.TerritoryService.GetCastleHeart(territoryId);
-            if (heart == Entity.Null)
+            if (heart == Entity.Null || !buckets.TryGetValue(heart, out var list))
                 yield break;
-            if (buckets.TryGetValue(heart, out var list))
+            for (var i = list.Count - 1; i >= 0; i--)
             {
-                for (var i = list.Count - 1; i >= 0; i--)
+                var e = list[i];
+                if (e == Entity.Null || !Core.EntityManager.Exists(e))
                 {
-                    var e = list[i];
-                    if (e == Entity.Null || !Core.EntityManager.Exists(e))
-                    {
-                        list.RemoveAt(i);
-                        continue;
-                    }
-                    if (skipDisabled && e.Has<Disabled>())
-                        continue;
-                    yield return e;
+                    list.RemoveAt(i);
+                    tracked.Remove(e);
+                    continue;
                 }
-                yield break;
-            }
-
-            foreach (var bucket in buckets.Values)
-            {
-                for (var i = bucket.Count - 1; i >= 0; i--)
-                {
-                    var e = bucket[i];
-                    if (e == Entity.Null || !Core.EntityManager.Exists(e))
-                    {
-                        bucket.RemoveAt(i);
-                        continue;
-                    }
-                    if (skipDisabled && e.Has<Disabled>())
-                        continue;
-                    if (Core.TerritoryService.GetTerritoryId(e) != territoryId)
-                        continue;
-                    yield return e;
-                }
+                if (skipDisabled && e.Has<Disabled>())
+                    continue;
+                yield return e;
             }
         }
 
         public IEnumerable<int> OccupiedTerritoryIds()
         {
-            foreach (var heart in new List<Entity>(buckets.Keys))
+            foreach (var heart in buckets.Keys)
             {
                 if (heart == Entity.Null || !Core.EntityManager.Exists(heart) || !heart.Has<CastleHeart>())
                     continue;

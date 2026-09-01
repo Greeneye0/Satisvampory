@@ -680,15 +680,15 @@ namespace Satisvampory.Services
                 return false;
             }
 
-            var castleHeartEntity = Core.TerritoryService.GetCastleHeart(territoryId);
-            if (castleHeartEntity == Entity.Null || !Core.EntityManager.Exists(castleHeartEntity) || !castleHeartEntity.Has<UserOwner>())
+            var plotHeart = Core.TerritoryService.GetCastleHeart(territoryId);
+            if (plotHeart == Entity.Null || !Core.EntityManager.Exists(plotHeart) || !plotHeart.Has<UserOwner>())
             {
                 if (replyIfMissing)
                     ctx.Reply("You must stand on a castle plot to view or set its reserves and production caps.");
                 return false;
             }
 
-            var userOwner = castleHeartEntity.Read<UserOwner>();
+            var userOwner = plotHeart.Read<UserOwner>();
             var userEntity = userOwner.Owner.GetEntityOnServer();
             if (userEntity == Entity.Null || !Core.EntityManager.Exists(userEntity) || !userEntity.Has<User>())
             {

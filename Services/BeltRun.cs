@@ -92,7 +92,7 @@ namespace Satisvampory.Services
 
             foreach (var plot in plots)
             {
-                foreach (var (group, station) in Core.RefinementStations.GetAllSendingStations(plot))
+                foreach (var (group, station) in Core.RefinementStations.SendBenches(plot))
                 {
                     if (!Core.EntityManager.Exists(station) || !station.Has<Refinementstation>())
                         continue;
@@ -110,7 +110,7 @@ namespace Satisvampory.Services
             {
                 if (!Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out var sourceOwner))
                     sourceOwner = ownerId;
-                foreach (var (group, sending) in Core.Stash.GetAllSendingStashes(plot))
+                foreach (var (group, sending) in Core.Stash.SendChests(plot))
                 {
                     if (!Core.EntityManager.Exists(sending) || sending.Has<Refinementstation>())
                         continue;
@@ -127,7 +127,7 @@ namespace Satisvampory.Services
         {
             foreach (var plot in plots)
             {
-                foreach (var (group, station) in Core.RefinementStations.GetAllReceivingStations(plot))
+                foreach (var (group, station) in Core.RefinementStations.ReceiveBenches(plot))
                 {
                     if (!station.Has<Refinementstation>() || !station.Has<CastleWorkstation>() || !station.Has<RefinementstationRecipesBuffer>())
                         continue;
@@ -137,8 +137,10 @@ namespace Satisvampory.Services
                     var floor = station.Read<CastleWorkstation>().WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor) ? 0.75f : 1f;
                     if (!Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(input, out var inputSlots))
                         continue;
-                    foreach (var recipe in station.ReadBuffer<RefinementstationRecipesBuffer>())
+                    var recipes = station.ReadBuffer<RefinementstationRecipesBuffer>();
+                    for (var r = 0; r < recipes.Length; r++)
                     {
+                        var recipe = recipes[r];
                         if (!recipe.Unlocked || recipe.Disabled)
                             continue;
                         if (!Core.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(recipe.RecipeGuid, out var recipeEnt))
@@ -162,8 +164,10 @@ namespace Satisvampory.Services
                         }
                         if (!recipeEnt.Has<RecipeRequirementBuffer>())
                             continue;
-                        foreach (var req in recipeEnt.ReadBuffer<RecipeRequirementBuffer>())
+                        var requirements = recipeEnt.ReadBuffer<RecipeRequirementBuffer>();
+                        for (var q = 0; q < requirements.Length; q++)
                         {
+                            var req = requirements[q];
                             var perCraft = Mathf.RoundToInt(req.Amount * floor);
                             var want = StationFeedMul * perCraft;
                             if (capped)
@@ -190,7 +194,7 @@ namespace Satisvampory.Services
             var seen = new HashSet<PrefabGUID>();
             foreach (var plot in plots)
             {
-                foreach (var (group, stash) in Core.Stash.GetAllReceivingStashes(plot))
+                foreach (var (group, stash) in Core.Stash.ReceiveChests(plot))
                 {
                     if (!StashRouting.TryGetExternalInventory(stash, out var inv))
                         continue;
@@ -221,7 +225,7 @@ namespace Satisvampory.Services
             var list = new List<Entity>();
             foreach (var plot in plots)
             {
-                foreach (var chest in Core.Stash.GetAllOverflowStashes(plot))
+                foreach (var chest in Core.Stash.OverflowChests(plot))
                     list.Add(chest);
             }
             return list.ToArray();
@@ -252,7 +256,7 @@ namespace Satisvampory.Services
             if (!Core.PlayerSettings.IsGlobalSalvageEnabled() || !Core.PlayerSettings.GetPlotSalvageFlag(ownerId, territoryId))
                 yield break;
 
-            var suppliers = new List<Entity>(Core.Stash.GetAllSalvageStashes(territoryId));
+            var suppliers = new List<Entity>(Core.Stash.SalvageChests(territoryId));
             var stations = new List<(Entity entity, Salvagestation station, int index)>();
             var n = 0;
             foreach (var s in Core.SalvageService.GetAllSalvageStations(territoryId))
@@ -264,7 +268,7 @@ namespace Satisvampory.Services
                 yield break;
 
             var itemStashes = Utilities.GetItemStashesOnTerritory(territoryId);
-            var overflows = new List<Entity>(Core.Stash.GetAllOverflowStashes(territoryId));
+            var overflows = new List<Entity>(Core.Stash.OverflowChests(territoryId));
             for (var i = 0; i < stations.Count; i++)
             {
                 var entity = stations[i].entity;
@@ -287,7 +291,7 @@ namespace Satisvampory.Services
                 if (!StashRouting.TryGetExternalInventory(supplier, out var inv))
                     continue;
                 var plate = supplier.Has<NameableInteractable>() ? supplier.Read<NameableInteractable>().Name.ToString() : "";
-                var receiver = !string.IsNullOrEmpty(plate) && Core.Stash.ReceiverPattern.IsMatch(plate.ToLowerInvariant());
+                var receiver = !string.IsNullOrEmpty(plate) && Core.Stash.ReceiveToken.IsMatch(plate.ToLowerInvariant());
                 pending.Clear();
                 if (!Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(inv, out var slots))
                     continue;
@@ -413,7 +417,7 @@ namespace Satisvampory.Services
             if (wants.Count == 0)
                 yield break;
 
-            foreach (var chest in Core.Stash.GetAllSpawnerStashes(territoryId))
+            foreach (var chest in Core.Stash.SpawnerChests(territoryId))
             {
                 if (!StashRouting.TryGetExternalInventory(chest, out var inv))
                     continue;
@@ -461,7 +465,7 @@ namespace Satisvampory.Services
             if (wants.Count == 0)
                 yield break;
 
-            foreach (var chest in Core.Stash.GetAllBrazierStashes(territoryId))
+            foreach (var chest in Core.Stash.BrazierChests(territoryId))
             {
                 if (!StashRouting.TryGetExternalInventory(chest, out var inv))
                     continue;
@@ -472,19 +476,45 @@ namespace Satisvampory.Services
         }
     }
 
+    /// <summary>
+    /// Plot item totals. Cached for the current work-queue drain so conveyor, inspect,
+    /// and clan-island sums do not rescan the same chests in one tick.
+    /// </summary>
     internal static class BeltCounts
     {
+        static readonly Dictionary<int, Dictionary<PrefabGUID, int>> plotCache = new();
+        static int cacheGeneration = int.MinValue;
+
+        static void EnsureGeneration()
+        {
+            var generation = Core.WorkQueue != null ? Core.WorkQueue.DrainGeneration : 0;
+            if (generation == cacheGeneration)
+                return;
+            plotCache.Clear();
+            cacheGeneration = generation;
+        }
+
         public static Dictionary<PrefabGUID, int> OfPlot(int territoryId)
         {
+            EnsureGeneration();
+            if (plotCache.TryGetValue(territoryId, out var cached))
+                return cached;
+            var counts = ScanPlot(territoryId);
+            plotCache[territoryId] = counts;
+            return counts;
+        }
+
+        static Dictionary<PrefabGUID, int> ScanPlot(int territoryId)
+        {
             var counts = new Dictionary<PrefabGUID, int>();
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(territoryId))
+            foreach (var stash in Core.Stash.ChestsOnPlot(territoryId))
             {
                 if (StashRouting.TryGetExternalInventory(stash, out var inv))
                     Add(inv, counts);
             }
             if (Core.RefinementStations == null)
                 return counts;
-            foreach (var station in Core.RefinementStations.GetAllStationsOnTerritory(territoryId))
+            foreach (var station in Core.RefinementStations.BenchesOnPlot(territoryId))
             {
                 if (!station.Has<Refinementstation>())
                     continue;
@@ -502,10 +532,11 @@ namespace Satisvampory.Services
                 return counts;
             for (var i = 0; i < plots.Count; i++)
             {
-                foreach (var (item, amount) in OfPlot(plots[i]))
+                var plotCounts = OfPlot(plots[i]);
+                foreach (var kv in plotCounts)
                 {
-                    counts.TryGetValue(item, out var have);
-                    counts[item] = have + amount;
+                    counts.TryGetValue(kv.Key, out var have);
+                    counts[kv.Key] = have + kv.Value;
                 }
             }
             return counts;

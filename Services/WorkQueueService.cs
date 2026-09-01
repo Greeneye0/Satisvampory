@@ -36,7 +36,7 @@ internal class WorkQueueService
 
     public void EnqueueOwner(Entity owner) { if (owner != Entity.Null) Enqueue(Core.TerritoryService.GetTerritoryId(owner)); }
 
-    public void EnqueueAll() { for (var plot = TerritoryService.MIN_TERRITORY_ID; plot <= TerritoryService.MAX_TERRITORY_ID; plot++) if (Core.TerritoryService.GetCastleHeart(plot) != Entity.Null) Enqueue(plot); }
+    public void EnqueueAll() { Core.TerritoryService.EachKnownPlot(Enqueue); }
 
     internal void FlushRebuildDeferred() { if (rebuildDeferred.Count == 0) return; var parked = new List<int>(rebuildDeferred); rebuildDeferred.Clear(); for (var i = 0; i < parked.Count; i++) Enqueue(parked[i]); }
 }

@@ -87,7 +87,7 @@ namespace Satisvampory.Services
                 if (TerritoryService.IsHeartRaided(heart)) continue;
 
                 var hits = new List<(Entity stash, int amount)>();
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(plotId))
+                foreach (var stash in Core.Stash.ChestsOnPlot(plotId))
                 {
                     scannedAny = true;
                     if (!StashRouting.TryGetExternalInventory(stash, out var attachedEntity))
@@ -165,7 +165,7 @@ namespace Satisvampory.Services
                 if (TerritoryService.IsHeartRaided(heart)) continue;
 
                 var hits = new List<(Entity stash, string highlightedName)>();
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(plotId))
+                foreach (var stash in Core.Stash.ChestsOnPlot(plotId))
                 {
                     var stashName = stash.Read<NameableInteractable>().Name.ToString();
                     if (!stashName.ToLower().Contains(searchName)) continue;

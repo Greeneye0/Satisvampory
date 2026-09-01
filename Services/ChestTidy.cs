@@ -65,7 +65,7 @@ namespace Satisvampory.Services
                     var heart = Core.TerritoryService.GetCastleHeart(plot);
                     if (heart == Entity.Null || TerritoryService.IsHeartRaided(heart))
                         continue;
-                    foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+                    foreach (var stash in Core.Stash.ChestsOnPlot(plot))
                     {
                         if (stash.Has<Refinementstation>())
                             continue;

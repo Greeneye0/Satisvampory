@@ -789,14 +789,14 @@ namespace Satisvampory.Commands
             }
 
             var territoryId = Core.TerritoryService.GetTerritoryId(ctx.Event.SenderCharacterEntity);
-            var castleHeartEntity = Core.TerritoryService.GetCastleHeart(territoryId);
-            if (castleHeartEntity == Entity.Null || !castleHeartEntity.Has<UserOwner>())
+            var plotHeart = Core.TerritoryService.GetCastleHeart(territoryId);
+            if (plotHeart == Entity.Null || !plotHeart.Has<UserOwner>())
             {
                 ctx.Reply("You must stand on a claimed castle plot to toggle salvage for that plot.");
                 return;
             }
 
-            var heartUserEntity = castleHeartEntity.Read<UserOwner>().Owner.GetEntityOnServer();
+            var heartUserEntity = plotHeart.Read<UserOwner>().Owner.GetEntityOnServer();
             if (heartUserEntity == Entity.Null || !heartUserEntity.Has<User>())
             {
                 ctx.Reply("You must stand on a claimed castle plot to toggle salvage for that plot.");
@@ -833,14 +833,14 @@ namespace Satisvampory.Commands
             }
 
             var territoryId = Core.TerritoryService.GetTerritoryId(ctx.Event.SenderCharacterEntity);
-            var castleHeartEntity = Core.TerritoryService.GetCastleHeart(territoryId);
-            if (castleHeartEntity == Entity.Null || !castleHeartEntity.Has<UserOwner>())
+            var plotHeart = Core.TerritoryService.GetCastleHeart(territoryId);
+            if (plotHeart == Entity.Null || !plotHeart.Has<UserOwner>())
             {
                 ctx.Reply("You must stand on a claimed castle plot to toggle heart auto-feed for that plot.");
                 return;
             }
 
-            var heartUserEntity = castleHeartEntity.Read<UserOwner>().Owner.GetEntityOnServer();
+            var heartUserEntity = plotHeart.Read<UserOwner>().Owner.GetEntityOnServer();
             if (heartUserEntity == Entity.Null || !heartUserEntity.Has<User>())
             {
                 ctx.Reply("You must stand on a claimed castle plot to toggle heart auto-feed for that plot.");
@@ -915,11 +915,11 @@ namespace Satisvampory.Commands
                 var capCount = Core.PlayerSettings.GetItemCapOverrideCount(castleId);
                 capsLine = $"Castle caps ({castleName}): {(capCount > 0 ? $"<color=green>{capCount} item cap{(capCount == 1 ? "" : "s")}</color>" : "<color=white>none</color>")}";
                 var territoryId = Core.TerritoryService.GetTerritoryId(ctx.Event.SenderCharacterEntity);
-                var castleHeartEntity = Core.TerritoryService.GetCastleHeart(territoryId);
+                var plotHeart = Core.TerritoryService.GetCastleHeart(territoryId);
                 var clanShareOn = false;
-                if (castleHeartEntity != Entity.Null && castleHeartEntity.Has<UserOwner>())
+                if (plotHeart != Entity.Null && plotHeart.Has<UserOwner>())
                 {
-                    var heartUserEntity = castleHeartEntity.Read<UserOwner>().Owner.GetEntityOnServer();
+                    var heartUserEntity = plotHeart.Read<UserOwner>().Owner.GetEntityOnServer();
                     if (heartUserEntity != Entity.Null && heartUserEntity.Has<User>())
                         clanShareOn = Core.TerritoryService.IsClanShareOn(heartUserEntity.Read<User>());
                 }

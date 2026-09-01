@@ -24,6 +24,8 @@ internal class TerritoryService {
         readonly List<Func<int, Entity, IEnumerator>> territoryUpdateCallbacks = [];
         readonly float timeBudget;
         double sliceStart;
+        EntityQuery connectedUsers;
+        bool connectedUsersReady;
 
         public const int MIN_TERRITORY_ID = 0;
         public const int MAX_TERRITORY_ID = 146;
@@ -44,9 +46,9 @@ internal class TerritoryService {
         public Entity GetCastleHeart(int territoryId) =>
             heartByPlot.TryGetValue(territoryId, out var heart) && HeartStillMapsTo(territoryId, heart) ? heart : Entity.Null;
 
-        internal void AddCastleHeart(Entity castleHeartEntity) => Remember(castleHeartEntity);
+        internal void AddCastleHeart(Entity plotHeart) => Remember(plotHeart);
 
-        internal void RemoveCastleHeart(Entity castleHeartEntity) { if (!Core.EntityManager.Exists(castleHeartEntity)) return; var territory = castleHeartEntity.Read<CastleHeart>().CastleTerritoryEntity; if (Core.EntityManager.Exists(territory)) Forget(territory.Read<CastleTerritory>().CastleTerritoryIndex); }
+        internal void RemoveCastleHeart(Entity plotHeart) { if (!Core.EntityManager.Exists(plotHeart)) return; var territory = plotHeart.Read<CastleHeart>().CastleTerritoryEntity; if (Core.EntityManager.Exists(territory)) Forget(territory.Read<CastleTerritory>().CastleTerritoryIndex); }
 
         public void FlushTerritoryCache() => entityPlot.Clear();
 
@@ -95,7 +97,33 @@ internal class TerritoryService {
         public bool ClanMemberStandingOnPlot(int plot) { EnsureClanStanding(); return plot >= 0 && clanStanding.ContainsKey(plot); }
 
         void EachUser(Action<Entity, User> visit)
-        { var builder = new EntityQueryBuilder(Allocator.Temp).AddAll(ComponentType.ReadOnly(Il2CppType.Of<User>())); var query = Core.EntityManager.CreateEntityQuery(ref builder); builder.Dispose(); NativeArray<Entity> users = default; try { users = query.ToEntityArray(Allocator.Temp); for (var i = 0; i < users.Length; i++) { var userEntity = users[i]; if (userEntity != Entity.Null && Core.EntityManager.Exists(userEntity) && userEntity.Has<User>()) visit(userEntity, userEntity.Read<User>()); } } finally { if (users.IsCreated) users.Dispose(); query.Dispose(); } }
+        {
+            if (!connectedUsersReady)
+            {
+                var builder = new EntityQueryBuilder(Allocator.Temp).AddAll(ComponentType.ReadOnly(Il2CppType.Of<User>()));
+                connectedUsers = Core.EntityManager.CreateEntityQuery(ref builder);
+                builder.Dispose();
+                connectedUsersReady = true;
+            }
+            NativeArray<Entity> users = default;
+            try
+            {
+                users = connectedUsers.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < users.Length; i++)
+                {
+                    var userEntity = users[i];
+                    if (userEntity != Entity.Null && Core.EntityManager.Exists(userEntity) && userEntity.Has<User>())
+                        visit(userEntity, userEntity.Read<User>());
+                }
+            }
+            finally { if (users.IsCreated) users.Dispose(); }
+        }
+
+        internal void EachKnownPlot(Action<int> visit)
+        {
+            foreach (var plot in heartByPlot.Keys)
+                visit(plot);
+        }
 
         void EnsureClanStanding()
         { var now = DateTime.UtcNow; if (clanStandingAt != default && (now - clanStandingAt).TotalSeconds < 0.25) return; clanStanding.Clear(); clanStandingAt = now; EachUser((_, user) => { if (!user.IsConnected) return; var character = user.LocalCharacter.GetEntityOnServer(); if (character == Entity.Null || !Core.EntityManager.Exists(character) || !character.Has<PlayerCharacter>()) return; var plot = GetStandingTerritoryId(character); if (plot < 0) return; var heart = GetCastleHeart(plot); if (heart != Entity.Null && IsSameClanAsHeart(character, heart)) clanStanding[plot] = true; }); }
@@ -113,7 +141,23 @@ internal class TerritoryService {
         public void InvalidateClanPlotCache() { clanPlotCache.Clear(); clanPlotCacheAt.Clear(); }
 
         List<int> GetCachedClanPlots(string clanKey, Entity clanEntity)
-        { if (clanPlotCache.TryGetValue(clanKey, out var cached) && clanPlotCacheAt.TryGetValue(clanKey, out var at) && (DateTime.UtcNow - at).TotalSeconds < 5) return cached; var list = new List<int>(); for (var id = MIN_TERRITORY_ID; id <= MAX_TERRITORY_ID; id++) { var heart = GetCastleHeart(id); if (heart == Entity.Null || !TryGetHeartOwner(heart, out _, out var otherOwner)) continue; var otherClan = otherOwner.ClanEntity.GetEntityOnServer(); if (otherClan != Entity.Null && Core.EntityManager.Exists(otherClan) && otherClan == clanEntity) list.Add(id); } clanPlotCache[clanKey] = list; clanPlotCacheAt[clanKey] = DateTime.UtcNow; return list; }
+        {
+            if (clanPlotCache.TryGetValue(clanKey, out var cached) && clanPlotCacheAt.TryGetValue(clanKey, out var at) && (DateTime.UtcNow - at).TotalSeconds < 5)
+                return cached;
+            var list = new List<int>();
+            var known = new List<int>(heartByPlot.Keys);
+            for (var i = 0; i < known.Count; i++)
+            {
+                var id = known[i];
+                var heart = GetCastleHeart(id);
+                if (heart == Entity.Null || !TryGetHeartOwner(heart, out _, out var otherOwner)) continue;
+                var otherClan = otherOwner.ClanEntity.GetEntityOnServer();
+                if (otherClan != Entity.Null && Core.EntityManager.Exists(otherClan) && otherClan == clanEntity) list.Add(id);
+            }
+            clanPlotCache[clanKey] = list;
+            clanPlotCacheAt[clanKey] = DateTime.UtcNow;
+            return list;
+        }
 
         public IReadOnlyList<int> GetLogisticsTerritoryIds(int standingTerritoryId)
         { var result = new List<int>(); if (standingTerritoryId < 0) return result; result.Add(standingTerritoryId); var standingHeart = GetCastleHeart(standingTerritoryId); if (!TryGetHeartOwner(standingHeart, out _, out var standingOwner) || !IsClanShareOn(standingOwner)) return result; var clanEntity = standingOwner.ClanEntity.GetEntityOnServer(); if (clanEntity == Entity.Null || !Core.EntityManager.Exists(clanEntity) || !TryGetClanKey(standingOwner, out var clanKey)) return result; foreach (var id in GetCachedClanPlots(clanKey, clanEntity)) if (id != standingTerritoryId && !Core.PlayerSettings.IsTerritoryClanShareExcluded(id)) result.Add(id); return result; }
@@ -128,7 +172,21 @@ internal class TerritoryService {
         { if (homePlot < 0) return new List<int>(); var heart = GetCastleHeart(homePlot); if (heart == Entity.Null) return new List<int> { homePlot }; if (IsHeartRaided(heart)) return new List<int>(); if (!TryGetHeartOwner(heart, out _, out var owner) || !IsClanShareOn(owner) || Core.PlayerSettings.IsTerritoryClanShareExcluded(homePlot)) return new List<int> { homePlot }; var ids = GetClanLogisticsTerritoryIds(owner); return ids == null || ids.Count == 0 ? new List<int> { homePlot } : ids; }
 
         public bool TryFindOwnedTerritory(ulong platformId, out int territoryId, out User owner)
-        { territoryId = -1; owner = default; for (var id = MIN_TERRITORY_ID; id <= MAX_TERRITORY_ID; id++) { var heart = GetCastleHeart(id); if (!TryGetHeartOwner(heart, out _, out var user) || user.PlatformId != platformId) continue; territoryId = id; owner = user; return true; } return false; }
+        {
+            territoryId = -1;
+            owner = default;
+            var known = new List<int>(heartByPlot.Keys);
+            for (var i = 0; i < known.Count; i++)
+            {
+                var id = known[i];
+                var heart = GetCastleHeart(id);
+                if (!TryGetHeartOwner(heart, out _, out var user) || user.PlatformId != platformId) continue;
+                territoryId = id;
+                owner = user;
+                return true;
+            }
+            return false;
+        }
 
         public static bool IsHeartRaided(Entity heart) =>
             heart != Entity.Null && Core.EntityManager.Exists(heart) && heart.Has<CastleHeart>()

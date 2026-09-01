@@ -17,42 +17,42 @@ namespace Satisvampory.Services;
 internal class StashService
 {
     public const string SpoilsLabel = "spoils";
-    public static readonly PrefabGUID ExternalInventoryPrefab = new(1183666186);
+    public static readonly PrefabGUID ChestBagGuid = new(1183666186);
 
-    readonly Regex receiverRegex;
-    readonly Regex senderRegex;
+    readonly Regex receiveRx;
+    readonly Regex sendRx;
     readonly ChestIndex chests;
     readonly FindSpotlight spotlight = new();
     readonly FindReport finder;
     const float StashCooldown = 1f;
     readonly Dictionary<Entity, double> lastStashed = [];
 
-    public Regex ReceiverPattern => receiverRegex;
-    public Regex SenderPattern => senderRegex;
+    public Regex ReceiveToken => receiveRx;
+    public Regex SendToken => sendRx;
 
-    public StashService() { receiverRegex = new Regex(Const.RECEIVER_REGEX, RegexOptions.Compiled | RegexOptions.IgnoreCase); senderRegex = new Regex(Const.SENDER_REGEX, RegexOptions.Compiled | RegexOptions.IgnoreCase); chests = new ChestIndex(senderRegex, receiverRegex); finder = new FindReport(spotlight); }
+    public StashService() { receiveRx = new Regex(BeltTokens.Receiver, RegexOptions.Compiled | RegexOptions.IgnoreCase); sendRx = new Regex(BeltTokens.Sender, RegexOptions.Compiled | RegexOptions.IgnoreCase); chests = new ChestIndex(sendRx, receiveRx); finder = new FindReport(spotlight); }
 
     internal void InvalidateTerritory(int territoryId) => chests.Forget(territoryId);
     internal void InvalidateAllStashLists() => chests.ForgetAll();
 
-    public bool IsConveyorNamedStash(Entity stash) { if (stash == Entity.Null || !Core.EntityManager.Exists(stash) || !stash.Has<NameableInteractable>()) return false; var plate = stash.Read<NameableInteractable>().Name.ToString().ToLower(); return !string.IsNullOrWhiteSpace(plate) && (senderRegex.IsMatch(plate) || receiverRegex.IsMatch(plate)); }
+    public bool HasBeltToken(Entity stash) { if (stash == Entity.Null || !Core.EntityManager.Exists(stash) || !stash.Has<NameableInteractable>()) return false; var plate = stash.Read<NameableInteractable>().Name.ToString().ToLower(); return !string.IsNullOrWhiteSpace(plate) && (sendRx.IsMatch(plate) || receiveRx.IsMatch(plate)); }
 
-    public IEnumerable<Entity> GetAllAlliedStashesOnTerritory(Entity character)
+    public IEnumerable<Entity> IslandChests(Entity character)
     {
-        foreach (var territoryId in Core.TerritoryService.GetLogisticsTerritoryIdsForCharacter(character)) { var heart = Core.TerritoryService.GetCastleHeart(territoryId); if (heart == Entity.Null || !Core.ServerGameManager.IsAllies(heart, character) || TerritoryService.IsHeartRaided(heart)) continue; foreach (var stash in GetStashesOnTerritory(territoryId)) yield return stash; }
+        foreach (var territoryId in Core.TerritoryService.GetLogisticsTerritoryIdsForCharacter(character)) { var heart = Core.TerritoryService.GetCastleHeart(territoryId); if (heart == Entity.Null || !Core.ServerGameManager.IsAllies(heart, character) || TerritoryService.IsHeartRaided(heart)) continue; foreach (var stash in ChestsOnPlot(territoryId)) yield return stash; }
     }
 
-    public IEnumerable<int> GetOverflowTerritoryIds(int standingTerritoryId) =>
+    public IEnumerable<int> IslandPlotIds(int standingTerritoryId) =>
         Core.TerritoryService.GetLogisticsTerritoryIds(standingTerritoryId);
 
-    public IEnumerable<Entity> GetStashesOnTerritory(int territoryIndex) => chests.OnPlot(territoryIndex);
-    public IEnumerable<(int group, Entity station)> GetAllReceivingStashes(int territoryId) => chests.Receivers(territoryId);
-    public IEnumerable<(int group, Entity station)> GetAllSendingStashes(int territoryId) => chests.Senders(territoryId);
-    public IEnumerable<Entity> GetAllSalvageStashes(int territoryId) => chests.Named(territoryId, "salvage");
-    public IEnumerable<Entity> GetAllSpawnerStashes(int territoryId) => chests.Named(territoryId, "spawner");
-    public IEnumerable<Entity> GetAllBrazierStashes(int territoryId) => chests.Named(territoryId, "brazier");
-    public IEnumerable<Entity> GetAllOverflowStashes(int territoryId) => chests.Named(territoryId, "overflow");
-    public IEnumerable<Entity> GetAllTrashStashes(int territoryId) => chests.Named(territoryId, "trash");
+    public IEnumerable<Entity> ChestsOnPlot(int territoryIndex) => chests.OnPlot(territoryIndex);
+    public IEnumerable<(int group, Entity station)> ReceiveChests(int territoryId) => chests.Receivers(territoryId);
+    public IEnumerable<(int group, Entity station)> SendChests(int territoryId) => chests.Senders(territoryId);
+    public IEnumerable<Entity> SalvageChests(int territoryId) => chests.Named(territoryId, "salvage");
+    public IEnumerable<Entity> SpawnerChests(int territoryId) => chests.Named(territoryId, "spawner");
+    public IEnumerable<Entity> BrazierChests(int territoryId) => chests.Named(territoryId, "brazier");
+    public IEnumerable<Entity> OverflowChests(int territoryId) => chests.Named(territoryId, "overflow");
+    public IEnumerable<Entity> TrashChests(int territoryId) => chests.Named(territoryId, "trash");
 
     public void StashCharacterInventory(Entity charEntity)
     {

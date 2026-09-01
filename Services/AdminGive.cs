@@ -30,7 +30,7 @@ namespace Satisvampory.Services
             var sgm = Core.ServerGameManager;
             var remaining = amount;
             var moved = new Dictionary<Entity, int>();
-            foreach (var chest in Core.Stash.GetStashesOnTerritory(plot))
+            foreach (var chest in Core.Stash.ChestsOnPlot(plot))
             {
                 var plate = StashRouting.RawName(chest);
                 if (StashRouting.IsSpecialName(plate) || StashRouting.IsOverflowName(plate))
@@ -57,7 +57,7 @@ namespace Satisvampory.Services
 
             if (remaining > 0)
             {
-                foreach (var overflow in Core.Stash.GetAllOverflowStashes(plot))
+                foreach (var overflow in Core.Stash.OverflowChests(plot))
                 {
                     try
                     {

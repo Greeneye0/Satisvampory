@@ -52,7 +52,7 @@ namespace Satisvampory.Services
             var sgm = Core.ServerGameManager;
             for (var pass = 0; pass < 3 && remaining > 0 && !full; pass++)
             {
-                foreach (var stash in Core.Stash.GetAllAlliedStashesOnTerritory(character))
+                foreach (var stash in Core.Stash.IslandChests(character))
                 {
                     if (remaining <= 0)
                         break;
@@ -129,7 +129,7 @@ namespace Satisvampory.Services
         {
             var n = 0;
             var sgm = Core.ServerGameManager;
-            foreach (var stash in Core.Stash.GetAllAlliedStashesOnTerritory(character))
+            foreach (var stash in Core.Stash.IslandChests(character))
             {
                 if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
                     continue;
@@ -145,7 +145,7 @@ namespace Satisvampory.Services
             var n = 0;
             var reserve = Core.PlayerSettings.GetPullReserve(leftoverOwnerId, item);
             var sgm = Core.ServerGameManager;
-            foreach (var stash in Core.Stash.GetAllAlliedStashesOnTerritory(character))
+            foreach (var stash in Core.Stash.IslandChests(character))
             {
                 if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
                     continue;
@@ -402,7 +402,7 @@ namespace Satisvampory.Services
             var seen = new HashSet<Entity>();
             for (var pass = 0; pass < 3 && remaining > 0 && !full; pass++)
             {
-                foreach (var stash in Core.Stash.GetAllAlliedStashesOnTerritory(character))
+                foreach (var stash in Core.Stash.IslandChests(character))
                 {
                     if (full || remaining <= 0)
                         break;

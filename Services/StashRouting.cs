@@ -10,12 +10,12 @@ using Unity.Entities;
 namespace Satisvampory.Services
 {
     /// <summary>
-    /// 1.6.1.38 dest/source naming. NS = no-share (never source or dest).
+    /// Dest/source naming. NS = no-share (never source or dest).
     /// Trailing '' (two apostrophes) is skip-quotes, treated like NS everywhere.
     /// Does not decide HOW MUCH to move - only WHERE an already-decided amount goes,
     /// plus same-plot self-sort of surplus above leftover.
     /// Name match: '+' AND clauses; spaces OR within a clause (group / ItemCategory / name).
-    /// No '+': 1.6.1.35 type-word AND fallback when a token is weapon/armor/material.
+    /// No '+': type-word AND fallback when a token is weapon/armor/material.
     /// Overflow/spoils/salvage/trash are dest-class, never item names. Overflow never
     /// outranks exact/category/named custom. Never drain s#/r#. Never self-sort INTO overflow.
     /// Built-in dest words (blood, stone, bone, jewel, …) match dest-group membership
@@ -26,8 +26,8 @@ namespace Satisvampory.Services
     internal static class StashRouting
     {
         static readonly Regex NoShareToken = new(@"\bns\b", RegexOptions.IgnoreCase | RegexOptions.Compiled);
-        static readonly Regex SenderRegex = new(Const.SENDER_REGEX, RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        static readonly Regex ReceiverRegex = new(Const.RECEIVER_REGEX, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex SendRx = new(BeltTokens.Sender, RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        static readonly Regex ReceiveRx = new(BeltTokens.Receiver, RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public const string LabelSkipNs = "skip-NS";
         public const string LabelSkipQuotes = "skip-quotes";
@@ -186,14 +186,14 @@ namespace Satisvampory.Services
         {
             if (string.IsNullOrWhiteSpace(name))
                 return false;
-            return SenderRegex.IsMatch(name.ToLowerInvariant());
+            return SendRx.IsMatch(name.ToLowerInvariant());
         }
 
         public static bool IsReceiverName(string name)
         {
             if (string.IsNullOrWhiteSpace(name))
                 return false;
-            return ReceiverRegex.IsMatch(name.ToLowerInvariant());
+            return ReceiveRx.IsMatch(name.ToLowerInvariant());
         }
 
         public static bool IsConveyorName(string name) => IsSenderName(name) || IsReceiverName(name);
@@ -356,8 +356,8 @@ namespace Satisvampory.Services
             if (string.IsNullOrWhiteSpace(token))
                 return "";
             var t = token.Trim().ToLowerInvariant();
-            t = SenderRegex.Replace(t, "");
-            t = ReceiverRegex.Replace(t, "");
+            t = SendRx.Replace(t, "");
+            t = ReceiveRx.Replace(t, "");
             return t.Trim(' ', '-', '_', '/', '|', '.', ':');
         }
 
@@ -1121,7 +1121,7 @@ namespace Satisvampory.Services
                     continue;
                 if (!inv.Has<PrefabGUID>())
                     continue;
-                if (!inv.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
+                if (!inv.Read<PrefabGUID>().Equals(StashService.ChestBagGuid))
                     continue;
                 inventory = inv;
                 return true;
@@ -1179,7 +1179,7 @@ namespace Satisvampory.Services
             if (plotInvStash.TryGetValue(plot, out var cached))
                 return cached;
             var map = new Dictionary<Entity, Entity>();
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+            foreach (var stash in Core.Stash.ChestsOnPlot(plot))
             {
                 if (stash == Entity.Null || !Core.EntityManager.Exists(stash))
                     continue;
@@ -1238,7 +1238,7 @@ namespace Satisvampory.Services
             var groups = new List<int>();
             if (string.IsNullOrWhiteSpace(name))
                 return groups;
-            foreach (Match match in SenderRegex.Matches(name.ToLowerInvariant()))
+            foreach (Match match in SendRx.Matches(name.ToLowerInvariant()))
             {
                 if (!int.TryParse(match.Groups[1].Value, out var g))
                     continue;
@@ -1270,7 +1270,7 @@ namespace Satisvampory.Services
             var seen = new HashSet<Entity>();
             foreach (var lid in logisticsIds)
             {
-                foreach (var (group, receiver) in Core.Stash.GetAllReceivingStashes(lid))
+                foreach (var (group, receiver) in Core.Stash.ReceiveChests(lid))
                 {
                     if (!groups.Contains(group))
                         continue;
@@ -1333,7 +1333,7 @@ namespace Satisvampory.Services
             var seen = new HashSet<Entity>();
             foreach (var lid in logisticsIds)
             {
-                foreach (var (group, receiver) in Core.Stash.GetAllReceivingStashes(lid))
+                foreach (var (group, receiver) in Core.Stash.ReceiveChests(lid))
                 {
                     if (!groups.Contains(group))
                         continue;

@@ -216,7 +216,7 @@ namespace Satisvampory.Services
                     Core.TerritoryService.TryGetTerritoryOwnerPlatformId(id, out var sourceOwnerId);
                     var reserve = isStanding ? 0 : Core.PlayerSettings.GetPullReserve(sourceOwnerId, type);
 
-                    foreach (var stash in Core.Stash.GetStashesOnTerritory(id))
+                    foreach (var stash in Core.Stash.ChestsOnPlot(id))
                     {
                         if (remainder <= 0)
                             break;
@@ -235,7 +235,7 @@ namespace Satisvampory.Services
                             var inventory = attachedBuffer.Entity;
                             if (!inventory.Has<PrefabGUID>())
                                 continue;
-                            if (!inventory.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
+                            if (!inventory.Read<PrefabGUID>().Equals(StashService.ChestBagGuid))
                                 continue;
 
                             var count = serverGameManager.GetInventoryItemCount(inventory, type);
@@ -292,7 +292,7 @@ namespace Satisvampory.Services
 
                 Core.TerritoryService.TryGetTerritoryOwnerPlatformId(id, out var sourceOwnerId);
 
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(id))
+                foreach (var stash in Core.Stash.ChestsOnPlot(id))
                 {
                     if (!IsTreasuryLinked(stash))
                         continue;
@@ -306,7 +306,7 @@ namespace Satisvampory.Services
                         var inventory = attachedBuffer.Entity;
                         if (!inventory.Has<PrefabGUID>())
                             continue;
-                        if (!inventory.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
+                        if (!inventory.Read<PrefabGUID>().Equals(StashService.ChestBagGuid))
                             continue;
 
                         var count = serverGameManager.GetInventoryItemCount(inventory, type);
@@ -354,7 +354,7 @@ namespace Satisvampory.Services
             {
                 Core.TerritoryService.TryGetTerritoryOwnerPlatformId(id, out var sourceOwnerId);
 
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(id))
+                foreach (var stash in Core.Stash.ChestsOnPlot(id))
                 {
                     if (!IsTreasuryLinked(stash))
                         continue;
@@ -368,7 +368,7 @@ namespace Satisvampory.Services
                         var inventory = attachedBuffer.Entity;
                         if (!inventory.Has<PrefabGUID>())
                             continue;
-                        if (!inventory.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
+                        if (!inventory.Read<PrefabGUID>().Equals(StashService.ChestBagGuid))
                             continue;
                         if (!serverGameManager.TryGetBuffer<InventoryBuffer>(inventory, out var items))
                             continue;
@@ -643,7 +643,7 @@ namespace Satisvampory.Services
             foreach (var id in ids)
             {
                 Core.TerritoryService.TryGetTerritoryOwnerPlatformId(id, out var sourceOwnerId);
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(id))
+                foreach (var stash in Core.Stash.ChestsOnPlot(id))
                 {
                     if (stash.Has<Refinementstation>())
                         continue;
@@ -979,7 +979,7 @@ namespace Satisvampory.Services
 
             var counts = new Dictionary<int, int>();
             var sgm = Core.ServerGameManager;
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(plotId))
+            foreach (var stash in Core.Stash.ChestsOnPlot(plotId))
             {
                 if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
                     continue;
@@ -992,7 +992,7 @@ namespace Satisvampory.Services
                         continue;
                     if (!inventory.Has<PrefabGUID>())
                         continue;
-                    if (!inventory.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
+                    if (!inventory.Read<PrefabGUID>().Equals(StashService.ChestBagGuid))
                         continue;
                     AddStacks(inventory, counts);
                 }

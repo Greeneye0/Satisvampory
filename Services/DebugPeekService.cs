@@ -330,7 +330,7 @@ namespace Satisvampory.Services
                 Core.TerritoryService.TryGetTerritoryOwnerPlatformId(id, out var ownerId);
                 var treas = 0;
                 var chests = 0;
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(id))
+                foreach (var stash in Core.Stash.ChestsOnPlot(id))
                 {
                     if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
                         continue;
@@ -439,7 +439,7 @@ namespace Satisvampory.Services
             var treas = 0;
             var chests = new List<string>();
             var sgm = Core.ServerGameManager;
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+            foreach (var stash in Core.Stash.ChestsOnPlot(plot))
             {
                 if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
                     continue;
@@ -547,7 +547,7 @@ namespace Satisvampory.Services
             if (plot >= 0)
             {
                 var sgm = Core.ServerGameManager;
-                foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+                foreach (var stash in Core.Stash.ChestsOnPlot(plot))
                 {
                     if (stash.Has<Refinementstation>() || StashRouting.IsNoShare(stash))
                         continue;

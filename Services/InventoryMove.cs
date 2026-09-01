@@ -16,7 +16,7 @@ namespace Satisvampory.Services
         {
             if (child == Entity.Null || !child.Has<PrefabGUID>())
                 return false;
-            return child.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab);
+            return child.Read<PrefabGUID>().Equals(StashService.ChestBagGuid);
         }
 
         public static Dictionary<PrefabGUID, List<Entity>> CollectOccupiedChests(int plot)
@@ -24,7 +24,7 @@ namespace Satisvampory.Services
             var byItem = new Dictionary<PrefabGUID, List<Entity>>(100);
             var seenThisChild = new HashSet<PrefabGUID>(32);
             var sgm = Core.ServerGameManager;
-            foreach (var chest in Core.Stash.GetStashesOnTerritory(plot))
+            foreach (var chest in Core.Stash.ChestsOnPlot(plot))
             {
                 if (!sgm.TryGetBuffer<AttachedBuffer>(chest, out var attached))
                     continue;
@@ -161,8 +161,8 @@ namespace Satisvampory.Services
                 if (plot < 0)
                     plot = Core.TerritoryService.GetStandingTerritoryId(territoryHint);
                 IEnumerable<Entity> chests = plot >= 0
-                    ? Core.Stash.GetStashesOnTerritory(plot)
-                    : Core.Stash.GetAllAlliedStashesOnTerritory(territoryHint);
+                    ? Core.Stash.ChestsOnPlot(plot)
+                    : Core.Stash.IslandChests(territoryHint);
                 if (plot < 0)
                     DestDebugLog.Miss("servant", -1, default, 0, 0, "no-plot");
 

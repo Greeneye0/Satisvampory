@@ -33,7 +33,7 @@ namespace Satisvampory.Services
 
             var dests = new List<(Entity stash, Entity inventory)>(100);
             var any = false;
-            var sources = clanWide ? Core.Stash.GetAllAlliedStashesOnTerritory(character) : Core.Stash.GetStashesOnTerritory(plot);
+            var sources = clanWide ? Core.Stash.IslandChests(character) : Core.Stash.ChestsOnPlot(plot);
             foreach (var stash in sources)
             {
                 if (!StashRouting.TryGetExternalInventory(stash, out var inv))
@@ -70,7 +70,7 @@ namespace Satisvampory.Services
                 : (IReadOnlyList<int>)new[] { plot };
             var overflow = overflowPlots
                 .Where(id => !TerritoryService.IsHeartRaided(Core.TerritoryService.GetCastleHeart(id)))
-                .SelectMany(Core.Stash.GetAllOverflowStashes)
+                .SelectMany(Core.Stash.OverflowChests)
                 .OrderBy(s => StashRouting.IsSpecialName(StashRouting.RawName(s)) ? 1 : 0)
                 .ThenBy(s => plot >= 0 && Core.TerritoryService.GetTerritoryId(s) == plot ? 0 : 1)
                 .ToArray();

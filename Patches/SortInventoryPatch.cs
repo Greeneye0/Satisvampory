@@ -37,7 +37,7 @@ public class SortSingleInventorySystemPatch
         if (clicked.Inventory == from.Character.Read<NetworkId>()) { if (Core.PlayerSettings.IsSortStashEnabled(steam) && Armed(stashArmed, steam, now)) Core.Stash.StashCharacterInventory(from.Character); return; }
         if (!Armed(trashArmed, steam, now)) return;
         var plot = Core.TerritoryService.GetTerritoryId(from.Character);
-        foreach (var trash in Core.Stash.GetAllTrashStashes(plot))
+        foreach (var trash in Core.Stash.TrashChests(plot))
             if (trash.Read<NetworkId>() == clicked.Inventory) { Core.Trash.EmptyTrash(from.Character, trash); break; }
     }
 

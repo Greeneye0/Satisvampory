@@ -12,7 +12,7 @@ internal sealed class TrashService
 {
     public void AshAll(Entity character) => EmptyTrash(character);
 
-    public void EmptyTrash(Entity character) { if (!Gate(character, out var ctx)) return; var cleared = 0; foreach (var bin in Core.Stash.GetAllTrashStashes(ctx.StandingPlot)) if (Wipe(bin)) cleared++; PlayerActionGate.Deny(ctx.User, "Trash emptied from " + cleared.ToString().Color(Color.White) + "x trash containers."); }
+    public void EmptyTrash(Entity character) { if (!Gate(character, out var ctx)) return; var cleared = 0; foreach (var bin in Core.Stash.TrashChests(ctx.StandingPlot)) if (Wipe(bin)) cleared++; PlayerActionGate.Deny(ctx.User, "Trash emptied from " + cleared.ToString().Color(Color.White) + "x trash containers."); }
 
     public void EmptyTrash(Entity character, Entity trashContainer) { if (!Gate(character, out var ctx)) return; Wipe(trashContainer); PlayerActionGate.Deny(ctx.User, "Sunlight, at this hour, in this castle, localized entirely within this trash bin? This trash is ashed."); }
 

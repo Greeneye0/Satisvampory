@@ -25,18 +25,18 @@ internal sealed class RefinementStationsService
             ComponentType.ReadOnly(Il2CppType.Of<CastleWorkstation>()),
         ];
 
-        public RefinementStationsService() { receiveToken = new Regex(Const.RECEIVER_REGEX, RegexOptions.Compiled | RegexOptions.IgnoreCase); sendToken = new Regex(Const.SENDER_REGEX, RegexOptions.Compiled | RegexOptions.IgnoreCase); index = HeartBoundIndex.Scan(includeDisabled: true, QueryTypes); }
+        public RefinementStationsService() { receiveToken = new Regex(BeltTokens.Receiver, RegexOptions.Compiled | RegexOptions.IgnoreCase); sendToken = new Regex(BeltTokens.Sender, RegexOptions.Compiled | RegexOptions.IgnoreCase); index = HeartBoundIndex.Scan(includeDisabled: true, QueryTypes); }
 
         internal void AddRefinementStation(Entity station) => index.Track(station);
         internal void RemoveRefinementStation(Entity station) => index.Untrack(station);
 
-        public IEnumerable<(int group, Entity station)> GetAllReceivingStations(int territoryId) =>
+        public IEnumerable<(int group, Entity station)> ReceiveBenches(int territoryId) =>
             NamedGroups(receiveToken, territoryId);
 
-        public IEnumerable<(int group, Entity station)> GetAllSendingStations(int territoryId) =>
+        public IEnumerable<(int group, Entity station)> SendBenches(int territoryId) =>
             NamedGroups(sendToken, territoryId);
 
-        public IEnumerable<Entity> GetAllStationsOnTerritory(int territoryId) => index.OnTerritory(territoryId);
+        public IEnumerable<Entity> BenchesOnPlot(int territoryId) => index.OnTerritory(territoryId);
 
         IEnumerable<(int group, Entity station)> NamedGroups(Regex token, int territoryId)
         {

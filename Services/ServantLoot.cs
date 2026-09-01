@@ -47,7 +47,7 @@ namespace Satisvampory.Services
                     var heart = Core.TerritoryService.GetCastleHeart(plot);
                     if (heart == Entity.Null || TerritoryService.IsHeartRaided(heart))
                         continue;
-                    foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+                    foreach (var stash in Core.Stash.ChestsOnPlot(plot))
                     {
                         if (stash.Has<Refinementstation>())
                             continue;
@@ -60,7 +60,7 @@ namespace Satisvampory.Services
                         {
                             var attachedEntity = attachedBuffer.Entity;
                             if (!attachedEntity.Has<PrefabGUID>()) continue;
-                            if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab)) continue;
+                            if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ChestBagGuid)) continue;
                             destCandidates.Add((stash, attachedEntity));
                         }
                     }
@@ -74,7 +74,7 @@ namespace Satisvampory.Services
 
                 var overflowStashes = plotIds
                     .Where(id => !TerritoryService.IsHeartRaided(Core.TerritoryService.GetCastleHeart(id)))
-                    .SelectMany(Core.Stash.GetAllOverflowStashes)
+                    .SelectMany(Core.Stash.OverflowChests)
                     .OrderBy(s => StashRouting.IsSpecialName(StashRouting.RawName(s)) ? 1 : 0)
                     .ThenBy(s => Core.TerritoryService.GetTerritoryId(s) == home ? 0 : 1)
                     .ToArray();

@@ -2527,7 +2527,7 @@ namespace Satisvampory.Services
             var prison = false;
             if (Core.RefinementStations != null)
             {
-                foreach (var station in Core.RefinementStations.GetAllStationsOnTerritory(plot))
+                foreach (var station in Core.RefinementStations.BenchesOnPlot(plot))
                 {
                     if (station.Has<Disabled>())
                         continue;
@@ -2771,7 +2771,7 @@ namespace Satisvampory.Services
                             continue;
                         if (!inventory.Has<PrefabGUID>())
                             continue;
-                        if (!inventory.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
+                        if (!inventory.Read<PrefabGUID>().Equals(StashService.ChestBagGuid))
                             continue;
                         if (IsDest(destInvs, inventory))
                             continue;
@@ -3324,7 +3324,7 @@ namespace Satisvampory.Services
                             var inv = attachedBuffer.Entity;
                             if (inv == Entity.Null || !Core.EntityManager.Exists(inv) || !inv.Has<PrefabGUID>())
                                 continue;
-                            if (inv.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
+                            if (inv.Read<PrefabGUID>().Equals(StashService.ChestBagGuid))
                                 continue;
                             if (sgm.GetInventoryItemCount(inv, be) > 0 || IsValidExternalInv(inv) || inv.Has<InventoryBuffer>())
                                 consider(inv);
@@ -3566,7 +3566,7 @@ namespace Satisvampory.Services
                 return false;
             if (!inventory.Has<PrefabGUID>())
                 return false;
-            return inventory.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab);
+            return inventory.Read<PrefabGUID>().Equals(StashService.ChestBagGuid);
         }
 
         static Entity FirstExternalInv(Entity stash)
@@ -3812,7 +3812,7 @@ namespace Satisvampory.Services
                 && tickStashes.TryGetValue(territoryId, out var cached))
                 return cached;
             var list = new List<Entity>();
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(territoryId))
+            foreach (var stash in Core.Stash.ChestsOnPlot(territoryId))
                 list.Add(stash);
             if (tickCachesOn && tickStashes != null)
                 tickStashes[territoryId] = list;
@@ -3842,7 +3842,7 @@ namespace Satisvampory.Services
                         continue;
                     if (!inventory.Has<PrefabGUID>())
                         continue;
-                    if (!inventory.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab))
+                    if (!inventory.Read<PrefabGUID>().Equals(StashService.ChestBagGuid))
                         continue;
                     list.Add(inventory);
                 }

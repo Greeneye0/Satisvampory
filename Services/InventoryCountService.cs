@@ -18,7 +18,7 @@ internal static class InventoryCountService
 {
     public const int MinTerritoryId = 0;
     public const int MaxTerritoryId = 146;
-    public static readonly PrefabGUID ExternalInventoryPrefab = new(1183666186);
+    public static readonly PrefabGUID ChestBagGuid = new(1183666186);
 
     public static int CountForCap(Entity character, User user, PrefabGUID item, CapMode mode)
     {
@@ -52,10 +52,10 @@ internal static class InventoryCountService
             return result;
         if (!Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(inventory, out var buffer))
             return result;
-        foreach (var entry in buffer)
+        for (var i = 0; i < buffer.Length; i++)
         {
-            if (entry.ItemType.GuidHash == 0) continue;
-            result.Add(entry.ItemType.GuidHash);
+            if (buffer[i].ItemType.GuidHash == 0) continue;
+            result.Add(buffer[i].ItemType.GuidHash);
         }
         return result;
     }
@@ -84,45 +84,24 @@ internal static class InventoryCountService
 
         var total = 0;
         var shared = Core.EntityManager.GetBuffer<SharedCastleInventories>(manager);
-        foreach (var sharedInventory in shared)
+        for (var i = 0; i < shared.Length; i++)
         {
-            var stash = sharedInventory.InventorySource;
+            var stash = shared[i].InventorySource;
             if (stash == Entity.Null || !Core.EntityManager.Exists(stash)) continue;
             if (stash.Has<Refinementstation>()) continue;
             if (stash.Has<UnitSpawnerstation>()) continue;
             if (!Core.ServerGameManager.TryGetBuffer<AttachedBuffer>(stash, out var attached))
                 continue;
-            foreach (var ab in attached)
+            for (var a = 0; a < attached.Length; a++)
             {
-                var attachedEntity = ab.Entity;
+                var attachedEntity = attached[a].Entity;
                 if (attachedEntity == Entity.Null || !Core.EntityManager.Exists(attachedEntity)) continue;
                 if (!attachedEntity.Has<PrefabGUID>()) continue;
-                if (!attachedEntity.Read<PrefabGUID>().Equals(ExternalInventoryPrefab)) continue;
+                if (!attachedEntity.Read<PrefabGUID>().Equals(ChestBagGuid)) continue;
                 total += Core.ServerGameManager.GetInventoryItemCount(attachedEntity, item);
             }
         }
         return total;
-    }
-
-    static List<Entity> EnumerateCastleHearts()
-    {
-        var list = new List<Entity>();
-        var builder = new EntityQueryBuilder(Allocator.Temp)
-            .AddAll(new(Il2CppType.Of<CastleHeart>(), ComponentType.AccessMode.ReadOnly));
-        var query = Core.EntityManager.CreateEntityQuery(ref builder);
-        builder.Dispose();
-        var entities = query.ToEntityArray(Allocator.Temp);
-        try
-        {
-            foreach (var e in entities)
-                list.Add(e);
-        }
-        finally
-        {
-            entities.Dispose();
-            query.Dispose();
-        }
-        return list;
     }
 }
 

@@ -289,7 +289,7 @@ namespace Satisvampory.Services
             ulong ownerId, Entity sendingStash)
         {
             if (!Core.PlayerSettings.IsConveyorLoopsAllowed() && sendingStash != Entity.Null
-                && StashHasToken(sendingStash, Core.Stash.ReceiverPattern, group))
+                && StashHasToken(sendingStash, Core.Stash.ReceiveToken, group))
             {
                 // Default OFF: an r# source does not refill an s# dest on the same group.
             }
@@ -298,7 +298,7 @@ namespace Satisvampory.Services
             HonorReserve(stock, ownerId, apply: true);
             var loops = Core.PlayerSettings.IsConveyorLoopsAllowed();
             var srcPlot = sendingStash != Entity.Null ? Core.TerritoryService.GetTerritoryId(sendingStash) : -1;
-            var srcIsReceiver = sendingStash != Entity.Null && StashHasToken(sendingStash, Core.Stash.ReceiverPattern, group);
+            var srcIsReceiver = sendingStash != Entity.Null && StashHasToken(sendingStash, Core.Stash.ReceiveToken, group);
 
             foreach (var (item, available) in stock)
             {
@@ -316,7 +316,7 @@ namespace Satisvampory.Services
                         continue;
                     var destStash = StashFromInventory(sink.Inventory, sendingStash);
                     if (!loops && destStash != Entity.Null && destStash != sendingStash
-                        && srcIsReceiver && StashHasToken(destStash, Core.Stash.SenderPattern, group))
+                        && srcIsReceiver && StashHasToken(destStash, Core.Stash.SendToken, group))
                         continue;
                     var take = sink.Unlimited ? left : (sink.Wanted < left ? sink.Wanted : left);
                     if (take <= 0)
@@ -346,7 +346,7 @@ namespace Satisvampory.Services
                 plot = Core.TerritoryService.GetTerritoryId(sendingStash);
             if (plot < 0)
                 return Entity.Null;
-            foreach (var stash in Core.Stash.GetStashesOnTerritory(plot))
+            foreach (var stash in Core.Stash.ChestsOnPlot(plot))
             {
                 if (StashRouting.TryGetExternalInventory(stash, out var inv) && inv.Equals(destInv))
                     return stash;

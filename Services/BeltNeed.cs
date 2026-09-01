@@ -102,7 +102,7 @@ namespace Satisvampory.Services
 
     internal static class BeltInspect
     {
-        const int ConvFeedMultiplier = 5;
+        const int FeedBurst = 5;
 
         /// <summary>
         /// READ-ONLY snapshot of conveyor feed for crafted product X.
@@ -127,11 +127,11 @@ namespace Satisvampory.Services
                 return lines;
             }
 
-            var castleHeartEntity = Core.TerritoryService.GetCastleHeart(standingTerritoryId);
+            var plotHeart = Core.TerritoryService.GetCastleHeart(standingTerritoryId);
             ulong platformID = 0;
-            if (castleHeartEntity != Entity.Null && Core.EntityManager.Exists(castleHeartEntity) && castleHeartEntity.Has<UserOwner>())
+            if (plotHeart != Entity.Null && Core.EntityManager.Exists(plotHeart) && plotHeart.Has<UserOwner>())
             {
-                var ownerEntity = castleHeartEntity.Read<UserOwner>().Owner.GetEntityOnServer();
+                var ownerEntity = plotHeart.Read<UserOwner>().Owner.GetEntityOnServer();
                 if (ownerEntity != Entity.Null && Core.EntityManager.Exists(ownerEntity) && ownerEntity.Has<User>())
                     platformID = ownerEntity.Read<User>().PlatformId;
             }
@@ -147,7 +147,7 @@ namespace Satisvampory.Services
             var seenStations = new HashSet<Entity>();
             foreach (var logisticsId in logisticsIds)
             {
-                foreach (var station in Core.RefinementStations.GetAllStationsOnTerritory(logisticsId))
+                foreach (var station in Core.RefinementStations.BenchesOnPlot(logisticsId))
                 {
                     if (!Core.EntityManager.Exists(station)) continue;
                     if (station.Has<Disabled>()) continue;
@@ -266,12 +266,12 @@ namespace Satisvampory.Services
             stationHave = new Dictionary<PrefabGUID, int>();
 
             var recipesBuffer = station.ReadBuffer<RefinementstationRecipesBuffer>();
-            var matchFloorReduction = 1f;
+            var floorScale = 1f;
             if (station.Has<CastleWorkstation>())
             {
                 var castleWorkstation = station.Read<CastleWorkstation>();
                 if (castleWorkstation.WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor))
-                    matchFloorReduction = 0.75f;
+                    floorScale = 0.75f;
             }
 
             var receivingStation = station.Read<Refinementstation>();
@@ -343,13 +343,13 @@ namespace Satisvampory.Services
                 var requirements = recipeEntity.ReadBuffer<RecipeRequirementBuffer>();
                 foreach (var requirement in requirements)
                 {
-                    var inputPerCraft = Mathf.RoundToInt(requirement.Amount * matchFloorReduction);
-                    var amountWanted = ConvFeedMultiplier * inputPerCraft;
+                    var inputPerCraft = Mathf.RoundToInt(requirement.Amount * floorScale);
+                    var feedShort = FeedBurst * inputPerCraft;
                     if (recipeCapped)
                     {
                         var inputForRemaining = remainingOutputs * inputPerCraft / outputPerCraft;
-                        if (inputForRemaining < amountWanted)
-                            amountWanted = inputForRemaining;
+                        if (inputForRemaining < feedShort)
+                            feedShort = inputForRemaining;
                     }
 
                     if (haveInputInv)
@@ -357,13 +357,13 @@ namespace Satisvampory.Services
                         foreach (var item in inputInv)
                         {
                             if (item.ItemType.Equals(requirement.Guid))
-                                amountWanted -= item.Amount;
+                                feedShort -= item.Amount;
                         }
                     }
 
-                    wantedByInput.TryGetValue(requirement.Guid, out var currentWanted);
-                    if (amountWanted > currentWanted)
-                        wantedByInput[requirement.Guid] = amountWanted;
+                    wantedByInput.TryGetValue(requirement.Guid, out var alreadyQueued);
+                    if (feedShort > alreadyQueued)
+                        wantedByInput[requirement.Guid] = feedShort;
                 }
             }
 
@@ -413,9 +413,9 @@ namespace Satisvampory.Services
         {
             var groups = new HashSet<int>();
             var name = StashRouting.RawName(station);
-            if (string.IsNullOrEmpty(name) || Core.Stash?.ReceiverPattern == null)
+            if (string.IsNullOrEmpty(name) || Core.Stash?.ReceiveToken == null)
                 return groups;
-            foreach (Match match in Core.Stash.ReceiverPattern.Matches(name.ToLower()))
+            foreach (Match match in Core.Stash.ReceiveToken.Matches(name.ToLower()))
             {
                 if (int.TryParse(match.Groups[1].Value, out var group))
                     groups.Add(group);
@@ -429,7 +429,7 @@ namespace Satisvampory.Services
             var seen = new HashSet<Entity>();
             foreach (var logisticsId in logisticsIds)
             {
-                foreach (var (group, stash) in Core.Stash.GetAllSendingStashes(logisticsId))
+                foreach (var (group, stash) in Core.Stash.SendChests(logisticsId))
                 {
                     if (!receiverGroups.Contains(group)) continue;
                     if (!Core.EntityManager.Exists(stash)) continue;
@@ -450,7 +450,7 @@ namespace Satisvampory.Services
             {
                 var attachedEntity = attachedBuffer.Entity;
                 if (!attachedEntity.Has<PrefabGUID>()) continue;
-                if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab)) continue;
+                if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ChestBagGuid)) continue;
                 if (!Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(attachedEntity, out var inventoryBuffer))
                     continue;
                 foreach (var entry in inventoryBuffer)
@@ -499,11 +499,11 @@ namespace Satisvampory.Services
                 return lines;
             }
 
-            var castleHeartEntity = Core.TerritoryService.GetCastleHeart(standingTerritoryId);
+            var plotHeart = Core.TerritoryService.GetCastleHeart(standingTerritoryId);
             ulong platformID = 0;
-            if (castleHeartEntity != Entity.Null && Core.EntityManager.Exists(castleHeartEntity) && castleHeartEntity.Has<UserOwner>())
+            if (plotHeart != Entity.Null && Core.EntityManager.Exists(plotHeart) && plotHeart.Has<UserOwner>())
             {
-                var ownerEntity = castleHeartEntity.Read<UserOwner>().Owner.GetEntityOnServer();
+                var ownerEntity = plotHeart.Read<UserOwner>().Owner.GetEntityOnServer();
                 if (ownerEntity != Entity.Null && Core.EntityManager.Exists(ownerEntity) && ownerEntity.Has<User>())
                     platformID = ownerEntity.Read<User>().PlatformId;
             }
@@ -517,7 +517,7 @@ namespace Satisvampory.Services
             var islandCounts = BeltCounts.OfPlots(logisticsIds);
 
             foreach (var logisticsId in logisticsIds)
-            foreach (var (group, station) in Core.RefinementStations.GetAllReceivingStations(logisticsId))
+            foreach (var (group, station) in Core.RefinementStations.ReceiveBenches(logisticsId))
             {
                 if (!Core.EntityManager.Exists(station) || station.Has<Disabled>())
                     continue;
@@ -526,7 +526,7 @@ namespace Satisvampory.Services
 
                 var receivingStation = station.Read<Refinementstation>();
                 var castleWorkstation = station.Read<CastleWorkstation>();
-                var matchFloorReduction = castleWorkstation.WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor) ? 0.75f : 1f;
+                var floorScale = castleWorkstation.WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor) ? 0.75f : 1f;
                 var inputInventoryEntity = receivingStation.InputInventoryEntity.GetEntityOnServer();
                 var haveInputInv = inputInventoryEntity != Entity.Null && Core.EntityManager.Exists(inputInventoryEntity)
                     && inputInventoryEntity.Has<InventoryBuffer>();
@@ -579,26 +579,26 @@ namespace Satisvampory.Services
                             if (requirement.Guid.GuidHash == 0)
                                 continue;
                             inputs.Add(requirement.Guid);
-                            var inputPerCraft = Mathf.RoundToInt(requirement.Amount * matchFloorReduction);
-                            var amountWanted = ConvFeedMultiplier * inputPerCraft;
+                            var inputPerCraft = Mathf.RoundToInt(requirement.Amount * floorScale);
+                            var feedShort = FeedBurst * inputPerCraft;
                             if (recipeCapped)
                             {
                                 var inputForRemaining = remainingOutputs * inputPerCraft / outputPerCraft;
-                                if (inputForRemaining < amountWanted)
-                                    amountWanted = inputForRemaining;
+                                if (inputForRemaining < feedShort)
+                                    feedShort = inputForRemaining;
                             }
                             if (haveInputInv)
                             {
                                 for (var i = 0; i < inventoryBuffer.Length; i++)
                                 {
                                     if (inventoryBuffer[i].ItemType.Equals(requirement.Guid))
-                                        amountWanted -= inventoryBuffer[i].Amount;
+                                        feedShort -= inventoryBuffer[i].Amount;
                                 }
                             }
-                            if (amountWanted <= 0)
+                            if (feedShort <= 0)
                                 continue;
                             wantByItem.TryGetValue(requirement.Guid.GuidHash, out var haveWant);
-                            wantByItem[requirement.Guid.GuidHash] = haveWant + amountWanted;
+                            wantByItem[requirement.Guid.GuidHash] = haveWant + feedShort;
                         }
                         if (outputGuid.GuidHash != 0)
                             recipes.Add((outputGuid, inputs));
