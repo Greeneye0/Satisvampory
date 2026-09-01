@@ -13,14 +13,16 @@ Do not give servant loot a different dest order than stash.
 
 ## `.s throne` (ClanShare hunt picker)
 
-ClanShare ON: numbered picker listing each plot’s living servants in **chat**.
+ClanShare ON: numbered picker listing each plot’s living servants, then **teleports you to that castle’s throne** so the vanilla hunt UI is that plot.
 
 - Default is the castle you are sitting on / standing on.
 - `.s throne` lists plots and servant names; pick with `.s 2` (pending pick TTL **2 minutes**).
-- `.s throne here` resets to this castle.
-- The in-game **Choose a Servant** panel is vanilla: it always lists the seat you are on. Hooking `GetResponseEntries` / stuffing extra entries Burst-aborts the dedicated server. Overlay later.
+- Picking another plot uses `TeleportUtilityServer.Teleport` (and writes `Translation` / `LastTranslation`) to that throne (save return position). Sit the throne there for Choose a Servant.
+- `.s throne here` teleports back.
+- Do **not** Harmony-patch `GetResponseEntries` / extra servant entries (Burst abort on sit).
 - Vanilla listing stays Burst-safe (no extra entries). ServantInfo / hunt events are retargeted at that plot’s real throne.
-- Never treat a **castle heart** as a throne (`ActiveServantMission` lives on the heart). Learn the real sit-target from `Request.Throne`, then `UseThrone` / prefab name containing `Throne`. Patch `Request.Throne` in-place. Also retarget `Interactor.Target` for that update; restore next tick. Do **not** Harmony-patch `GetResponseEntries` (Burst abort on sit). Debug mailbox `thrones` records last response names and whether the cached entity is a heart.
+- Never treat a **castle heart** as a throne (`ActiveServantMission` lives on the heart). Learn the real sit-target from `Request.Throne`, then `UseThrone` / prefab name containing `Throne`. Patch `Request.Throne` in-place. Also retarget `Interactor.Target` for that update; restore next tick. Do **not** Harmony-patch `GetResponseEntries` (Burst abort on sit).
+- Debug mailbox `thrones` lists throne positions and connected players. `gotothrone` with `plot:N` actually moves a connected player onto that throne (does **not** set the `.s throne` pick — sit there for a vanilla hunt-UI test). `name":"here"` returns. `thrones` also records last response names and whether the cached entity is a heart.
 - ClanShare off or plot excluded: sit **this** throne to manage its servants. Picker is a no-op / explains that.
 
 May manage from plot A only if A and the target throne are both on the character’s ClanShare island.

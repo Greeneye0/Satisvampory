@@ -19,7 +19,7 @@ namespace Satisvampory.Services
     /// <summary>
     /// Local file mailbox so an operator can inspect live ECS without chat or a bounce.
     /// Write BepInEx/config/Satisvampory/debug/req.json then read res.json.
-    /// Main-thread only. No give/spawn. Local disk, not a network socket.
+    /// Main-thread only. No give/spawn. gotothrone actually moves a player. Local disk, not a network socket.
     /// </summary>
     internal static class DebugPeekService
     {
@@ -126,7 +126,7 @@ namespace Satisvampory.Services
             switch (op)
             {
                 case "help":
-                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\"],"
+                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\",\"gotothrone\"],"
                         + "\"req\":\"" + Esc(ReqPath) + "\",\"res\":\"" + Esc(ResPath) + "\","
                         + "\"hint\":\"{\\\"op\\\":\\\"log\\\",\\\"name\\\":\\\"dupe\\\"}\","
                         + "\"sim\":\"dry-run covering as if you are standing on plot. apply:true actually moves\","
@@ -139,7 +139,8 @@ namespace Satisvampory.Services
                         + "\"upgrade\":\"heart upgrade costs vs have on plot\","
                         + "\"settings\":\"cs/asm/hf/cse/conveyor/cloop for plot owner\","
                         + "\"servants\":\"list coffins/servants and loot counts (plot:N optional)\","
-                        + "\"thrones\":\"list thrones, .s throne picks, last hunt rewrite and response names\","
+                        + "\"thrones\":\"list thrones with positions, connected players, .s throne picks, last hunt rewrite\","
+                        + "\"gotothrone\":\"actually move a connected player onto plot N's throne (name:here returns). Vanilla sit test.\","
                         + "\"servantstash\":\"stash all returned servants now (plot:N optional)\"}";
                 case "players":
                     return PeekPlayers();
@@ -178,6 +179,9 @@ namespace Satisvampory.Services
                     return Core.Stash.DebugListServants(plot);
                 case "thrones":
                     return ClanThroneServants.DebugDump(plot);
+                case "gotothrone":
+                case "movethrone":
+                    return ClanThroneServants.DebugGoto(plot, name);
                 case "servantstash":
                 case "asmstash":
                     return Core.Stash.DebugStashAllServants(plot);

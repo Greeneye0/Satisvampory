@@ -7,20 +7,24 @@ using ProjectM.Shared.Systems;
 using Stunlock.Core;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
+using Unity.Transforms;
 
 namespace Satisvampory.Services
 {
     /// <summary>
-    /// ClanShare throne: chat picks a plot, then ServantInfo / hunt events are retargeted
-    /// at that plot's real throne. Vanilla listing stays Burst-safe (no extra entries).
+    /// ClanShare throne: chat/debug moves you onto that castle's throne so vanilla hunt UI
+    /// is that plot. Do not stuff extra Burst list entries.
     /// </summary>
     internal static class ClanThroneServants
     {
         static readonly Dictionary<ulong, int> selectedPlot = new();
+        static readonly Dictionary<ulong, float3> returnPos = new();
         static readonly Dictionary<ulong, PendingPick> pendingPick = new();
         static readonly Dictionary<int, Entity> throneByPlot = new();
         static readonly Dictionary<int, Entity> learnedThroneByPlot = new();
@@ -36,6 +40,7 @@ namespace Satisvampory.Services
         static int lastResponseCount = -1;
         static string lastResponseNames = "";
         static string lastPatched = "";
+        static string lastGoto = "";
 
         struct PendingPick
         {
@@ -114,7 +119,7 @@ namespace Satisvampory.Services
                 ExpiresUtc = DateTime.UtcNow + PickTtl
             };
             var sb = new StringBuilder();
-            sb.Append("ClanShare throne — hunt panel is this seat. Chat lists each plot.\n");
+            sb.Append("ClanShare throne — pick a plot to go sit that castle's throne.\n");
             for (var i = 0; i < ids.Count; i++)
             {
                 var plot = ids[i];
@@ -164,6 +169,12 @@ namespace Satisvampory.Services
             {
                 selectedPlot.Remove(steam);
                 pendingPick.Remove(steam);
+                if (returnPos.TryGetValue(steam, out var home) && TryTeleport(character, home, out var via))
+                {
+                    returnPos.Remove(steam);
+                    return "Returned (" + via + "). Sit this castle's throne for its servants.";
+                }
+                returnPos.Remove(steam);
                 return "Default: this castle's throne. Sit / reopen the hunt UI.";
             }
             if (!int.TryParse(arg, out var n))
@@ -188,16 +199,21 @@ namespace Satisvampory.Services
             if (FindThrone(plot) == Entity.Null)
                 return "No throne on " + Core.TerritoryService.FormatPlotLabel(plot) + ".";
             pendingPick.Remove(steam);
+            var names = AliveNames(plot);
+            var who = names.Count == 0 ? "no living servants" : string.Join(", ", names);
+            var throne = FindThrone(plot);
             if (plot == standing)
             {
                 selectedPlot.Remove(steam);
-                return "Default: " + Core.TerritoryService.FormatPlotLabel(plot) + " (this castle). Sit / reopen the hunt UI.";
+                return "Default: " + Core.TerritoryService.FormatPlotLabel(plot) + " (this castle). " + who;
             }
             selectedPlot[steam] = plot;
-            var names = AliveNames(plot);
-            var who = names.Count == 0 ? "no living servants" : string.Join(", ", names);
-            return "Plot " + Core.TerritoryService.FormatPlotLabel(plot) + ": " + who
-                + ". In-game Choose a Servant stays this castle (vanilla). Overlay later.";
+            if (character.Has<Translation>() && !returnPos.ContainsKey(steam))
+                returnPos[steam] = character.Read<Translation>().Value;
+            if (TryTeleportToThrone(character, throne, out var via))
+                return "Moved you to " + Core.TerritoryService.FormatPlotLabel(plot) + " (" + via + "). Sit that throne. "
+                    + who + "  .s throne here returns.";
+            return "Could not move you to " + Core.TerritoryService.FormatPlotLabel(plot) + " (" + via + "). " + who;
         }
 
         public static string DebugDump(int plotFilter)
@@ -211,8 +227,10 @@ namespace Satisvampory.Services
                 .Append(",\"lastTo\":").Append(lastTo)
                 .Append(",\"lastPatched\":\"").Append(Esc(lastPatched)).Append('"')
                 .Append(",\"lastSkip\":\"").Append(Esc(lastSkip)).Append('"')
+                .Append(",\"lastGoto\":\"").Append(Esc(lastGoto)).Append('"')
                 .Append(",\"lastResponseCount\":").Append(lastResponseCount)
                 .Append(",\"lastResponseNames\":\"").Append(Esc(lastResponseNames)).Append('"')
+                .Append(",\"hint\":\"{\\\"op\\\":\\\"gotothrone\\\",\\\"plot\\\":86} or name:here to return\"")
                 .Append(",\"picks\":[");
             var first = true;
             foreach (var kv in selectedPlot)
@@ -220,6 +238,25 @@ namespace Satisvampory.Services
                 if (!first) sb.Append(',');
                 first = false;
                 sb.Append("{\"steam\":").Append(kv.Key).Append(",\"plot\":").Append(kv.Value).Append('}');
+            }
+            sb.Append("],\"returns\":[");
+            first = true;
+            foreach (var kv in returnPos)
+            {
+                if (!first) sb.Append(',');
+                first = false;
+                AppendPos(sb.Append("{\"steam\":").Append(kv.Key).Append(','), kv.Value, "pos").Append('}');
+            }
+            sb.Append("],\"players\":[");
+            first = true;
+            foreach (var p in ConnectedPlayers())
+            {
+                if (!first) sb.Append(',');
+                first = false;
+                sb.Append("{\"steam\":").Append(p.steam)
+                    .Append(",\"name\":\"").Append(Esc(p.name)).Append('"')
+                    .Append(",\"plot\":").Append(p.plot).Append(',');
+                AppendPos(sb, p.pos, "pos").Append('}');
             }
             sb.Append("],\"thrones\":[");
             first = true;
@@ -236,10 +273,54 @@ namespace Satisvampory.Services
                     .Append(",\"useThrone\":").Append(kv.Value.Has<UseThrone>() ? "true" : "false")
                     .Append(",\"heart\":").Append(kv.Value.Has<CastleHeart>() ? "true" : "false")
                     .Append(",\"missions\":").Append(kv.Value.Has<ActiveServantMission>() ? "true" : "false")
-                    .Append('}');
+                    .Append(',');
+                var pos = kv.Value.Has<Translation>() ? kv.Value.Read<Translation>().Value : default;
+                AppendPos(sb, pos, "pos").Append('}');
             }
             sb.Append("]}");
             return sb.ToString();
+        }
+
+        /// <summary>
+        /// Mailbox: move a connected player onto a plot's throne so the client is actually there.
+        /// plot omitted = list. name=here returns. Does not set .s throne pick (vanilla sit test).
+        /// </summary>
+        public static string DebugGoto(int plot, string who)
+        {
+            RefreshThroneCache();
+            var goHome = !string.IsNullOrWhiteSpace(who)
+                && (who.Equals("here", StringComparison.OrdinalIgnoreCase)
+                    || who.Equals("back", StringComparison.OrdinalIgnoreCase)
+                    || who.Equals("return", StringComparison.OrdinalIgnoreCase));
+            var filter = goHome ? "" : who;
+            if (!TryFindConnected(filter, out var steam, out var character, out var playerName, out var error))
+            {
+                lastGoto = "no-player " + error;
+                return "{\"error\":\"" + Esc(error) + "\",\"dump\":" + DebugDump(plot) + "}";
+            }
+            if (goHome)
+            {
+                if (!returnPos.TryGetValue(steam, out var home))
+                {
+                    lastGoto = "no-return " + playerName;
+                    return "{\"error\":\"no saved return position\",\"player\":\"" + Esc(playerName) + "\"}";
+                }
+                return FinishGoto(character, steam, playerName, -1, "return", home, saveReturn: false, clearReturn: true);
+            }
+            if (plot < 0)
+                return DebugDump(plot);
+            var throne = FindThrone(plot);
+            if (throne == Entity.Null || !Core.EntityManager.Exists(throne) || !throne.Has<Translation>())
+            {
+                lastGoto = "no-throne plot=" + plot;
+                return "{\"error\":\"no throne on plot " + plot + "\",\"player\":\"" + Esc(playerName) + "\",\"dump\":" + DebugDump(plot) + "}";
+            }
+            var dest = throne.Read<Translation>().Value;
+            dest.y += 1.5f;
+            var nid = throne.Has<NetworkId>() ? throne.Read<NetworkId>().ToString() : "";
+            var names = AliveNames(plot);
+            var whoServants = names.Count == 0 ? "no living servants" : string.Join(", ", names);
+            return FinishGoto(character, steam, playerName, plot, nid + " " + whoServants, dest, saveReturn: true, clearReturn: false);
         }
 
         static string Esc(string s)
@@ -502,6 +583,218 @@ namespace Satisvampory.Services
             lastPatched += " rb=" + readback + " want=" + want;
             return true;
         }
+
+        static bool TryTeleportToThrone(Entity character, Entity throne)
+            => TryTeleportToThrone(character, throne, out _);
+
+        static bool TryTeleportToThrone(Entity character, Entity throne, out string via)
+        {
+            via = "no-throne";
+            if (character == Entity.Null || throne == Entity.Null || !Core.EntityManager.Exists(character)
+                || !Core.EntityManager.Exists(throne) || !throne.Has<Translation>())
+                return false;
+            var pos = throne.Read<Translation>().Value;
+            pos.y += 1.5f;
+            return TryTeleport(character, pos, out via);
+        }
+
+        static bool TryTeleport(Entity character, float3 pos)
+            => TryTeleport(character, pos, out _);
+
+        static bool TryTeleport(Entity character, float3 pos, out string via)
+        {
+            via = "missing";
+            if (character == Entity.Null || !Core.EntityManager.Exists(character))
+                return false;
+            var util = false;
+            try
+            {
+                TeleportUtilityServer.Teleport(
+                    Core.EntityManager,
+                    character,
+                    pos,
+                    default(Il2CppSystem.Nullable_Unboxed<quaternion>));
+                util = true;
+                via = "TeleportUtilityServer";
+            }
+            catch (Exception e)
+            {
+                Core.LogException(e);
+                via = "TeleportUtilityServer-fail";
+            }
+            var wrote = false;
+            try
+            {
+                if (character.Has<Translation>())
+                {
+                    character.Write(new Translation { Value = pos });
+                    wrote = true;
+                }
+                if (character.Has<LastTranslation>())
+                {
+                    character.Write(new LastTranslation { Value = pos });
+                    wrote = true;
+                }
+                if (wrote)
+                    via = util ? "TeleportUtilityServer+Translation" : "Translation";
+            }
+            catch (Exception e)
+            {
+                Core.LogException(e);
+                if (!util)
+                {
+                    via += "+Translation-fail";
+                    return false;
+                }
+            }
+            return util || wrote;
+        }
+
+        static string FinishGoto(Entity character, ulong steam, string playerName, int toPlot, string extra, float3 dest, bool saveReturn, bool clearReturn)
+        {
+            var fromPlot = Core.TerritoryService.GetStandingTerritoryId(character);
+            var from = character.Has<Translation>() ? character.Read<Translation>().Value : default;
+            if (saveReturn && character.Has<Translation>() && !returnPos.ContainsKey(steam))
+                returnPos[steam] = from;
+            var moved = TryTeleport(character, dest, out var via);
+            if (clearReturn)
+                returnPos.Remove(steam);
+            var afterPlot = Core.TerritoryService.GetStandingTerritoryId(character);
+            var after = character.Has<Translation>() ? character.Read<Translation>().Value : default;
+            lastGoto = (moved ? "ok " : "fail ") + playerName + " " + fromPlot + "->" + toPlot + " " + via;
+            DestDebugLog.Note("throne", toPlot, 0, lastGoto + " " + extra);
+            var sb = new StringBuilder();
+            sb.Append("{\"moved\":").Append(moved ? "true" : "false")
+                .Append(",\"player\":\"").Append(Esc(playerName)).Append('"')
+                .Append(",\"steam\":").Append(steam)
+                .Append(",\"fromPlot\":").Append(fromPlot)
+                .Append(",\"toPlot\":").Append(toPlot)
+                .Append(",\"afterPlot\":").Append(afterPlot)
+                .Append(",\"via\":\"").Append(Esc(via)).Append('"')
+                .Append(",\"extra\":\"").Append(Esc(extra)).Append('"')
+                .Append(",\"savedReturn\":").Append(returnPos.ContainsKey(steam) ? "true" : "false")
+                .Append(',');
+            AppendPos(sb, from, "from").Append(',');
+            AppendPos(sb, dest, "dest").Append(',');
+            AppendPos(sb, after, "after").Append('}');
+            return sb.ToString();
+        }
+
+        struct ConnectedPlayer
+        {
+            public ulong steam;
+            public string name;
+            public int plot;
+            public float3 pos;
+            public Entity character;
+        }
+
+        static bool TryFindConnected(string who, out ulong steam, out Entity character, out string playerName, out string error)
+        {
+            steam = 0;
+            character = Entity.Null;
+            playerName = "";
+            error = "no connected player";
+            ulong wantSteam = 0;
+            var matchSteam = !string.IsNullOrWhiteSpace(who) && ulong.TryParse(who, out wantSteam);
+            ConnectedPlayer first = default;
+            var any = false;
+            foreach (var p in ConnectedPlayers())
+            {
+                if (!any)
+                {
+                    first = p;
+                    any = true;
+                }
+                if (matchSteam && p.steam == wantSteam)
+                {
+                    steam = p.steam;
+                    character = p.character;
+                    playerName = p.name;
+                    error = "";
+                    return true;
+                }
+                if (!matchSteam && !string.IsNullOrWhiteSpace(who)
+                    && p.name.IndexOf(who, StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    steam = p.steam;
+                    character = p.character;
+                    playerName = p.name;
+                    error = "";
+                    return true;
+                }
+            }
+            if (any && string.IsNullOrWhiteSpace(who))
+            {
+                steam = first.steam;
+                character = first.character;
+                playerName = first.name;
+                error = "";
+                return true;
+            }
+            if (any && !string.IsNullOrWhiteSpace(who))
+                error = "no connected player matching " + who;
+            return false;
+        }
+
+        static List<ConnectedPlayer> ConnectedPlayers()
+        {
+            var list = new List<ConnectedPlayer>();
+            var builder = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<User>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref builder);
+            builder.Dispose();
+            NativeArray<Entity> users = default;
+            try
+            {
+                users = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < users.Length; i++)
+                {
+                    var userEntity = users[i];
+                    if (userEntity == Entity.Null || !Core.EntityManager.Exists(userEntity) || !userEntity.Has<User>())
+                        continue;
+                    var user = userEntity.Read<User>();
+                    if (!user.IsConnected)
+                        continue;
+                    var character = user.LocalCharacter.GetEntityOnServer();
+                    var plot = -1;
+                    var pos = default(float3);
+                    if (character != Entity.Null && Core.EntityManager.Exists(character))
+                    {
+                        plot = Core.TerritoryService.GetStandingTerritoryId(character);
+                        if (character.Has<Translation>())
+                            pos = character.Read<Translation>().Value;
+                    }
+                    list.Add(new ConnectedPlayer
+                    {
+                        steam = user.PlatformId,
+                        name = user.CharacterName.ToString(),
+                        plot = plot,
+                        pos = pos,
+                        character = character
+                    });
+                }
+            }
+            finally
+            {
+                if (users.IsCreated)
+                    users.Dispose();
+                query.Dispose();
+            }
+            return list;
+        }
+
+        static StringBuilder AppendPos(StringBuilder sb, float3 pos, string prefix = null)
+        {
+            if (!string.IsNullOrEmpty(prefix))
+                sb.Append('"').Append(prefix).Append("\":");
+            sb.Append("{\"x\":").Append(F(pos.x))
+                .Append(",\"y\":").Append(F(pos.y))
+                .Append(",\"z\":").Append(F(pos.z)).Append('}');
+            return sb;
+        }
+
+        static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
 
         static Entity FindThrone(int plot)
         {

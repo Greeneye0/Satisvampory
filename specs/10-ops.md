@@ -43,15 +43,17 @@ GitHub: https://github.com/Greeneye0/Satisvampory (public AGPL).
 
 ## Debug mailbox
 
-Local file mailbox. No network socket. No give/spawn (except covering `sim` with `apply:true`, which actually moves).
+Local file mailbox. No network socket. No give/spawn (except covering `sim` with `apply:true`, which actually moves, and `gotothrone`, which actually moves a player).
 
 - Write `BepInEx/config/Satisvampory/debug/req.json`
 - Read `res.json`
 - Poll ~0.25s, main thread only
 
-Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, `settings`, `dest`, `sim`, `fair`, `occupy`, `guest`, `cover`, `unstick`, `need`, `selftest`, `log`, `perf`, `logdump`, `servants`, `servantstash`, `thrones`.
+Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, `settings`, `dest`, `sim`, `fair`, `occupy`, `guest`, `cover`, `unstick`, `need`, `selftest`, `log`, `perf`, `logdump`, `servants`, `servantstash`, `thrones`, `gotothrone`.
 
-`thrones` also dumps `.s throne` picks, last rewrite (sitting/selected/from/to), whether Request and Interactor were patched, and servant names on the last `ServantInfoEvent.Response`.
+`thrones` dumps throne positions, connected players, `.s throne` picks, last rewrite (sitting/selected/from/to), last `gotothrone`, whether Request and Interactor were patched, and servant names on the last `ServantInfoEvent.Response`.
+
+`gotothrone` with `plot:N` teleports a connected player onto that plot’s throne (`name` filters the player; omit `plot` to list). `{"op":"gotothrone","name":"here"}` returns. Does not set the `.s throne` pick. Stand up first if you are sitting.
 
 `players` is the bounce gate. `selftest` includes dest-ranking assertions (`StashRouting.SelfTestDest`).
 

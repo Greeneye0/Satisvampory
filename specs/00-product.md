@@ -59,7 +59,7 @@ Plot salvage (`.s sal`) default **OFF**.
 - Covering or clan pulls triggered by **castle guests**. Only clan members occupy a plot.
 - Draining castle hearts for tidy / stash / covering dest.
 - Chat HUD spam for covering (chat push is off).
-- Giving / spawning items through the debug mailbox (read/inspect only, except documented `apply` covering sim).
+- Giving / spawning items through the debug mailbox (read/inspect only, except documented `apply` covering sim and `gotothrone`, which moves a player).
 
 ## Player action gates
 
