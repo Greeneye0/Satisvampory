@@ -1,5 +1,6 @@
 using Il2CppInterop.Runtime;
 using ProjectM;
+using ProjectM.CastleBuilding;
 using ProjectM.Network;
 using ProjectM.Shared.Systems;
 using System;
@@ -285,7 +286,7 @@ namespace Satisvampory.Services
         {
             RefreshThroneCache();
             if (throneByPlot.TryGetValue(plot, out var throne)
-                && throne != Entity.Null && Core.EntityManager.Exists(throne) && throne.Has<UseThroneComponent>())
+                && throne != Entity.Null && Core.EntityManager.Exists(throne) && throne.Has<NetworkId>())
                 return throne;
             return Entity.Null;
         }
@@ -302,8 +303,15 @@ namespace Satisvampory.Services
                 return;
             throneByPlot.Clear();
             throneCacheAt = DateTime.UtcNow;
+            RememberThrones(Il2CppType.Of<UseThrone>());
+            RememberThrones(Il2CppType.Of<ActiveServantMission>());
+        }
+
+        static void RememberThrones(Il2CppSystem.Type component)
+        {
             var qb = new EntityQueryBuilder(Allocator.Temp)
-                .AddAll(new(Il2CppType.Of<UseThroneComponent>(), ComponentType.AccessMode.ReadOnly));
+                .WithOptions(EntityQueryOptions.IncludeDisabled)
+                .AddAll(new(component, ComponentType.AccessMode.ReadOnly));
             var query = Core.EntityManager.CreateEntityQuery(ref qb);
             qb.Dispose();
             NativeArray<Entity> rows = default;
@@ -314,6 +322,8 @@ namespace Satisvampory.Services
                 {
                     var throne = rows[i];
                     if (throne == Entity.Null || !Core.EntityManager.Exists(throne) || !throne.Has<NetworkId>())
+                        continue;
+                    if (throne.Has<PlayerCharacter>())
                         continue;
                     var plot = Core.TerritoryService.GetTerritoryId(throne);
                     if (plot < 0)

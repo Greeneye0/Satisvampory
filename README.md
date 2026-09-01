@@ -2,7 +2,7 @@
 
 Server-only V Rising 1.1 BepInEx plugin. Castle logistics (named dest, ClanShare, conveyors, reserve/caps, treasury lend) plus ground scoop.
 
-Current version **1.0.49**.
+Current version **1.0.50**.
 
 Satisvampory should be the only logistics/scoop plugin in `BepInEx/plugins`.
 

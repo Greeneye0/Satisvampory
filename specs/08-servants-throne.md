@@ -20,6 +20,7 @@ ClanShare ON: numbered picker for which clan plot the **throne hunt UI** manages
 - `.s throne here` resets to this castle.
 - Reopen the hunt panel after picking.
 - Vanilla listing stays Burst-safe (no extra entries). ServantInfo / hunt events are retargeted at that plot’s real throne.
+- Find thrones by ECS `UseThrone` tag and `ActiveServantMission` buffer (not authoring `UseThroneComponent`). Skip player entities.
 - ClanShare off or plot excluded: sit **this** throne to manage its servants. Picker is a no-op / explains that.
 
 May manage from plot A only if A and the target throne are both on the character’s ClanShare island.
