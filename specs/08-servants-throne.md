@@ -20,7 +20,7 @@ ClanShare ON: numbered picker for which clan plot the **throne hunt UI** manages
 - `.s throne here` resets to this castle.
 - Reopen the hunt panel after picking.
 - Vanilla listing stays Burst-safe (no extra entries). ServantInfo / hunt events are retargeted at that plot’s real throne.
-- Never treat a **castle heart** as a throne (`ActiveServantMission` lives on the heart). Learn the real sit-target from `Request.Throne`, then `UseThrone` / prefab name containing `Throne`. Patch `Request.Throne` in-place and remaps `GetResponseEntries`’s throne entity. Also retarget `Interactor.Target` for that update; restore next tick. Debug mailbox `thrones` records last response names and whether the cached entity is a heart.
+- Never treat a **castle heart** as a throne (`ActiveServantMission` lives on the heart). Learn the real sit-target from `Request.Throne`, then `UseThrone` / prefab name containing `Throne`. Patch `Request.Throne` in-place. Also retarget `Interactor.Target` for that update; restore next tick. Do **not** Harmony-patch `GetResponseEntries` (Burst abort on sit). Debug mailbox `thrones` records last response names and whether the cached entity is a heart.
 - ClanShare off or plot excluded: sit **this** throne to manage its servants. Picker is a no-op / explains that.
 
 May manage from plot A only if A and the target throne are both on the character’s ClanShare island.

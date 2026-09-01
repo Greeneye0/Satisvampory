@@ -35,24 +35,6 @@ namespace Satisvampory.Patches
         }
     }
 
-    [HarmonyPatch(typeof(ServantInfoEventSystem_Server), nameof(ServantInfoEventSystem_Server.GetResponseEntries))]
-    public static class ClanThroneGetEntriesPatch
-    {
-        static void Prefix(ref Entity throneEntity)
-        {
-            if (!Core.HasInitialized)
-                return;
-            try
-            {
-                ClanThroneServants.RemapGetEntries(ref throneEntity);
-            }
-            catch (Exception e)
-            {
-                Core.LogException(e);
-            }
-        }
-    }
-
     [HarmonyPatch(typeof(ServantMissionActionSystem), nameof(ServantMissionActionSystem.OnUpdate))]
     public static class ClanThroneMissionRewritePatch
     {
