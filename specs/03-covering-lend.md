@@ -77,6 +77,9 @@ Move the **next heart level** upgrade costs onto treasury dests on the occupied 
 ## Heart fuel
 
 - Fills the heart’s Blood Essence **fuel slots**, cap **500** per stack (`HeartFuelStack`).
+- Fill **every unlocked HUD pad**, not only top off stacks that already have BE. A level-2 heart with 500 + empty must get a second 500. Locked pads stay empty.
+- Unlocked count is the **current heart level** blob (`GetLevelData(level)`), at least `heart.Level` (L2 → 2 slots). Do not use no-index `GetLevelData()` — that blob is wrong on L2 (empty upgrade costs / ItemSlots=1).
+- Move BE **into the heart fuel inventory**, not through chest dest ranking.
 - Default **ON** (`.s hf`). Missing per-plot key = ON.
 - Seed / opt-out is **heart NetworkId** (`n{net}`) only. `t{plot}` MUST NOT stick to a replacement heart.
 - Dump-opt-out only sticks while auto-feed is **OFF** (so unbuild/empty is possible). Turning `.s hf` ON clears opt-out.

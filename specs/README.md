@@ -42,4 +42,5 @@ Do not "simplify" these away. They exist because earlier updates went off the ra
 - `.sg convloop` default **OFF**. Chest→chest without a same-group cycle still works.
 - Castle **guests** never occupy a plot for covering / leftover-bypass / clan pulls.
 - Blood Essence covering parks **Blood / Alchemy / generic** dests (including named treasury-floor). Vanilla treasury chests reject regular Blood Essence.
+- Heart fuel fills **every unlocked HUD pad** (level 2 → two stacks of 500). Do not treat the second pad as locked because `GetLevelData()` with no index says `ItemSlots=1`.
 - There is **no** `.leftover` command. Chest floors are `.s reserve`.

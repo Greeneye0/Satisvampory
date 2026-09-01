@@ -299,7 +299,91 @@ namespace Satisvampory.Services
                     .Append(",\"ok\":").Append(have >= kv.Value ? "true" : "false")
                     .Append('}');
             }
-            sb.Append("]}");
+            sb.Append("],\"fuel\":").Append(DebugHeartFuelJson(plot, heart, ch)).Append('}');
+            return sb.ToString();
+        }
+
+        static string DebugHeartFuelJson(int plot, Entity heart, CastleHeart ch)
+        {
+            var sb = new StringBuilder();
+            Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out var ownerId);
+            var keys = HeartFuelKeys(heart);
+            var fuelInvs = GetHeartFuelInventories(heart);
+            var feedOn = Core.PlayerSettings.IsHeartFeedEnabled(ownerId, plot);
+            var seeded = AnyHeartKey(keys, Core.PlayerSettings.IsHeartFuelSeeded);
+            var opted = AnyHeartKey(keys, Core.PlayerSettings.IsHeartFuelOptOut);
+            var fuel = CountHeartFuel(fuelInvs, heart);
+            var topOff = HeartFuelTopOffNeed(heart, fuelInvs);
+            var emptyNeed = HeartFuelEmptySlotNeed(heart, fuelInvs);
+            var need = HeartFuelNeed(heart, fuelInvs);
+            var itemSlots = 0;
+            var iieSlots = 0;
+            var bufLen = 0;
+            var unlocked = 0;
+            try
+            {
+                ref var levelData = ref ch.GetLevelData(ch.Level);
+                itemSlots = levelData.ItemSlots;
+            }
+            catch { }
+            if (itemSlots <= 0)
+            {
+                try
+                {
+                    ref var levelData = ref ch.GetLevelData();
+                    itemSlots = levelData.ItemSlots;
+                }
+                catch { }
+            }
+            var sgm = Core.ServerGameManager;
+            sb.Append("{\"hf\":").Append(feedOn ? "true" : "false")
+                .Append(",\"seeded\":").Append(seeded ? "true" : "false")
+                .Append(",\"opted\":").Append(opted ? "true" : "false")
+                .Append(",\"invs\":").Append(fuelInvs.Count)
+                .Append(",\"fuel\":").Append(fuel)
+                .Append(",\"topOffNeed\":").Append(topOff)
+                .Append(",\"emptyNeed\":").Append(emptyNeed)
+                .Append(",\"need\":").Append(need)
+                .Append(",\"level\":").Append(ch.Level)
+                .Append(",\"itemSlots\":").Append(itemSlots)
+                .Append(",\"slots\":[");
+            var first = true;
+            foreach (var inv in fuelInvs)
+            {
+                if (inv == Entity.Null || !Core.EntityManager.Exists(inv))
+                    continue;
+                if (!sgm.TryGetBuffer<InventoryBuffer>(inv, out var buf))
+                    continue;
+                bufLen = buf.Length;
+                unlocked = UnlockedFuelSlotCount(heart, inv, buf.Length);
+                try
+                {
+                    if (sgm.TryGetBuffer<InventoryInstanceElement>(heart, out var iieBuffer))
+                    {
+                        foreach (var iie in iieBuffer)
+                        {
+                            if (iie.ExternalInventoryEntity.GetEntityOnServer().Equals(inv) && iie.Slots > iieSlots)
+                                iieSlots = iie.Slots;
+                        }
+                    }
+                }
+                catch { }
+                for (var i = 0; i < buf.Length; i++)
+                {
+                    if (!first) sb.Append(',');
+                    first = false;
+                    var slot = buf[i];
+                    sb.Append("{\"i\":").Append(i)
+                        .Append(",\"guid\":").Append(slot.ItemType.GuidHash)
+                        .Append(",\"n\":").Append(slot.Amount)
+                        .Append(",\"cap\":").Append(slot.MaxAmountOverride)
+                        .Append('}');
+                }
+            }
+            sb.Append("],\"bufLen\":").Append(bufLen)
+                .Append(",\"unlocked\":").Append(unlocked)
+                .Append(",\"iieSlots\":").Append(iieSlots)
+                .Append('}');
             return sb.ToString();
         }
 
@@ -547,7 +631,7 @@ namespace Satisvampory.Services
                             var destRejected = false;
                             if (apply && skip.Length == 0 && take > 0 && !sticky)
                             {
-                                got = MoveIntoDest(destPlot, inventory, park, type, take, out destRejected);
+                                got = MoveIntoDest(destPlot, inventory, park, type, take, destMode, out destRejected);
                                 moved += got;
                                 if (got > 0)
                                 {
@@ -2849,7 +2933,7 @@ namespace Satisvampory.Services
                             continue;
 
                         var srcBefore = sgm.GetInventoryItemCount(inventory, type);
-                        var moved = MoveIntoDest(destPlot, inventory, destInvs, type, take, out var destRejected);
+                        var moved = MoveIntoDest(destPlot, inventory, destInvs, type, take, destMode, out var destRejected);
                         var srcAfter = sgm.GetInventoryItemCount(inventory, type);
 
                         if (moved > 0 && srcAfter >= srcBefore)
@@ -2914,7 +2998,7 @@ namespace Satisvampory.Services
             return movedAll;
         }
 
-        static int MoveIntoDest(int destPlot, Entity source, List<Entity> destInvs, PrefabGUID type, int amount, out bool destRejected)
+        static int MoveIntoDest(int destPlot, Entity source, List<Entity> destInvs, PrefabGUID type, int amount, string destMode, out bool destRejected)
         {
             destRejected = false;
             if (amount <= 0)
@@ -2923,6 +3007,25 @@ namespace Satisvampory.Services
             var moved = 0;
             var attempted = false;
             var sgm = Core.ServerGameManager;
+            if (destMode == "heartFuel")
+            {
+                foreach (var dest in destInvs)
+                {
+                    if (remaining <= 0)
+                        break;
+                    if (dest == Entity.Null || !Core.EntityManager.Exists(dest) || dest.Equals(source))
+                        continue;
+                    attempted = true;
+                    var got = Utilities.TransferItems(sgm, source, dest, type, remaining);
+                    if (got <= 0)
+                        continue;
+                    remaining -= got;
+                    moved += got;
+                }
+                if (attempted && moved == 0)
+                    destRejected = true;
+                return moved;
+            }
             var ordered = StashRouting.OrderDepositInventories(destPlot, destInvs, type, depositMaxClass);
             // Named match first. Blank-plate park dests only (never dump into "Leather").
             if (destInvs != null)
@@ -3384,42 +3487,78 @@ namespace Satisvampory.Services
 
 
         /// <summary>
-        /// Unlocked heart-fuel slot count. Locked slots (above castle-heart ItemSlots /
-        /// InventoryInstanceElement.Slots) must not receive auto-feed.
+        /// Unlocked heart-fuel slot count. Locked pads (above this heart's level) must
+        /// not receive auto-feed. Use the current-level blob: GetLevelData() with no
+        /// index is the wrong blob on L2 (empty UpgradeCosts, ItemSlots=1 while HUD
+        /// shows 2 unlocked). Never shrink below the displayed heart level.
         /// </summary>
         static int UnlockedFuelSlotCount(Entity heart, Entity fuelInv, int bufferLength)
         {
-            var unlocked = bufferLength;
+            var unlocked = 0;
+            var level = 0;
             try
             {
                 if (heart != Entity.Null && Core.EntityManager.Exists(heart) && heart.Has<CastleHeart>())
                 {
                     var ch = heart.Read<CastleHeart>();
-                    ref var levelData = ref ch.GetLevelData();
-                    if (levelData.ItemSlots > 0 && levelData.ItemSlots < unlocked)
-                        unlocked = levelData.ItemSlots;
+                    level = ch.Level;
+                    try
+                    {
+                        ref var levelData = ref ch.GetLevelData(level);
+                        if (levelData.ItemSlots > 0)
+                            unlocked = levelData.ItemSlots;
+                    }
+                    catch { }
+                    if (unlocked <= 0)
+                    {
+                        try
+                        {
+                            ref var levelData = ref ch.GetLevelData();
+                            if (levelData.ItemSlots > 0)
+                                unlocked = levelData.ItemSlots;
+                        }
+                        catch { }
+                    }
+                    if (level > 0 && unlocked < level)
+                        unlocked = level;
                 }
             }
             catch { }
 
-            try
+            if (unlocked <= 0)
             {
-                var sgm = Core.ServerGameManager;
-                if (heart != Entity.Null && sgm.TryGetBuffer<InventoryInstanceElement>(heart, out var iieBuffer))
+                try
                 {
-                    foreach (var iie in iieBuffer)
+                    var sgm = Core.ServerGameManager;
+                    if (heart != Entity.Null && sgm.TryGetBuffer<InventoryInstanceElement>(heart, out var iieBuffer))
                     {
-                        var inv = iie.ExternalInventoryEntity.GetEntityOnServer();
-                        if (inv.Equals(fuelInv) && iie.Slots > 0 && iie.Slots < unlocked)
-                            unlocked = iie.Slots;
+                        foreach (var iie in iieBuffer)
+                        {
+                            var inv = iie.ExternalInventoryEntity.GetEntityOnServer();
+                            if (inv.Equals(fuelInv) && iie.Slots > unlocked)
+                                unlocked = iie.Slots;
+                        }
                     }
                 }
+                catch { }
             }
-            catch { }
 
+            if (unlocked <= 0)
+                unlocked = bufferLength;
+            if (bufferLength > 0 && unlocked > bufferLength)
+                unlocked = bufferLength;
             if (unlocked < 0)
                 unlocked = 0;
             return unlocked;
+        }
+
+        static int HeartFuelNeed(Entity heart, List<Entity> fuelInvs)
+        {
+            var fuel = CountHeartFuel(fuelInvs, heart);
+            var need = HeartFuelTopOffNeed(heart, fuelInvs);
+            if (fuel <= 0 || need <= 0)
+                need += HeartFuelEmptySlotNeed(heart, fuelInvs);
+            return need;
         }
 
         /// <summary>
@@ -3541,11 +3680,26 @@ namespace Satisvampory.Services
                     return;
             }
 
-            var need = HeartFuelTopOffNeed(heart, fuelInvs);
-            if (fuel <= 0 || need <= 0)
-                need += HeartFuelEmptySlotNeed(heart, fuelInvs);
+            var need = HeartFuelNeed(heart, fuelInvs);
             if (need <= 0)
+            {
+                if (loggedHeartFuel.Add(destPlot + 400000))
+                {
+                    var unlocked = 0;
+                    var sgm = Core.ServerGameManager;
+                    for (var i = 0; i < fuelInvs.Count; i++)
+                    {
+                        if (sgm.TryGetBuffer<InventoryBuffer>(fuelInvs[i], out var buf))
+                        {
+                            unlocked = UnlockedFuelSlotCount(heart, fuelInvs[i], buf.Length);
+                            break;
+                        }
+                    }
+                    Core.Log.LogInfo($"[ClanTreasuryLend] destPlot={destPlot} heart fuel need=0 fuel={fuel} topOff={HeartFuelTopOffNeed(heart, fuelInvs)} empty={HeartFuelEmptySlotNeed(heart, fuelInvs)} unlocked={unlocked} feedOn={feedOn}");
+                    DestDebugLog.Miss("heart", destPlot, type, fuel, 0, "no-need unlocked=" + unlocked + " feedOn=" + feedOn);
+                }
                 return;
+            }
             if (!CanLendPull())
                 return;
             ConsumeLendPull();
@@ -3559,7 +3713,7 @@ namespace Satisvampory.Services
                 ref leftoverBlocked, ref leftoverHave, ref leftoverReserve);
             if (!fail)
             {
-                var still = HeartFuelTopOffNeed(heart, fuelInvs) + (CountHeartFuel(fuelInvs, heart) <= 0 ? HeartFuelEmptySlotNeed(heart, fuelInvs) : 0);
+                var still = HeartFuelNeed(heart, fuelInvs);
                 if (still > 0)
                     moved += PullFromSources(destPlot, fuelInvs, type, still, HeartFuelStack, clanIds, occupiedInClan, destMode,
                         occupiedSpareOnly: true, allowNamed: true, allowSamePlot: true, ledgerMoves: false, ignoreLeftoverNamed: fuelBypass, ref fail,
