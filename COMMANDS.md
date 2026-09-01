@@ -49,7 +49,7 @@ If ClanShare is **ON**, dest/source is the **clan island**. If **OFF**, standing
 | Command | Scope | What |
 | --- | --- | --- |
 | `.stash` | You; dest plot or clan | Dump inventory except hotbar into named/matching chests |
-| `.s tidy` | Plot, or clan island if `.s cs` on | Restack existing chests onto better dests (named/category first). Does not drain `s#`/`r#`, `NS`, salvage/trash. Overflow and spoils are sources only. Does not honor reserve. |
+| `.s tidy` | Plot, or clan island if `.s cs` on | Restack existing chests onto better dests (named/category first). Matching `s#`/`r#` nameplates are dests, never sources. Does not drain `NS`, salvage/trash. Overflow and spoils are sources only. Does not honor reserve. |
 | `.s ss` | You | Allow double-click sort / double-tap R to stash |
 | `.pull plank 50` | You; source plot or clan | Take items into your bags. **Does not honor reserve** |
 | `.s cr` | You | Right-click recipe craft-pull. **Honors reserve** |

@@ -12,8 +12,9 @@ namespace Satisvampory.Services
     /// Player-triggered chest restack: every dest-eligible chest is ranked with the
     /// same dest rules as .stash, then stacks move from worse chests to better ones.
     /// ClanShare ON = whole logistics island. Never drains s#/r#, NS, salvage/trash/
-    /// spoils/spawner/brazier. Overflow is a source only. Does not honor reserve
-    /// (wrong chest should empty into the named dest).
+    /// spoils/spawner/brazier. Matching s#/r# nameplates are dests only (Ghost Crystal
+    /// leaves General into Crystal Stone S1). Overflow is a source only. Does not honor
+    /// reserve (wrong chest should empty into the named dest).
     /// </summary>
     internal static class ChestTidy
     {
@@ -212,7 +213,7 @@ namespace Satisvampory.Services
 
         static bool SkipPlate(string plate)
         {
-            if (StashRouting.IsNoShareName(plate) || StashRouting.IsConveyorName(plate))
+            if (StashRouting.IsNoShareName(plate))
                 return true;
             if (string.IsNullOrEmpty(plate))
                 return false;
@@ -245,6 +246,22 @@ namespace Satisvampory.Services
                 rank.UsableSource = true;
                 rank.UsableDest = false;
                 rank.Label = StashRouting.LabelOverflow;
+                return rank;
+            }
+            if (StashRouting.IsConveyorName(plate))
+            {
+                var dep = StashRouting.RankDeposit(stash, item, ownerId, hasItem);
+                rank.UsableSource = false;
+                if (dep.Class <= 2)
+                {
+                    rank.Class = dep.Class == 2 ? 1 : 0;
+                    rank.Spec = dep.Spec;
+                    rank.UsableDest = true;
+                    rank.Seeded = dep.Seeded;
+                    rank.Label = dep.Label;
+                }
+                else
+                    rank.UsableDest = false;
                 return rank;
             }
             if (!rank.UsableDest && rank.Class >= 3)

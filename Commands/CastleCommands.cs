@@ -758,7 +758,7 @@ namespace Satisvampory.Commands
                 ctx.Reply(line);
         }
 
-        [Command(name: "tidy", usage: ".s tidy", description: "Restack chests onto better dests (named/category first). ClanShare ON: whole clan island. Overflow and spoils are sources. Does not drain s#/r#, NS, salvage, trash.")]
+        [Command(name: "tidy", usage: ".s tidy", description: "Restack chests onto better dests (named/category first). Matching s#/r# are dests, never sources. ClanShare ON: whole clan island. Overflow and spoils are sources. Does not drain NS, salvage, trash.")]
         public static void TidyChests(ChatCommandContext ctx)
         {
             if (!Core.HasInitialized)
