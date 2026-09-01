@@ -53,7 +53,7 @@ Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, 
 
 `thrones` dumps throne positions, connected players, `.s throne` picks, last rewrite (sitting/selected/from/to), last `gotothrone`, whether Request and Interactor were patched, and servant names on the last `ServantInfoEvent.Response`.
 
-`gotothrone` with `plot:N` teleports a connected player onto that plot’s throne (`name` filters the player; omit `plot` to list). `{"op":"gotothrone","name":"here"}` returns. Does not set the `.s throne` pick. Stand up first if you are sitting.
+`gotothrone` with `plot:N` unseats, teleports a connected player onto that plot’s throne, then sits it so the hunt map reloads (`name` filters the player; omit `plot` to list). `{"op":"gotothrone","name":"here"}` unseats and returns. Does not set the `.s throne` pick. `thrones` players include `sitPlot` and `interactBuffs`.
 
 `players` is the bounce gate. `selftest` includes dest-ranking assertions (`StashRouting.SelfTestDest`).
 

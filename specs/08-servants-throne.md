@@ -17,8 +17,9 @@ ClanShare ON: numbered picker listing each plot’s living servants, then **tele
 
 - Default is the castle you are sitting on / standing on.
 - `.s throne` lists plots and servant names; pick with `.s 2` (pending pick TTL **2 minutes**).
-- Picking another plot uses `TeleportUtilityServer.Teleport` (and writes `Translation` / `LastTranslation`) to that throne (save return position). Sit the throne there for Choose a Servant.
-- `.s throne here` teleports back.
+- Hunt UI loads **on sit** (the map opens from the InteractBuff). Teleporting while seated keeps the old throne bind; standing up snaps you home.
+- Picking another plot **unseats** (destroy `InteractBuff`, `StopInteractingWithObjectEvent`, clear `Interactor.Target`), then `TeleportUtilityServer.Teleport` (and `Translation` / `LastTranslation`) to that throne (save return position), then casts that throne’s interact ability so the hunt map reloads for that plot.
+- `.s throne here` unseats and teleports back.
 - Do **not** Harmony-patch `GetResponseEntries` / extra servant entries (Burst abort on sit).
 - Vanilla listing stays Burst-safe (no extra entries). ServantInfo / hunt events are retargeted at that plot’s real throne.
 - Never treat a **castle heart** as a throne (`ActiveServantMission` lives on the heart). Learn the real sit-target from `Request.Throne`, then `UseThrone` / prefab name containing `Throne`. Patch `Request.Throne` in-place. Also retarget `Interactor.Target` for that update; restore next tick. Do **not** Harmony-patch `GetResponseEntries` (Burst abort on sit).

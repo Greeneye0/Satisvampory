@@ -6,6 +6,7 @@ using ProjectM.Shared;
 using ProjectM.Shared.Systems;
 using Stunlock.Core;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -41,6 +42,7 @@ namespace Satisvampory.Services
         static string lastResponseNames = "";
         static string lastPatched = "";
         static string lastGoto = "";
+        static string lastSit = "";
 
         struct PendingPick
         {
@@ -169,10 +171,11 @@ namespace Satisvampory.Services
             {
                 selectedPlot.Remove(steam);
                 pendingPick.Remove(steam);
+                var unseatHome = TryUnseat(character);
                 if (returnPos.TryGetValue(steam, out var home) && TryTeleport(character, home, out var via))
                 {
                     returnPos.Remove(steam);
-                    return "Returned (" + via + "). Sit this castle's throne for its servants.";
+                    return "Returned (" + via + unseatHome + "). Sit this castle's throne for its servants.";
                 }
                 returnPos.Remove(steam);
                 return "Default: this castle's throne. Sit / reopen the hunt UI.";
@@ -208,12 +211,14 @@ namespace Satisvampory.Services
                 return "Default: " + Core.TerritoryService.FormatPlotLabel(plot) + " (this castle). " + who;
             }
             selectedPlot[steam] = plot;
+            var unseat = TryUnseat(character);
             if (character.Has<Translation>() && !returnPos.ContainsKey(steam))
                 returnPos[steam] = character.Read<Translation>().Value;
-            if (TryTeleportToThrone(character, throne, out var via))
-                return "Moved you to " + Core.TerritoryService.FormatPlotLabel(plot) + " (" + via + "). Sit that throne. "
-                    + who + "  .s throne here returns.";
-            return "Could not move you to " + Core.TerritoryService.FormatPlotLabel(plot) + " (" + via + "). " + who;
+            if (!TryTeleportToThrone(character, throne, out var via))
+                return "Could not move you to " + Core.TerritoryService.FormatPlotLabel(plot) + " (" + via + unseat + "). " + who;
+            Core.StartCoroutine(SitSoon(character, throne));
+            return "Unseated and moved to " + Core.TerritoryService.FormatPlotLabel(plot) + " (" + via + unseat
+                + "). Sitting that throne so the hunt map reloads. " + who + "  .s throne here returns.";
         }
 
         public static string DebugDump(int plotFilter)
@@ -228,6 +233,7 @@ namespace Satisvampory.Services
                 .Append(",\"lastPatched\":\"").Append(Esc(lastPatched)).Append('"')
                 .Append(",\"lastSkip\":\"").Append(Esc(lastSkip)).Append('"')
                 .Append(",\"lastGoto\":\"").Append(Esc(lastGoto)).Append('"')
+                .Append(",\"lastSit\":\"").Append(Esc(lastSit)).Append('"')
                 .Append(",\"lastResponseCount\":").Append(lastResponseCount)
                 .Append(",\"lastResponseNames\":\"").Append(Esc(lastResponseNames)).Append('"')
                 .Append(",\"hint\":\"{\\\"op\\\":\\\"gotothrone\\\",\\\"plot\\\":86} or name:here to return\"")
@@ -253,9 +259,14 @@ namespace Satisvampory.Services
             {
                 if (!first) sb.Append(',');
                 first = false;
+                var sitPlot = -1;
+                if (TryGetInteractTarget(p.character, out var sitTarget, out _))
+                    sitPlot = Core.TerritoryService.GetTerritoryId(sitTarget);
                 sb.Append("{\"steam\":").Append(p.steam)
                     .Append(",\"name\":\"").Append(Esc(p.name)).Append('"')
-                    .Append(",\"plot\":").Append(p.plot).Append(',');
+                    .Append(",\"plot\":").Append(p.plot)
+                    .Append(",\"sitPlot\":").Append(sitPlot)
+                    .Append(",\"interactBuffs\":").Append(CountInteractBuffs(p.character)).Append(',');
                 AppendPos(sb, p.pos, "pos").Append('}');
             }
             sb.Append("],\"thrones\":[");
@@ -273,6 +284,7 @@ namespace Satisvampory.Services
                     .Append(",\"useThrone\":").Append(kv.Value.Has<UseThrone>() ? "true" : "false")
                     .Append(",\"heart\":").Append(kv.Value.Has<CastleHeart>() ? "true" : "false")
                     .Append(",\"missions\":").Append(kv.Value.Has<ActiveServantMission>() ? "true" : "false")
+                    .Append(",\"ability\":\"").Append(Esc(InteractAbilityName(kv.Value))).Append('"')
                     .Append(',');
                 var pos = kv.Value.Has<Translation>() ? kv.Value.Read<Translation>().Value : default;
                 AppendPos(sb, pos, "pos").Append('}');
@@ -584,6 +596,209 @@ namespace Satisvampory.Services
             return true;
         }
 
+        static IEnumerator SitSoon(Entity character, Entity throne)
+        {
+            yield return null;
+            yield return null;
+            if (character == Entity.Null || !Core.EntityManager.Exists(character)
+                || throne == Entity.Null || !Core.EntityManager.Exists(throne))
+            {
+                lastSit = "gone";
+                yield break;
+            }
+            TrySitThrone(character, throne, out var via);
+            lastSit = via;
+            lastGoto += " sit=" + via;
+            DestDebugLog.Note("throne", Core.TerritoryService.GetTerritoryId(throne), 0, "sit " + via);
+        }
+
+        static string TryUnseat(Entity character)
+        {
+            if (character == Entity.Null || !Core.EntityManager.Exists(character))
+                return "";
+            var nBuff = DestroyInteractBuffs(character);
+            var stopped = "";
+            if (TryGetInteractTarget(character, out _, out var nid))
+            {
+                SpawnStopInteract(character, nid);
+                ClearInteractTarget(character);
+                stopped = " stop";
+            }
+            if (nBuff == 0 && stopped.Length == 0)
+                return " standing";
+            return " unseat buffs=" + nBuff + stopped;
+        }
+
+        static int DestroyInteractBuffs(Entity character)
+        {
+            var n = 0;
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .WithOptions(EntityQueryOptions.IncludeDisabled)
+                .AddAll(new(Il2CppType.Of<InteractBuff>(), ComponentType.AccessMode.ReadWrite));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var buff = rows[i];
+                    if (buff == Entity.Null || !Core.EntityManager.Exists(buff))
+                        continue;
+                    var mine = false;
+                    if (buff.Has<Buff>() && buff.Read<Buff>().Target == character)
+                        mine = true;
+                    if (buff.Has<EntityOwner>() && buff.Read<EntityOwner>().Owner == character)
+                        mine = true;
+                    if (!mine)
+                        continue;
+                    DestroyUtility.Destroy(Core.EntityManager, buff, DestroyDebugReason.TryRemoveBuff);
+                    n++;
+                }
+            }
+            catch (Exception e)
+            {
+                Core.LogException(e);
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
+            return n;
+        }
+
+        static int CountInteractBuffs(Entity character)
+        {
+            if (character == Entity.Null || !Core.EntityManager.Exists(character))
+                return 0;
+            var n = 0;
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .WithOptions(EntityQueryOptions.IncludeDisabled)
+                .AddAll(new(Il2CppType.Of<InteractBuff>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var buff = rows[i];
+                    if (buff == Entity.Null || !Core.EntityManager.Exists(buff))
+                        continue;
+                    if (buff.Has<Buff>() && buff.Read<Buff>().Target == character)
+                        n++;
+                    else if (buff.Has<EntityOwner>() && buff.Read<EntityOwner>().Owner == character)
+                        n++;
+                }
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
+            return n;
+        }
+
+        static void SpawnStopInteract(Entity character, NetworkId target)
+        {
+            if (!character.Has<PlayerCharacter>())
+                return;
+            var user = character.Read<PlayerCharacter>().UserEntity;
+            var entity = Core.EntityManager.CreateEntity();
+            entity.Add<FromCharacter>();
+            entity.Add<StopInteractingWithObjectEvent>();
+            entity.Write(new FromCharacter { User = user, Character = character });
+            entity.Write(new StopInteractingWithObjectEvent { Target = target });
+        }
+
+        static bool TrySitThrone(Entity character, Entity throne, out string via)
+        {
+            via = "no-sit";
+            if (character == Entity.Null || throne == Entity.Null
+                || !Core.EntityManager.Exists(character) || !Core.EntityManager.Exists(throne))
+                return false;
+            if (!character.Has<PlayerCharacter>() || !throne.Has<NetworkId>())
+                return false;
+            var ability = InteractAbility(throne);
+            if (ability.GuidHash == 0)
+            {
+                via = "no-interact-ability";
+                return false;
+            }
+            try
+            {
+                var userEnt = character.Read<PlayerCharacter>().UserEntity;
+                var user = userEnt.Read<User>();
+                var from = new FromCharacter { User = userEnt, Character = character };
+                var ev = new CastAbilityServerDebugEvent
+                {
+                    AbilityGroup = ability,
+                    Who = throne.Read<NetworkId>()
+                };
+                Core.DebugEventsSystem.CastAbilityServerDebugEvent(user.Index, ref ev, ref from);
+                via = "cast " + ability.LookupName();
+                lastSit = via;
+                return true;
+            }
+            catch (Exception e)
+            {
+                Core.LogException(e);
+                via = "cast-fail";
+                lastSit = via;
+                return false;
+            }
+        }
+
+        static PrefabGUID InteractAbility(Entity throne)
+        {
+            if (throne == Entity.Null || !Core.EntityManager.Exists(throne) || !throne.Has<InteractAbilityBuffer>())
+                return default;
+            var buf = throne.ReadBuffer<InteractAbilityBuffer>();
+            if (buf.Length == 0)
+                return default;
+            return buf[0].Ability;
+        }
+
+        static string InteractAbilityName(Entity throne)
+        {
+            var ability = InteractAbility(throne);
+            return ability.GuidHash == 0 ? "" : ability.LookupName();
+        }
+
+        static unsafe bool TryGetInteractTarget(Entity character, out Entity target, out NetworkId nid)
+        {
+            target = Entity.Null;
+            nid = default;
+            if (character == Entity.Null || !Core.EntityManager.Exists(character) || !character.Has<Interactor>())
+                return false;
+            var type = new ComponentType(Il2CppType.Of<Interactor>());
+            var raw = Core.EntityManager.GetComponentDataRawRW(character, type.TypeIndex);
+            if (raw == null)
+                return false;
+            var ptr = new IntPtr(raw);
+            nid = Marshal.PtrToStructure<NetworkId>(IntPtr.Add(ptr, 8));
+            target = Marshal.PtrToStructure<Entity>(IntPtr.Add(ptr, 20));
+            return target != Entity.Null && Core.EntityManager.Exists(target);
+        }
+
+        static unsafe void ClearInteractTarget(Entity character)
+        {
+            if (character == Entity.Null || !Core.EntityManager.Exists(character) || !character.Has<Interactor>())
+                return;
+            var type = new ComponentType(Il2CppType.Of<Interactor>());
+            var raw = Core.EntityManager.GetComponentDataRawRW(character, type.TypeIndex);
+            if (raw == null)
+                return;
+            var ptr = new IntPtr(raw);
+            Marshal.StructureToPtr(default(NetworkId), IntPtr.Add(ptr, 8), false);
+            Marshal.StructureToPtr(Entity.Null, IntPtr.Add(ptr, 20), false);
+        }
+
         static bool TryTeleportToThrone(Entity character, Entity throne)
             => TryTeleportToThrone(character, throne, out _);
 
@@ -653,24 +868,36 @@ namespace Satisvampory.Services
         static string FinishGoto(Entity character, ulong steam, string playerName, int toPlot, string extra, float3 dest, bool saveReturn, bool clearReturn)
         {
             var fromPlot = Core.TerritoryService.GetStandingTerritoryId(character);
+            var sitPlot = -1;
+            Entity sitTarget;
+            if (TryGetInteractTarget(character, out sitTarget, out _))
+                sitPlot = Core.TerritoryService.GetTerritoryId(sitTarget);
+            var unseat = TryUnseat(character);
             var from = character.Has<Translation>() ? character.Read<Translation>().Value : default;
             if (saveReturn && character.Has<Translation>() && !returnPos.ContainsKey(steam))
                 returnPos[steam] = from;
             var moved = TryTeleport(character, dest, out var via);
             if (clearReturn)
                 returnPos.Remove(steam);
+            Entity sitThrone = Entity.Null;
+            if (toPlot >= 0)
+                sitThrone = FindThrone(toPlot);
+            if (moved && sitThrone != Entity.Null)
+                Core.StartCoroutine(SitSoon(character, sitThrone));
             var afterPlot = Core.TerritoryService.GetStandingTerritoryId(character);
             var after = character.Has<Translation>() ? character.Read<Translation>().Value : default;
-            lastGoto = (moved ? "ok " : "fail ") + playerName + " " + fromPlot + "->" + toPlot + " " + via;
+            lastGoto = (moved ? "ok " : "fail ") + playerName + " " + fromPlot + "->" + toPlot + " sitWas=" + sitPlot + " " + via + unseat;
             DestDebugLog.Note("throne", toPlot, 0, lastGoto + " " + extra);
             var sb = new StringBuilder();
             sb.Append("{\"moved\":").Append(moved ? "true" : "false")
                 .Append(",\"player\":\"").Append(Esc(playerName)).Append('"')
                 .Append(",\"steam\":").Append(steam)
                 .Append(",\"fromPlot\":").Append(fromPlot)
+                .Append(",\"sitWas\":").Append(sitPlot)
                 .Append(",\"toPlot\":").Append(toPlot)
                 .Append(",\"afterPlot\":").Append(afterPlot)
-                .Append(",\"via\":\"").Append(Esc(via)).Append('"')
+                .Append(",\"via\":\"").Append(Esc(via + unseat)).Append('"')
+                .Append(",\"sitPending\":").Append(moved && sitThrone != Entity.Null ? "true" : "false")
                 .Append(",\"extra\":\"").Append(Esc(extra)).Append('"')
                 .Append(",\"savedReturn\":").Append(returnPos.ContainsKey(steam) ? "true" : "false")
                 .Append(',');
