@@ -156,10 +156,11 @@ namespace Satisvampory.Services
         const int UnoccupiedReturnSeconds = 90;
         // Global safety so 30 occupied plots cannot dump thousands of stacks in one 5s tick.
         // Per-plot cap + round-robin so the first HashSet plot does not starve everyone else.
-        // 120 = 30 plots * 4 pulls: every occupied plot gets a turn in one 5s tick.
-        // Kit (6 GUIDs) plus covering may still take more than one tick to finish stocking.
+        // 120 global / 12 per plot: one occupied castle can fill missing mats (local 0)
+        // instead of spending the whole tick topping 200-stack kit types.
         const int MaxLendPullsPerTick = 120;
-        const int MaxLendPullsPerPlot = 4;
+        const int MaxLendPullsPerPlot = 12;
+        static readonly Dictionary<int, int> coverCursor = new();
         static readonly Dictionary<int, DateTime> leftAt = new();
         static int lendPullsLeft;
         static int plotPullsLeft;
@@ -2100,33 +2101,63 @@ namespace Satisvampory.Services
             }
         }
 
-        static List<KeyValuePair<int, int>> OrderedCoveringTargets(Dictionary<int, int> targets)
+        static List<KeyValuePair<int, int>> OrderedCoveringTargets(int destPlot, Dictionary<int, int> targets, bool stockOnPlot)
         {
             var result = new List<KeyValuePair<int, int>>();
             if (targets == null || targets.Count == 0)
                 return result;
-            // New-chest priority: build mats before fibre/hide/paintings.
-            // Blood Essence is a smithy/alchemy build cost; do not bury it behind guid-sort.
             var kitOrder = new[] { PlankHash, StoneBrickHash, GemDustHash, CopperIngotHash, IronIngotHash, StoneHash, BloodEssenceHash };
-            var seen = new HashSet<int>();
-            for (var i = 0; i < kitOrder.Length; i++)
-            {
-                var g = kitOrder[i];
-                if (!targets.TryGetValue(g, out var n) || n <= 0)
-                    continue;
-                seen.Add(g);
-                result.Add(new KeyValuePair<int, int>(g, n));
-            }
-            var rest = new List<KeyValuePair<int, int>>();
+            var kit = new HashSet<int>(kitOrder);
+            var kitZero = new List<KeyValuePair<int, int>>();
+            var kitMore = new List<KeyValuePair<int, int>>();
+            var otherZero = new List<KeyValuePair<int, int>>();
+            var otherMore = new List<KeyValuePair<int, int>>();
             foreach (var kv in targets)
             {
-                if (seen.Contains(kv.Key) || kv.Value <= 0)
+                if (kv.Key == 0 || kv.Value <= 0)
                     continue;
-                rest.Add(kv);
+                var local = 0;
+                if (stockOnPlot && destPlot >= 0)
+                    local = CountVanillaOnPlot(destPlot, new PrefabGUID(kv.Key));
+                var zero = local <= 0;
+                if (kit.Contains(kv.Key))
+                {
+                    if (zero) kitZero.Add(kv);
+                    else if (local < kv.Value) kitMore.Add(kv);
+                }
+                else if (zero) otherZero.Add(kv);
+                else if (local < kv.Value) otherMore.Add(kv);
             }
-            rest.Sort((a, b) => a.Key.CompareTo(b.Key));
-            result.AddRange(rest);
+            kitZero.Sort((a, b) => Array.IndexOf(kitOrder, a.Key).CompareTo(Array.IndexOf(kitOrder, b.Key)));
+            kitMore.Sort((a, b) => Array.IndexOf(kitOrder, a.Key).CompareTo(Array.IndexOf(kitOrder, b.Key)));
+            var newCastle = destPlot >= 0 && !PlotHasAllKitTypes(destPlot);
+            if (newCastle)
+            {
+                result.AddRange(kitZero);
+                result.AddRange(kitMore);
+                RotateAppend(result, otherZero, destPlot);
+                RotateAppend(result, otherMore, destPlot);
+            }
+            else
+            {
+                result.AddRange(kitZero);
+                RotateAppend(result, otherZero, destPlot);
+                result.AddRange(kitMore);
+                RotateAppend(result, otherMore, destPlot);
+            }
             return result;
+        }
+
+        static void RotateAppend(List<KeyValuePair<int, int>> dest, List<KeyValuePair<int, int>> rest, int plot)
+        {
+            if (rest.Count == 0)
+                return;
+            rest.Sort((a, b) => a.Key.CompareTo(b.Key));
+            coverCursor.TryGetValue(plot, out var cursor);
+            var start = ((cursor % rest.Count) + rest.Count) % rest.Count;
+            coverCursor[plot] = cursor + 1;
+            for (var i = 0; i < rest.Count; i++)
+                dest.Add(rest[(start + i) % rest.Count]);
         }
 
         static IEnumerator LendTargetAmounts(int destPlot, List<Entity> destInvs, Dictionary<int, int> targets,
@@ -2136,7 +2167,7 @@ namespace Satisvampory.Services
                 yield break;
 
             var destFull = false;
-            foreach (var kv in OrderedCoveringTargets(targets))
+            foreach (var kv in OrderedCoveringTargets(destPlot, targets, stockOnPlot))
             {
                 if (!CanLendPull())
                     yield break;
