@@ -1,0 +1,262 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>Satisvampory</AssemblyName>
+    <Product>Satisvampory</Product>
+    <Description>Server QOL for V Rising: logistics, named dest, ClanShare, treasury lend, and ground scoop.</Description>
+    <Version>1.0.20</Version>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>Satisvampory</RootNamespace>
+    <AssemblyVersion>1.0.20.0</AssemblyVersion>
+    <FileVersion>1.0.20.0</FileVersion>
+    <BepInExPluginGuid>Satisvampory</BepInExPluginGuid>
+    <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="Patches.cs" />
+    <Compile Remove="Preview.cs" />
+    <Compile Remove="ClientWorld.cs" />
+    <Compile Remove="_DumpInterop.cs" />
+    <Compile Remove="_DumpInteropApp\**" />
+    <Compile Remove="Services\ClanTreasuryHudPush.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Remove="Data\prefabNames.json" />
+    <None Remove="LICENSE" />
+    <None Remove="Localization\English.json" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data\PrefabNames.json" />
+    <EmbeddedResource Include="LICENSE" />
+    <EmbeddedResource Include="Localization\English.json" />
+  </ItemGroup>
+  <ItemGroup>
+	  <PackageReference Include="BepInEx.PluginInfoProps" Version="2.*" />
+	  <PackageReference Include="VRising.VampireCommandFramework" Version="0.10.*" />
+	  <!-- <PackageReference Include="HookDOTS.API" Version="1.*" /> -->
+  </ItemGroup>
+  <ItemGroup>
+      <PackageReference Include="System.Text.Json" Version="6.0.11" />
+  </ItemGroup>
+
+
+	<ItemGroup>
+		<Reference Include="HookDOTS.API" HintPath="HookDOTS.API.dll" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Reference Include="Backtrace.Unity" HintPath="C:\VRisingServer\BepInEx\interop\Backtrace.Unity.dll" />
+		<Reference Include="com.rlabrecque.steamworks.net" HintPath="C:\VRisingServer\BepInEx\interop\com.rlabrecque.steamworks.net.dll" />
+		<Reference Include="com.stunlock.network.eos" HintPath="C:\VRisingServer\BepInEx\interop\com.stunlock.network.eos.dll" />
+		<Reference Include="com.stunlock.platform" HintPath="C:\VRisingServer\BepInEx\interop\com.stunlock.platform.dll" />
+		<Reference Include="com.stunlock.platform.pc" HintPath="C:\VRisingServer\BepInEx\interop\com.stunlock.platform.pc.dll" />
+		<Reference Include="Il2CppMono.Security" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppMono.Security.dll" />
+		<Reference Include="Il2Cppmscorlib" HintPath="C:\VRisingServer\BepInEx\interop\Il2Cppmscorlib.dll" />
+		<Reference Include="Il2CppSystem.Configuration" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Configuration.dll" />
+		<Reference Include="Il2CppSystem.Core" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Core.dll" />
+		<Reference Include="Il2CppSystem.Data" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Data.dll" />
+		<Reference Include="Il2CppSystem" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.dll" />
+		<Reference Include="Il2CppSystem.Drawing" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Drawing.dll" />
+		<Reference Include="Il2CppSystem.Net.Http" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Net.Http.dll" />
+		<Reference Include="Il2CppSystem.Numerics" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Numerics.dll" />
+		<Reference Include="Il2CppSystem.Runtime.CompilerServices.Unsafe" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Runtime.CompilerServices.Unsafe.dll" />
+		<Reference Include="Il2CppSystem.Runtime.Serialization" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Runtime.Serialization.dll" />
+		<Reference Include="Il2CppSystem.Xml" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Xml.dll" />
+		<Reference Include="Il2CppSystem.Xml.Linq" HintPath="C:\VRisingServer\BepInEx\interop\Il2CppSystem.Xml.Linq.dll" />
+		<Reference Include="Lidgren.Network" HintPath="C:\VRisingServer\BepInEx\interop\Lidgren.Network.dll" />
+		<Reference Include="MagicaCloth" HintPath="C:\VRisingServer\BepInEx\interop\MagicaCloth.dll" />
+		<Reference Include="Malee.ReorderableList" HintPath="C:\VRisingServer\BepInEx\interop\Malee.ReorderableList.dll" />
+		<Reference Include="Newtonsoft.Json" HintPath="C:\VRisingServer\BepInEx\interop\Newtonsoft.Json.dll" />
+		<Reference Include="ProjectM.Behaviours" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Behaviours.dll" />
+		<Reference Include="ProjectM.Camera" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Camera.dll" />
+		<Reference Include="ProjectM.CastleBuilding.Systems" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.CastleBuilding.Systems.dll" />
+		<Reference Include="ProjectM.CastleDyeSystem" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.CastleDyeSystem.dll" />
+		<Reference Include="ProjectM.CodeGeneration" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.CodeGeneration.dll" />
+		<Reference Include="ProjectM.Conversion" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Conversion.dll" />
+		<Reference Include="ProjectM" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.dll" />
+		<Reference Include="ProjectM.DualsensePC" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.DualsensePC.dll" />
+		<Reference Include="ProjectM.Editor.SampleHandler" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Editor.SampleHandler.dll" />
+		<Reference Include="ProjectM.Gameplay.Scripting" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Gameplay.Scripting.dll" />
+		<Reference Include="ProjectM.Gameplay.Systems" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Gameplay.Systems.dll" />
+		<Reference Include="ProjectM.GeneratedNetCode" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.GeneratedNetCode.dll" />
+		<Reference Include="ProjectM.Haptics" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Haptics.dll" />
+		<Reference Include="ProjectM.HUD" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.HUD.dll" />
+		<Reference Include="ProjectM.Hybrid.Performance" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Hybrid.Performance.dll" />
+		<Reference Include="ProjectM.LiveBuildPerformanceTests.GlowingVampire" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.LiveBuildPerformanceTests.GlowingVampire.dll" />
+		<Reference Include="ProjectM.LiveBuildPerformanceTests.Utilities" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.LiveBuildPerformanceTests.Utilities.dll" />
+		<Reference Include="ProjectM.Misc.Systems" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Misc.Systems.dll" />
+		<Reference Include="ProjectM.Pathfinding" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Pathfinding.dll" />
+		<Reference Include="ProjectM.PerformanceTests.Editor" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.PerformanceTests.Editor.dll" />
+		<Reference Include="ProjectM.Presentation.Systems" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Presentation.Systems.dll" />
+		<Reference Include="ProjectM.Roofs" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Roofs.dll" />
+		<Reference Include="ProjectM.ScriptableSystems" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.ScriptableSystems.dll" />
+		<Reference Include="ProjectM.Shared.ColorData" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Shared.ColorData.dll" />
+		<Reference Include="ProjectM.Shared" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Shared.dll" />
+		<Reference Include="ProjectM.Shared.Systems" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Shared.Systems.dll" />
+		<Reference Include="ProjectM.Steam" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Steam.dll" />
+		<Reference Include="ProjectM.Terrain" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Terrain.dll" />
+		<Reference Include="ProjectM.VFXRendererUtility" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.VFXRendererUtility.dll" />
+		<Reference Include="ProjectM.Wind.Shared" HintPath="C:\VRisingServer\BepInEx\interop\ProjectM.Wind.Shared.dll" />
+		<Reference Include="RCONServerLib" HintPath="C:\VRisingServer\BepInEx\interop\RCONServerLib.dll" />
+		<Reference Include="RootMotion" HintPath="C:\VRisingServer\BepInEx\interop\RootMotion.dll" />
+		<Reference Include="RTLTMPro" HintPath="C:\VRisingServer\BepInEx\interop\RTLTMPro.dll" />
+		<Reference Include="Rukhanka.DebugDrawer" HintPath="C:\VRisingServer\BepInEx\interop\Rukhanka.DebugDrawer.dll" />
+		<Reference Include="Rukhanka.Hybrid" HintPath="C:\VRisingServer\BepInEx\interop\Rukhanka.Hybrid.dll" />
+		<Reference Include="Rukhanka.Runtime" HintPath="C:\VRisingServer\BepInEx\interop\Rukhanka.Runtime.dll" />
+		<Reference Include="Rukhanka.Toolbox" HintPath="C:\VRisingServer\BepInEx\interop\Rukhanka.Toolbox.dll" />
+		<Reference Include="Sequencer" HintPath="C:\VRisingServer\BepInEx\interop\Sequencer.dll" />
+		<Reference Include="Stunlock.Animation.StunCloth.Runtime" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Animation.StunCloth.Runtime.dll" />
+		<Reference Include="Stunlock.Console" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Console.dll" />
+		<Reference Include="Stunlock.ContentTests" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.ContentTests.dll" />
+		<Reference Include="Stunlock.Core.Animation" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Core.Animation.dll" />
+		<Reference Include="Stunlock.Core" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Core.dll" />
+		<Reference Include="Stunlock.Fmod" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Fmod.dll" />
+		<Reference Include="Stunlock.Localization" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Localization.dll" />
+		<Reference Include="Stunlock.Metrics" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Metrics.dll" />
+		<Reference Include="Stunlock.Network" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Network.dll" />
+		<Reference Include="Stunlock.Network.EosSdk" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Network.EosSdk.dll" />
+		<Reference Include="Stunlock.Network.Lidgren" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Network.Lidgren.dll" />
+		<Reference Include="Stunlock.Network.Steam" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Network.Steam.dll" />
+		<Reference Include="Stunlock.Tools" HintPath="C:\VRisingServer\BepInEx\interop\Stunlock.Tools.dll" />
+		<Reference Include="Unity.Burst" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Burst.dll" />
+		<Reference Include="Unity.Burst.Unsafe" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Burst.Unsafe.dll" />
+		<Reference Include="Unity.Collections" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Collections.dll" />
+		<Reference Include="Unity.Collections.LowLevel.ILSupport" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Collections.LowLevel.ILSupport.dll" />
+		<Reference Include="Unity.Deformations" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Deformations.dll" />
+		<Reference Include="Unity.Entities" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Entities.dll" />
+		<Reference Include="Unity.Entities.Graphics" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Entities.Graphics.dll" />
+		<Reference Include="Unity.Entities.Hybrid" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Entities.Hybrid.dll" />
+		<Reference Include="Unity.Entities.Hybrid.HybridComponents" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Entities.Hybrid.HybridComponents.dll" />
+		<Reference Include="Unity.InputSystem" HintPath="C:\VRisingServer\BepInEx\interop\Unity.InputSystem.dll" />
+		<Reference Include="Unity.InputSystem.ForUI" HintPath="C:\VRisingServer\BepInEx\interop\Unity.InputSystem.ForUI.dll" />
+		<Reference Include="Unity.Mathematics" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Mathematics.dll" />
+		<Reference Include="Unity.Mathematics.Extensions" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Mathematics.Extensions.dll" />
+		<Reference Include="Unity.Mathematics.Extensions.Hybrid" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Mathematics.Extensions.Hybrid.dll" />
+		<Reference Include="Unity.MemoryProfiler" HintPath="C:\VRisingServer\BepInEx\interop\Unity.MemoryProfiler.dll" />
+		<Reference Include="Unity.Physics" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Physics.dll" />
+		<Reference Include="Unity.Physics.Hybrid" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Physics.Hybrid.dll" />
+		<Reference Include="Unity.Profiling.Core" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Profiling.Core.dll" />
+		<Reference Include="Unity.RenderPipelines.Core.Runtime" HintPath="C:\VRisingServer\BepInEx\interop\Unity.RenderPipelines.Core.Runtime.dll" />
+		<Reference Include="Unity.RenderPipelines.HighDefinition.Config.Runtime" HintPath="C:\VRisingServer\BepInEx\interop\Unity.RenderPipelines.HighDefinition.Config.Runtime.dll" />
+		<Reference Include="Unity.RenderPipelines.HighDefinition.Runtime" HintPath="C:\VRisingServer\BepInEx\interop\Unity.RenderPipelines.HighDefinition.Runtime.dll" />
+		<Reference Include="Unity.Scenes" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Scenes.dll" />
+		<Reference Include="Unity.Serialization" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Serialization.dll" />
+		<Reference Include="Unity.TextMeshPro" HintPath="C:\VRisingServer\BepInEx\interop\Unity.TextMeshPro.dll" />
+		<Reference Include="Unity.Transforms" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Transforms.dll" />
+		<Reference Include="Unity.Transforms.Hybrid" HintPath="C:\VRisingServer\BepInEx\interop\Unity.Transforms.Hybrid.dll" />
+		<Reference Include="Unity.VisualEffectGraph.Runtime" HintPath="C:\VRisingServer\BepInEx\interop\Unity.VisualEffectGraph.Runtime.dll" />
+		<Reference Include="UnityEngine.AccessibilityModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.AccessibilityModule.dll" />
+		<Reference Include="UnityEngine.AIModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.AIModule.dll" />
+		<Reference Include="UnityEngine.AndroidJNIModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.AndroidJNIModule.dll" />
+		<Reference Include="UnityEngine.AnimationModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.AnimationModule.dll" />
+		<Reference Include="UnityEngine.AssetBundleModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.AssetBundleModule.dll" />
+		<Reference Include="UnityEngine.AudioModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.AudioModule.dll" />
+		<Reference Include="UnityEngine.ClothModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.ClothModule.dll" />
+		<Reference Include="UnityEngine.ClusterInputModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.ClusterInputModule.dll" />
+		<Reference Include="UnityEngine.ClusterRendererModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.ClusterRendererModule.dll" />
+		<Reference Include="UnityEngine.ContentLoadModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.ContentLoadModule.dll" />
+		<Reference Include="UnityEngine.CoreModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.CoreModule.dll" />
+		<Reference Include="UnityEngine.CrashReportingModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.CrashReportingModule.dll" />
+		<Reference Include="UnityEngine.DirectorModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.DirectorModule.dll" />
+		<Reference Include="UnityEngine" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.dll" />
+		<Reference Include="UnityEngine.DSPGraphModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.DSPGraphModule.dll" />
+		<Reference Include="UnityEngine.GameCenterModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.GameCenterModule.dll" />
+		<Reference Include="UnityEngine.GIModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.GIModule.dll" />
+		<Reference Include="UnityEngine.GridModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.GridModule.dll" />
+		<Reference Include="UnityEngine.HotReloadModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.HotReloadModule.dll" />
+		<Reference Include="UnityEngine.ImageConversionModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.ImageConversionModule.dll" />
+		<Reference Include="UnityEngine.IMGUIModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.IMGUIModule.dll" />
+		<Reference Include="UnityEngine.InputLegacyModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.InputLegacyModule.dll" />
+		<Reference Include="UnityEngine.InputModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.InputModule.dll" />
+		<Reference Include="UnityEngine.JSONSerializeModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.JSONSerializeModule.dll" />
+		<Reference Include="UnityEngine.LocalizationModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.LocalizationModule.dll" />
+		<Reference Include="UnityEngine.ParticleSystemModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.ParticleSystemModule.dll" />
+		<Reference Include="UnityEngine.PerformanceReportingModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.PerformanceReportingModule.dll" />
+		<Reference Include="UnityEngine.Physics2DModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.Physics2DModule.dll" />
+		<Reference Include="UnityEngine.PhysicsModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.PhysicsModule.dll" />
+		<Reference Include="UnityEngine.ProfilerModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.ProfilerModule.dll" />
+		<Reference Include="UnityEngine.PropertiesModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.PropertiesModule.dll" />
+		<Reference Include="UnityEngine.RuntimeInitializeOnLoadManagerInitializerModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.RuntimeInitializeOnLoadManagerInitializerModule.dll" />
+		<Reference Include="UnityEngine.ScreenCaptureModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.ScreenCaptureModule.dll" />
+		<Reference Include="UnityEngine.SharedInternalsModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.SharedInternalsModule.dll" />
+		<Reference Include="UnityEngine.SpriteMaskModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.SpriteMaskModule.dll" />
+		<Reference Include="UnityEngine.SpriteShapeModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.SpriteShapeModule.dll" />
+		<Reference Include="UnityEngine.StreamingModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.StreamingModule.dll" />
+		<Reference Include="UnityEngine.SubstanceModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.SubstanceModule.dll" />
+		<Reference Include="UnityEngine.SubsystemsModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.SubsystemsModule.dll" />
+		<Reference Include="UnityEngine.TerrainModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.TerrainModule.dll" />
+		<Reference Include="UnityEngine.TerrainPhysicsModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.TerrainPhysicsModule.dll" />
+		<Reference Include="UnityEngine.TextCoreFontEngineModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.TextCoreFontEngineModule.dll" />
+		<Reference Include="UnityEngine.TextCoreTextEngineModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.TextCoreTextEngineModule.dll" />
+		<Reference Include="UnityEngine.TextRenderingModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.TextRenderingModule.dll" />
+		<Reference Include="UnityEngine.TilemapModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.TilemapModule.dll" />
+		<Reference Include="UnityEngine.TLSModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.TLSModule.dll" />
+		<Reference Include="UnityEngine.UI" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UI.dll" />
+		<Reference Include="UnityEngine.UIElementsModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UIElementsModule.dll" />
+		<Reference Include="UnityEngine.UIModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UIModule.dll" />
+		<Reference Include="UnityEngine.UmbraModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UmbraModule.dll" />
+		<Reference Include="UnityEngine.UnityAnalyticsCommonModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityAnalyticsCommonModule.dll" />
+		<Reference Include="UnityEngine.UnityAnalyticsModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityAnalyticsModule.dll" />
+		<Reference Include="UnityEngine.UnityConnectModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityConnectModule.dll" />
+		<Reference Include="UnityEngine.UnityCurlModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityCurlModule.dll" />
+		<Reference Include="UnityEngine.UnityTestProtocolModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityTestProtocolModule.dll" />
+		<Reference Include="UnityEngine.UnityWebRequestAssetBundleModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityWebRequestAssetBundleModule.dll" />
+		<Reference Include="UnityEngine.UnityWebRequestAudioModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityWebRequestAudioModule.dll" />
+		<Reference Include="UnityEngine.UnityWebRequestModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityWebRequestModule.dll" />
+		<Reference Include="UnityEngine.UnityWebRequestTextureModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityWebRequestTextureModule.dll" />
+		<Reference Include="UnityEngine.UnityWebRequestWWWModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.UnityWebRequestWWWModule.dll" />
+		<Reference Include="UnityEngine.VehiclesModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.VehiclesModule.dll" />
+		<Reference Include="UnityEngine.VFXModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.VFXModule.dll" />
+		<Reference Include="UnityEngine.VideoModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.VideoModule.dll" />
+		<Reference Include="UnityEngine.VirtualTexturingModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.VirtualTexturingModule.dll" />
+		<Reference Include="UnityEngine.VRModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.VRModule.dll" />
+		<Reference Include="UnityEngine.WindModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.WindModule.dll" />
+		<Reference Include="UnityEngine.XRModule" HintPath="C:\VRisingServer\BepInEx\interop\UnityEngine.XRModule.dll" />
+		<Reference Include="VivoxUnity" HintPath="C:\VRisingServer\BepInEx\interop\VivoxUnity.dll" />
+		<Reference Include="__Generated" HintPath="C:\VRisingServer\BepInEx\interop\__Generated.dll" />
+	</ItemGroup>
+	<ItemGroup>
+		<Reference Include="0Harmony" HintPath="C:\VRisingServer\BepInEx\core\0Harmony.dll" />
+		<Reference Include="AsmResolver" HintPath="C:\VRisingServer\BepInEx\core\AsmResolver.dll" />
+		<Reference Include="AsmResolver.DotNet" HintPath="C:\VRisingServer\BepInEx\core\AsmResolver.DotNet.dll" />
+		<Reference Include="AsmResolver.PE" HintPath="C:\VRisingServer\BepInEx\core\AsmResolver.PE.dll" />
+		<Reference Include="AsmResolver.PE.File" HintPath="C:\VRisingServer\BepInEx\core\AsmResolver.PE.File.dll" />
+		<Reference Include="AssetRipper.CIL" HintPath="C:\VRisingServer\BepInEx\core\AssetRipper.CIL.dll" />
+		<Reference Include="AssetRipper.Primitives" HintPath="C:\VRisingServer\BepInEx\core\AssetRipper.Primitives.dll" />
+		<Reference Include="BepInEx.Core" HintPath="C:\VRisingServer\BepInEx\core\BepInEx.Core.dll" />
+		<Reference Include="BepInEx.Preloader.Core" HintPath="C:\VRisingServer\BepInEx\core\BepInEx.Preloader.Core.dll" />
+		<Reference Include="BepInEx.Unity.Common" HintPath="C:\VRisingServer\BepInEx\core\BepInEx.Unity.Common.dll" />
+		<Reference Include="BepInEx.Unity.IL2CPP" HintPath="C:\VRisingServer\BepInEx\core\BepInEx.Unity.IL2CPP.dll" />
+		<Reference Include="Cpp2IL.Core" HintPath="C:\VRisingServer\BepInEx\core\Cpp2IL.Core.dll" />
+		<Reference Include="Disarm" HintPath="C:\VRisingServer\BepInEx\core\Disarm.dll" />
+		<Reference Include="Gee.External.Capstone" HintPath="C:\VRisingServer\BepInEx\core\Gee.External.Capstone.dll" />
+		<Reference Include="Iced" HintPath="C:\VRisingServer\BepInEx\core\Iced.dll" />
+		<Reference Include="Il2CppInterop.Common" HintPath="C:\VRisingServer\BepInEx\core\Il2CppInterop.Common.dll" />
+		<Reference Include="Il2CppInterop.Generator" HintPath="C:\VRisingServer\BepInEx\core\Il2CppInterop.Generator.dll" />
+		<Reference Include="Il2CppInterop.HarmonySupport" HintPath="C:\VRisingServer\BepInEx\core\Il2CppInterop.HarmonySupport.dll" />
+		<Reference Include="Il2CppInterop.Runtime" HintPath="C:\VRisingServer\BepInEx\core\Il2CppInterop.Runtime.dll" />
+		<Reference Include="LibCpp2IL" HintPath="C:\VRisingServer\BepInEx\core\LibCpp2IL.dll" />
+		<Reference Include="Mono.Cecil" HintPath="C:\VRisingServer\BepInEx\core\Mono.Cecil.dll" />
+		<Reference Include="Mono.Cecil.Mdb" HintPath="C:\VRisingServer\BepInEx\core\Mono.Cecil.Mdb.dll" />
+		<Reference Include="Mono.Cecil.Pdb" HintPath="C:\VRisingServer\BepInEx\core\Mono.Cecil.Pdb.dll" />
+		<Reference Include="Mono.Cecil.Rocks" HintPath="C:\VRisingServer\BepInEx\core\Mono.Cecil.Rocks.dll" />
+		<Reference Include="MonoMod.Backports" HintPath="C:\VRisingServer\BepInEx\core\MonoMod.Backports.dll" />
+		<Reference Include="MonoMod.ILHelpers" HintPath="C:\VRisingServer\BepInEx\core\MonoMod.ILHelpers.dll" />
+		<Reference Include="MonoMod.RuntimeDetour" HintPath="C:\VRisingServer\BepInEx\core\MonoMod.RuntimeDetour.dll" />
+		<Reference Include="MonoMod.Utils" HintPath="C:\VRisingServer\BepInEx\core\MonoMod.Utils.dll" />
+		<Reference Include="SemanticVersioning" HintPath="C:\VRisingServer\BepInEx\core\SemanticVersioning.dll" />
+		<Reference Include="StableNameDotNet" HintPath="C:\VRisingServer\BepInEx\core\StableNameDotNet.dll" />
+		<Reference Include="WasmDisassembler" HintPath="C:\VRisingServer\BepInEx\core\WasmDisassembler.dll" />
+	</ItemGroup>
+  <PropertyGroup>
+	  <NoWarn>NU1605</NoWarn>
+  </PropertyGroup>
+	<Target Name="PostBuild" AfterTargets="PostBuildEvent">
+		<!-- Do not copy over a live Satisvampory.dll while the server is running. Stage .next only. -->
+	</Target>
+</Project>
+
+
+

@@ -1,0 +1,712 @@
+using ProjectM;
+using ProjectM.Behaviours;
+using ProjectM.CastleBuilding;
+using ProjectM.Network;
+using ProjectM.Scripting;
+using ProjectM.Shared;
+using Stunlock.Core;
+using System;
+using System.Collections.Generic;
+using Unity.Entities;
+using UnityEngine;
+
+namespace Satisvampory.Services
+{
+    internal class PullService
+    {
+        public static void PullItem(Entity character, PrefabGUID item, int quantity)
+        {
+            var user = character.Read<PlayerCharacter>().UserEntity.Read<User>();
+            if (Core.PlayerSettings.IsPullEnabled())
+            {
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Pulling is globally disabled.");
+                return;
+            }
+
+            if(!Core.GameDataSystem.ItemHashLookupMap.TryGetValue(item, out var itemData))
+            {
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Invalid item specified.");
+                return;
+            }
+
+            var downed = new PrefabGUID(-1992158531);
+            if (BuffUtility.TryGetBuff(Core.EntityManager, character, downed, out var buff))
+            {
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Unable to pull while downed!");
+                return;
+            }
+
+            var health = character.Read<Health>();
+            if (health.IsDead)
+            {
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Unable to pull when dead!");
+                return;
+            }
+
+            var entityManager = Core.EntityManager;
+            var serverGameManager = Core.ServerGameManager;
+            var territoryIndex = Core.TerritoryService.GetStandingTerritoryId(character);
+            var csOn = Core.TerritoryService.IsClanShareOn(user);
+
+            if (!InventoryUtilities.TryGetInventoryEntity(entityManager, character, out Entity inventory))
+            {
+                Core.Log.LogWarning($"No inventory found for character {character}.");
+                return;
+            }
+            var batform = new PrefabGUID(1205505492);
+            if (BuffUtility.TryGetBuff(Core.EntityManager, character, batform , out var _))
+            {
+                Utilities.SendSystemMessageToClient(entityManager, user, "Cannot pull items while in batform.");
+                return;
+            }
+
+            if (!csOn)
+            {
+                if (territoryIndex == -1)
+                {
+                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Unable to pull outside territories!");
+                    return;
+                }
+                var castleHeartEntity = Core.TerritoryService.GetCastleHeart(territoryIndex);
+                if (castleHeartEntity == Entity.Null)
+                {
+                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, "There is no heart on this territory!");
+                    return;
+                }
+
+                if (!Core.ServerGameManager.IsAllies(castleHeartEntity, character))
+                {
+                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, "You aren't allies with the heart on this territory!");
+                    return;
+                }
+
+                var castleHeart = castleHeartEntity.Read<CastleHeart>();
+                if (castleHeart.ActiveEvent >= CastleHeartEvent.Attacked)
+                {
+                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, $"Unable to pull while castle is {castleHeart.ActiveEvent.ToString()}");
+                    return;
+                }
+            }
+            else if (Core.TerritoryService.GetLogisticsTerritoryIdsForCharacter(character).Count == 0)
+            {
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Unable to pull — no clan castles available (ClanShare on).");
+                return;
+            }
+
+            // ItemData.Entity is the prefab, not "this stack is a unique item". Unique
+            // items have a live ItemEntity on the inventory slot. Using Entity!=Null here
+            // made TransferItemEntities copy a whole GBE stack while counting 1 moved.
+            var silentPull = Core.PlayerSettings.IsSilentPullEnabled(user.PlatformId);
+
+            var quantityRemaining = quantity;
+            var foundStash = false;
+            var playerInventorySlot = 0;
+            var inventoryFull = false;
+            var seenInv = new HashSet<Entity>();
+            // 1.6.1.34: never NS; unnamed/treasury, then named non-conveyor, then s#/r# last.
+            // .pull still ignores leftover (no GetPullReserve here).
+            for (var pass = 0; pass < 3 && quantityRemaining > 0 && !inventoryFull; pass++)
+            {
+            foreach (var stash in Core.Stash.GetAllAlliedStashesOnTerritory(character))
+            {
+                if (quantityRemaining <= 0) break;
+                if (stash.Has<Refinementstation>()) continue;
+                var sourcePass = StashRouting.SourcePass(stash);
+                if (sourcePass < 0 || sourcePass != pass) continue;
+                if (!serverGameManager.TryGetBuffer<AttachedBuffer>(stash, out var buffer))
+                    continue;
+
+                foundStash = true;
+
+                foreach (var attachedBuffer in buffer)
+                {
+                    var attachedEntity = attachedBuffer.Entity;
+                    if (!attachedEntity.Has<PrefabGUID>()) continue;
+                    if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab)) continue;
+                    if (!seenInv.Add(attachedEntity)) continue;
+
+                    var stashItemCount = serverGameManager.GetInventoryItemCount(attachedEntity, item);
+
+                    if (stashItemCount <= 0) continue;
+
+                    var transferAmount = Mathf.Min(stashItemCount, quantityRemaining);
+                    var slotIsEntity = InventorySlotIsEntityItem(serverGameManager, attachedEntity, item);
+
+                    if (slotIsEntity)
+                    {
+                        if (Utilities.TransferItemEntities(attachedEntity, inventory, item, transferAmount, ref playerInventorySlot, out transferAmount))
+                        {
+                            inventoryFull = true;
+                            break;
+                        }
+                    }
+                    else
+                    {
+                        transferAmount = Utilities.TransferItems(serverGameManager, attachedEntity, inventory, item, transferAmount);
+                    }
+                    if (transferAmount <= 0)
+                    {
+                        if (inventoryFull)
+                            break;
+                        continue;
+                    }
+                    if (!silentPull)
+                        Utilities.SendSystemMessageToClient(entityManager, user, $"<color=white>{transferAmount}</color>x <color=green>{item.PrefabName()}</color> fetched from <color=#FFC0CB>{stash.EntityName()}</color>");
+                    quantityRemaining -= transferAmount;
+                    if (quantityRemaining <= 0 || inventoryFull)
+                        break;
+                }
+            }
+            }
+
+            if (!foundStash)
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Unable to pull as no available stashes found in your current territory!");
+            else if (quantityRemaining <= 0)
+                Utilities.SendSystemMessageToClient(entityManager, user, $"Pulled {quantity}x {item.PrefabName()} from containers.");
+            else
+                Utilities.SendSystemMessageToClient(entityManager, user, $"Was able to only pull {quantity - quantityRemaining}x out of desired {quantity}x {item.PrefabName()} from containers.");
+
+            if (inventoryFull)
+                Utilities.SendSystemMessageToClient(entityManager, user, "Inventory is full, unable to pull more items.");
+
+            // Remaining total after the Pulled/partial line. SilentPull only suppresses
+            // per-chest lines; the Pulled/partial summary still shows, so remaining does too.
+            if (foundStash)
+            {
+                var remaining = CountAlliedStores(character, item);
+                Utilities.SendSystemMessageToClient(entityManager, user, $"Remaining in stores: {remaining}");
+            }
+
+        }
+
+        static bool InventorySlotIsEntityItem(ServerGameManager sgm, Entity inventory, PrefabGUID item)
+        {
+            if (!sgm.TryGetBuffer<InventoryBuffer>(inventory, out var buf))
+                return false;
+            for (var i = 0; i < buf.Length; i++)
+            {
+                if (!buf[i].ItemType.Equals(item))
+                    continue;
+                var ent = buf[i].ItemEntity.GetEntityOnServer();
+                if (!ent.Equals(Entity.Null) && Core.EntityManager.Exists(ent))
+                    return true;
+            }
+            return false;
+        }
+
+        internal static int CountAlliedStores(Entity character, PrefabGUID item)
+        {
+            var n = 0;
+            var sgm = Core.ServerGameManager;
+            foreach (var stash in Core.Stash.GetAllAlliedStashesOnTerritory(character))
+            {
+                if (stash.Has<Refinementstation>()) continue;
+                if (StashRouting.IsNoShare(stash)) continue;
+                if (!sgm.TryGetBuffer<AttachedBuffer>(stash, out var buffer))
+                    continue;
+                foreach (var attachedBuffer in buffer)
+                {
+                    var attachedEntity = attachedBuffer.Entity;
+                    if (!attachedEntity.Has<PrefabGUID>()) continue;
+                    if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab)) continue;
+                    n += sgm.GetInventoryItemCount(attachedEntity, item);
+                }
+            }
+            return n;
+        }
+
+        /// <summary>
+        /// Per-chest leftover floor of leftoverOwnerId (standing castle owner).
+        /// Does not subtract leftover from CountAlliedStores total. Not a global minus.
+        /// </summary>
+        internal static int CountAlliedTakeable(Entity character, PrefabGUID item, ulong leftoverOwnerId)
+        {
+            var n = 0;
+            var reserve = Core.PlayerSettings.GetPullReserve(leftoverOwnerId, item);
+            var sgm = Core.ServerGameManager;
+            foreach (var stash in Core.Stash.GetAllAlliedStashesOnTerritory(character))
+            {
+                if (stash.Has<Refinementstation>()) continue;
+                if (StashRouting.IsNoShare(stash)) continue;
+                if (!sgm.TryGetBuffer<AttachedBuffer>(stash, out var buffer))
+                    continue;
+                foreach (var attachedBuffer in buffer)
+                {
+                    var attachedEntity = attachedBuffer.Entity;
+                    if (!attachedEntity.Has<PrefabGUID>()) continue;
+                    if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab)) continue;
+                    var have = sgm.GetInventoryItemCount(attachedEntity, item);
+                    if (have <= 0) continue;
+                    var avail = have - reserve;
+                    if (avail > 0)
+                        n += avail;
+                }
+            }
+            return n;
+        }
+
+        public static void HandleRecipePull(Entity character, Entity workstation, PrefabGUID recipe)
+        {
+            var user = character.Read<PlayerCharacter>().UserEntity.Read<User>();
+            var entityManager = Core.EntityManager;
+            if (!InventoryUtilities.TryGetInventoryEntity(entityManager, character, out Entity inventory))
+            {
+                Core.Log.LogWarning($"No inventory found for character {character}.");
+                return;
+            }
+
+            var serverGameManager = Core.ServerGameManager;
+            var workstationInventory = Entity.Null;
+            if (serverGameManager.TryGetBuffer<AttachedBuffer>(workstation, out var workStationBuffer))
+            {
+                foreach (var attachedBuffer in workStationBuffer)
+                {
+                    var attachedEntity = attachedBuffer.Entity;
+                    if (!attachedEntity.Has<PrefabGUID>()) continue;
+                    if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab)) continue;
+
+                    workstationInventory = attachedEntity;
+                    break;
+                }
+            }
+
+            // Determine the multiple of the recipe we currently have then we will try to fetch up to one more recipe's worth of materials
+            var currentRecipeMultiple = -1;
+            var castleWorkstation = workstation.Read<CastleWorkstation>();
+            var recipeReduction = castleWorkstation.WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor) ? 0.75 : 1;
+            var recipeEntity = Core.PrefabCollectionSystem._PrefabGuidToEntityMap[recipe];
+            var requirements = recipeEntity.ReadBuffer<RecipeRequirementBuffer>();
+            foreach (var requirement in requirements)
+            {
+                var currentAmount = serverGameManager.GetInventoryItemCount(inventory, requirement.Guid);
+                if (!workstationInventory.Equals(Entity.Null))
+                    currentAmount += serverGameManager.GetInventoryItemCount(workstationInventory, requirement.Guid);
+                var requiredAmount = (int)Math.Round(requirement.Amount * recipeReduction, MidpointRounding.ToPositiveInfinity);
+
+                var itemRecipeMultiple = currentAmount / requiredAmount;
+                if (currentRecipeMultiple < 0)
+                    currentRecipeMultiple = itemRecipeMultiple;
+                else
+                    currentRecipeMultiple = Mathf.Min(currentRecipeMultiple, itemRecipeMultiple);
+            }
+
+            var recipeName = recipeEntity.Read<PrefabGUID>().LookupName();
+            var recipeOutputBuffer = recipeEntity.ReadBuffer<RecipeOutputBuffer>();
+            if (recipeOutputBuffer.Length > 0)
+            {
+                var recipeOutput = recipeOutputBuffer[0];
+                recipeName = recipeOutput.Guid.PrefabName();
+            }
+
+            var fetchedForAnother = true;
+            var fetchedMaterials = false;
+            var desiredRecipeMultiple = currentRecipeMultiple + 1;
+            var reserve = Core.PlayerSettings.GetPullReserve(user.PlatformId);
+            var silentPull = Core.PlayerSettings.IsSilentPullEnabled(user.PlatformId);
+            foreach (var requirement in requirements)
+            {
+                RetrieveRequirement(character, workstation, user, entityManager, ref serverGameManager, recipeName, reserve, silentPull, inventory,
+                    workstationInventory, ref fetchedForAnother, ref fetchedMaterials, requirement.Guid, requirement.Amount, desiredRecipeMultiple,
+                    recipeReduction, "crafting");
+            }
+            if (!fetchedMaterials)
+            {
+                Utilities.SendSystemMessageToClient(entityManager, user, $"Couldn't find any materials for crafting additional <color=yellow>{recipeName}</color>!");
+            }
+            Utilities.SendSystemMessageToClient(entityManager, user, $"Have enough materials for crafting <color=white>{(fetchedForAnother ? desiredRecipeMultiple : currentRecipeMultiple)}</color>x <color=yellow>{recipeName}</color>.");
+        }
+
+        public static void HandleRepairPull(Entity character, PrefabGUID recipe, float repairNeeded, PrefabGUID repairing)
+        {
+            var user = character.Read<PlayerCharacter>().UserEntity.Read<User>();
+            var entityManager = Core.EntityManager;
+
+            if (recipe == PrefabGUID.Empty)
+            {
+                Utilities.SendSystemMessageToClient(entityManager, user, $"{repairing.PrefabName()} has no repair recipe.");
+                return;
+            }
+
+            // check if the user has the mats in their inventory already
+            var desiredRecipeMultiple = 1;
+            var recipeEntity = Core.PrefabCollectionSystem._PrefabGuidToEntityMap[recipe];
+            if (!recipeEntity.Has<ItemRepairBuffer>())
+            {
+                Utilities.SendSystemMessageToClient(entityManager, user, $"{repairing.PrefabName()} has an invalid repair recipe.");
+                return;
+            }
+
+            if (!InventoryUtilities.TryGetInventoryEntity(entityManager, character, out Entity inventory))
+            {
+                Core.Log.LogWarning($"No inventory found for character {character}.");
+                return;
+            }
+
+            var missingRequirement = false;
+            var serverGameManager = Core.ServerGameManager;
+            var requirements = recipeEntity.ReadBuffer<ItemRepairBuffer>();
+            foreach (var requirement in requirements)
+            {
+                if (!HasRequirement(character, Entity.Null, user, entityManager, ref serverGameManager, inventory, Entity.Null, requirement.Guid, requirement.Stacks, desiredRecipeMultiple, 1))
+                {
+                    missingRequirement = true;
+                    break;
+                }
+            }
+            
+            if (!missingRequirement) return;
+
+            if (Core.PlayerSettings.IsPullEnabled())
+            {
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Pulling is globally disabled.");
+                return;
+            }
+
+            var downed = new PrefabGUID(-1992158531);
+            if (BuffUtility.TryGetBuff(Core.EntityManager, character, downed, out var buff))
+            {
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Unable to pull while downed!");
+                return;
+            }
+
+            var health = character.Read<Health>();
+            if (health.IsDead)
+            {
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Unable to pull when dead!");
+                return;
+            }
+
+            var territoryIndex = Core.TerritoryService.GetStandingTerritoryId(character);
+            var csOn = Core.TerritoryService.IsClanShareOn(user);
+
+            if (!csOn)
+            {
+                if (territoryIndex == -1)
+                {
+                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Unable to pull outside territories!");
+                    return;
+                }
+
+                var castleHeartEntity = Core.TerritoryService.GetCastleHeart(territoryIndex);
+                if (castleHeartEntity == Entity.Null)
+                {
+                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, "There is no heart on this territory!");
+                    return;
+                }
+
+                if (!Core.ServerGameManager.IsAllies(castleHeartEntity, character))
+                {
+                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, "You aren't allies with the heart on this territory!");
+                    return;
+                }
+
+                var castleHeart = castleHeartEntity.Read<CastleHeart>();
+                if (castleHeart.ActiveEvent >= CastleHeartEvent.Attacked)
+                {
+                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, $"Unable to pull while castle is {castleHeart.ActiveEvent.ToString()}");
+                    return;
+                }
+            }
+            else if (Core.TerritoryService.GetLogisticsTerritoryIdsForCharacter(character).Count == 0)
+            {
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Unable to pull — no clan castles available (ClanShare on).");
+                return;
+            }
+
+            // Determine the multiple of the recipe we currently have then we will try to fetch up to one more recipe's worth of materials
+            var recipeName = recipeEntity.Read<PrefabGUID>().LookupName();
+
+            var recipeOutputBuffer = recipeEntity.ReadBuffer<RecipeOutputBuffer>();
+            if (recipeOutputBuffer.Length > 0)
+            {
+                var recipeOutput = recipeOutputBuffer[0];
+                recipeName = recipeOutput.Guid.PrefabName();
+            }
+
+            var fetchedForAnother = true;
+            var fetchedMaterials = false;
+            var reserve = Core.PlayerSettings.GetPullReserve(user.PlatformId);
+            var silentPull = Core.PlayerSettings.IsSilentPullEnabled(user.PlatformId);
+
+            foreach (var requirement in requirements)
+            {
+                int repairAmount = (int)Math.Ceiling(requirement.Stacks * (1 - repairNeeded));
+                RetrieveRequirement(character, Entity.Null, user, entityManager, ref serverGameManager, recipeName, reserve, silentPull, inventory,
+                    Entity.Null, ref fetchedForAnother, ref fetchedMaterials, requirement.Guid, repairAmount, desiredRecipeMultiple,
+                    1, "repairing", excludeTreasuryRoom: true);
+            }
+        }
+        public static void HandleForgePull(Entity character, Entity workstation, Entity item)
+        {
+            var user = character.Read<PlayerCharacter>().UserEntity.Read<User>();
+            var entityManager = Core.EntityManager;
+            if (!InventoryUtilities.TryGetInventoryEntity(entityManager, character, out Entity inventory))
+            {
+                Core.Log.LogWarning($"No inventory found for character {character}.");
+                return;
+            }
+
+            var serverGameManager = Core.ServerGameManager;
+            var workstationInventory = Entity.Null;
+            if (serverGameManager.TryGetBuffer<AttachedBuffer>(workstation, out var workStationBuffer))
+            {
+                foreach (var attachedBuffer in workStationBuffer)
+                {
+                    var attachedEntity = attachedBuffer.Entity;
+                    if (!attachedEntity.Has<PrefabGUID>()) continue;
+                    if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab)) continue;
+
+                    workstationInventory = attachedEntity;
+                    break;
+                }
+            }
+
+            // Determine the multiple of the recipe we currently have then we will try to fetch up to one more recipe's worth of materials
+            var currentRecipeMultiple = -1;
+            var castleWorkstation = workstation.Read<CastleWorkstation>();
+            var recipeReduction = castleWorkstation.WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor) ? 0.75f : 1f;
+            var requirements = item.ReadBuffer<ShatteredItemRepairCost>();
+            foreach (var requirement in requirements)
+            {
+                var currentAmount = serverGameManager.GetInventoryItemCount(inventory, requirement.ItemId);
+                if (!workstationInventory.Equals(Entity.Null))
+                    currentAmount += serverGameManager.GetInventoryItemCount(workstationInventory, requirement.ItemId);
+                var requiredAmount = (int)Math.Round(requirement.Amount * recipeReduction, MidpointRounding.ToPositiveInfinity);
+
+                var itemRecipeMultiple = currentAmount / requiredAmount;
+                if (currentRecipeMultiple < 0)
+                    currentRecipeMultiple = itemRecipeMultiple;
+                else
+                    currentRecipeMultiple = Mathf.Min(currentRecipeMultiple, itemRecipeMultiple);
+            }
+
+            var desiredRecipeMultiple = currentRecipeMultiple + 1;
+
+            var fetchedForAnother = true;
+            var fetchedMaterials = false;
+            var recipeName = item.Read<PrefabGUID>().PrefabName();
+            var reserve = Core.PlayerSettings.GetPullReserve(user.PlatformId);
+            var silentPull = Core.PlayerSettings.IsSilentPullEnabled(user.PlatformId);
+            foreach (var requirement in requirements)
+            {
+                RetrieveRequirement(character, workstation, user, entityManager, ref serverGameManager, recipeName, reserve, silentPull, inventory,
+                    workstationInventory, ref fetchedForAnother, ref fetchedMaterials, requirement.ItemId, requirement.Amount, desiredRecipeMultiple, recipeReduction, "forging");
+            }
+            if (!fetchedMaterials)
+            {
+                Utilities.SendSystemMessageToClient(entityManager, user, $"Couldn't find any materials for forging additional <color=yellow>{recipeName}</color>!");
+            }
+            Utilities.SendSystemMessageToClient(entityManager, user, $"Have enough materials for forging <color=white>{(fetchedForAnother ? desiredRecipeMultiple : currentRecipeMultiple)}</color>x <color=yellow>{recipeName}</color>.");
+        }
+
+        public static void HandleForgeUpgradePull(Entity character, Entity workstation, Entity item)
+        {
+            var user = character.Read<PlayerCharacter>().UserEntity.Read<User>();
+            var entityManager = Core.EntityManager;
+            if (!InventoryUtilities.TryGetInventoryEntity(entityManager, character, out Entity inventory))
+            {
+                Core.Log.LogWarning($"No inventory found for character {character}.");
+                return;
+            }
+
+            var serverGameManager = Core.ServerGameManager;
+            var workstationInventory = Entity.Null;
+            if (serverGameManager.TryGetBuffer<AttachedBuffer>(workstation, out var workStationBuffer))
+            {
+                foreach (var attachedBuffer in workStationBuffer)
+                {
+                    var attachedEntity = attachedBuffer.Entity;
+                    if (!attachedEntity.Has<PrefabGUID>()) continue;
+                    if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab)) continue;
+
+                    workstationInventory = attachedEntity;
+                    break;
+                }
+            }
+
+            // Determine the multiple of the recipe we currently have then we will try to fetch up to one more recipe's worth of materials
+            var requirements = item.ReadBuffer<UpgradeableLegendaryItemTiers>();
+            var upgradeableLegendaryItem = item.Read<UpgradeableLegendaryItem>();
+            var requirement = requirements[upgradeableLegendaryItem.NextTier];
+            var currentRecipeMultiple = serverGameManager.GetInventoryItemCount(inventory, requirement.TierPrefab);
+            if (!workstationInventory.Equals(Entity.Null))
+                currentRecipeMultiple += serverGameManager.GetInventoryItemCount(workstationInventory, requirement.TierPrefab);
+
+            var fetchedForAnother = true;
+            var fetchedMaterials = false;
+            var desiredRecipeMultiple = currentRecipeMultiple + 1;
+            var recipeName = item.Read<PrefabGUID>().PrefabName();
+            var reserve = Core.PlayerSettings.GetPullReserve(user.PlatformId);
+            var silentPull = Core.PlayerSettings.IsSilentPullEnabled(user.PlatformId);
+            RetrieveRequirement(character, workstation, user, entityManager, ref serverGameManager, recipeName, reserve, silentPull, inventory,
+                        workstationInventory, ref fetchedForAnother, ref fetchedMaterials, requirement.TierPrefab, 1, desiredRecipeMultiple, 1, "upgrading");
+
+            if (!fetchedMaterials)
+            {
+                Utilities.SendSystemMessageToClient(entityManager, user, $"Couldn't find any materials for upgrading additional <color=yellow>{recipeName}</color>!");
+            }
+            Utilities.SendSystemMessageToClient(entityManager, user, $"Have enough materials for upgrading <color=white>{(fetchedForAnother ? desiredRecipeMultiple : currentRecipeMultiple)}</color>x <color=yellow>{recipeName}</color>.");
+        }
+
+
+
+        static bool HasRequirement(Entity character, Entity workstation, User user, EntityManager entityManager, ref ServerGameManager serverGameManager,
+                                   Entity inventory, Entity workstationInventory, PrefabGUID requiredItem, int requiredAmount, int desiredRecipeMultiple, double recipeReduction)
+        {
+            var currentAmount = serverGameManager.GetInventoryItemCount(inventory, requiredItem);
+            if (!workstationInventory.Equals(Entity.Null))
+                currentAmount += serverGameManager.GetInventoryItemCount(workstationInventory, requiredItem);
+            requiredAmount = desiredRecipeMultiple * (int)Math.Round(requiredAmount * recipeReduction, MidpointRounding.ToPositiveInfinity);
+            return currentAmount >= requiredAmount;
+        }
+   
+
+        static void RetrieveRequirement(Entity character, Entity workstation, User user, EntityManager entityManager, ref ServerGameManager serverGameManager,
+                                        string recipeName, int reserve, bool silentPull, Entity inventory, Entity workstationInventory, ref bool fetchedForAnother,
+                                        ref bool fetchedMaterials, PrefabGUID requiredItem, int requiredAmount, int desiredRecipeMultiple, double recipeReduction,
+                                        string fetchMessage = "", bool excludeTreasuryRoom = false)
+        {
+            reserve = Core.PlayerSettings.GetPullReserve(user.PlatformId, requiredItem);
+            var currentAmount = serverGameManager.GetInventoryItemCount(inventory, requiredItem);
+            if (!workstationInventory.Equals(Entity.Null))
+                currentAmount += serverGameManager.GetInventoryItemCount(workstationInventory, requiredItem);
+            requiredAmount = desiredRecipeMultiple * (int)Math.Round(requiredAmount * recipeReduction, MidpointRounding.ToPositiveInfinity);
+            if (currentAmount >= requiredAmount) return;
+
+            if (!fetchedMaterials)
+            {
+                fetchedMaterials = true;
+                if (!silentPull)
+                    Utilities.SendSystemMessageToClient(entityManager, user, $"Fetching materials for {fetchMessage} <color=yellow>{recipeName}</color>...");
+            }
+
+            requiredAmount -= currentAmount;
+
+            var destinationSlot = 0;
+            var isInventoryFull = false;
+            var seenInv = new HashSet<Entity>();
+
+            // Same three-pass as .pull: never NS; unnamed/treasury, named, then s#/r#. Leftover still honored below.
+            for (var pass = 0; pass < 3 && requiredAmount > 0 && !isInventoryFull; pass++)
+            {
+            foreach (var stash in Core.Stash.GetAllAlliedStashesOnTerritory(character))
+            {
+                if (isInventoryFull) break;
+                if (requiredAmount <= 0) break;
+                if (stash.Has<Refinementstation>()) continue;
+                if (stash.Equals(workstation)) continue;
+                var sourcePass = StashRouting.SourcePass(stash);
+                if (sourcePass < 0 || sourcePass != pass) continue;
+                if (!serverGameManager.TryGetBuffer<AttachedBuffer>(stash, out var buffer))
+                    continue;
+
+                // Don't pull resources that are being actively used from a spawner station
+                if (stash.Has<UnitSpawnerstation>())
+                {
+                    var spawnerStation = stash.Read<UnitSpawnerstation>();
+                    if (spawnerStation.IsWorking)
+                    {
+                        Entity recipeEntity = Core.PrefabCollectionSystem._PrefabGuidToEntityMap[spawnerStation.CurrentRecipeGuid];
+                        var requirements = recipeEntity.ReadBuffer<RecipeRequirementBuffer>();
+                        var foundItem = false;
+                        foreach (var requirement in requirements)
+                        {
+                            if (requirement.Guid.Equals(requiredItem))
+                            {
+                                foundItem = true;
+                                break;
+                            }
+                        }
+                        if (foundItem)
+                            continue;
+                    }
+                }
+
+                // Don't pull resources that are being actively used from a refinement station
+                if (stash.Has<Refinementstation>())
+                {
+                    var refinementStation = stash.Read<Refinementstation>();
+                    if (refinementStation.IsWorking)
+                    {
+                        Entity recipeEntity = Core.PrefabCollectionSystem._PrefabGuidToEntityMap[refinementStation.CurrentRecipeGuid];
+                        var requirements = recipeEntity.ReadBuffer<RecipeRequirementBuffer>();
+                        var foundItem = false;
+                        foreach (var requirement in requirements)
+                        {
+                            if (requirement.Guid.Equals(requiredItem))
+                            {
+                                foundItem = true;
+                                break;
+                            }
+                        }
+                        if (foundItem)
+                            continue;
+                    }
+                }
+
+
+                var isTreasuryRoom = false;
+                if (excludeTreasuryRoom && stash.Has<CastleRoomConnection>())
+                {
+                    var room = stash.Read<CastleRoomConnection>().RoomEntity.GetEntityOnServer();
+                    if (room != Entity.Null && Utilities.IsRoomOfType(room, CastleFloorTypes.Treasury))
+                        isTreasuryRoom = true;
+                }
+
+                foreach (var attachedBuffer in buffer)
+                {
+                    var attachedEntity = attachedBuffer.Entity;
+                    if (!attachedEntity.Has<PrefabGUID>()) continue;
+                    if (!attachedEntity.Read<PrefabGUID>().Equals(StashService.ExternalInventoryPrefab)) continue;
+                    if (!seenInv.Add(attachedEntity)) continue;
+
+                    var stashItemCount = serverGameManager.GetInventoryItemCount(attachedEntity, requiredItem);
+
+                    if (reserve > 0) stashItemCount -= reserve;
+
+                    if (stashItemCount <= 0) continue;
+
+                    var transferAmount = Mathf.Min(stashItemCount, requiredAmount);
+                    var slotIsEntity = InventorySlotIsEntityItem(serverGameManager, attachedEntity, requiredItem);
+
+                    if (!excludeTreasuryRoom || !isTreasuryRoom)
+                    {
+                        if (slotIsEntity)
+                        {
+                            if (Utilities.TransferItemEntities(attachedEntity, inventory, requiredItem, transferAmount, ref destinationSlot, out transferAmount))
+                            {
+                                isInventoryFull = true;
+                                break;
+                            }
+                        }
+                        else
+                        {
+                            transferAmount = Utilities.TransferItems(serverGameManager, attachedEntity, inventory, requiredItem, transferAmount);
+                        }
+                    }
+                    if (transferAmount <= 0)
+                        continue;
+
+                    if (!silentPull)
+                    {
+                        if (excludeTreasuryRoom && isTreasuryRoom)
+                            Utilities.SendSystemMessageToClient(entityManager, user, $"<color=white>{transferAmount}</color>x <color=green>{requiredItem.PrefabName()}</color> used from <color=#FFC0CB>{stash.EntityName()}</color> in the Treasury Room");
+                        else
+                            Utilities.SendSystemMessageToClient(entityManager, user, $"<color=white>{transferAmount}</color>x <color=green>{requiredItem.PrefabName()}</color> fetched from <color=#FFC0CB>{stash.EntityName()}</color>");
+
+                    }
+                    requiredAmount -= transferAmount;
+                    if (requiredAmount <= 0)
+                        break;
+                }
+            }
+            }
+
+            if (requiredAmount > 0)
+            {
+                fetchedForAnother = false;
+                Utilities.SendSystemMessageToClient(entityManager, user, $"Couldn't find <color=white>{requiredAmount}</color>x <color=green>{requiredItem.PrefabName()}</color>");
+            }
+        }
+    }
+}
