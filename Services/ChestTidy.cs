@@ -10,13 +10,10 @@ using Unity.Entities;
 namespace Satisvampory.Services
 {
     /// <summary>
-    /// Player-triggered chest restack: every dest-eligible chest is ranked with the
-    /// same dest rules as .stash, then stacks move from worse chests to better ones.
-    /// ClanShare ON = whole logistics island. Never drains s#/r#, NS, salvage/trash/
-    /// spoils/spawner/brazier. Matching s#/r# nameplates are dests only (Ghost Crystal
-    /// leaves General into Crystal Stone S1). Overflow is a source only. Castle heart
-    /// and treasury-floor chests are dests, never sources. Does not honor reserve
-    /// (wrong chest should empty into the named dest).
+    /// Player-triggered chest restack: dest rank matches .stash / RR (seeded matching
+    /// s# first, then exact, then category). Never drains s#/r#, NS, skip-quotes (''),
+    /// salvage/trash/spoils/spawner/brazier, or castle hearts. Treasury-floor chests
+    /// are normal sources. Overflow is a source only. Does not honor reserve.
     /// </summary>
     internal static class ChestTidy
     {
@@ -217,7 +214,7 @@ namespace Satisvampory.Services
 
         static bool SkipPlate(string plate)
         {
-            if (StashRouting.IsNoShareName(plate))
+            if (StashRouting.IsNoShareName(plate) || StashRouting.IsSkipQuotesName(plate))
                 return true;
             if (string.IsNullOrEmpty(plate))
                 return false;
@@ -236,9 +233,9 @@ namespace Satisvampory.Services
 
         static StashRouting.SortRank TidyRank(Entity stash, PrefabGUID item, ulong ownerId, bool hasItem)
         {
-            var rank = StashRouting.RankSort(stash, item, ownerId, hasItem);
             var plate = StashRouting.RawName(stash);
-            if (SkipPlate(plate))
+            var rank = new StashRouting.SortRank { Class = 9, Label = StashRouting.SkipLabel(plate), Seeded = hasItem };
+            if (SkipPlate(plate) || stash.Has<CastleHeart>())
             {
                 rank.UsableDest = false;
                 rank.UsableSource = false;
@@ -252,31 +249,14 @@ namespace Satisvampory.Services
                 rank.Label = StashRouting.LabelOverflow;
                 return rank;
             }
-            if (stash.Has<CastleHeart>() || StashRouting.IsTreasury(stash))
-            {
-                rank.UsableSource = false;
-                if (!rank.UsableDest && rank.Class >= 3)
-                    rank.UsableDest = true;
-                return rank;
-            }
-            if (StashRouting.IsConveyorName(plate))
-            {
-                var dep = StashRouting.RankDeposit(stash, item, ownerId, hasItem);
-                rank.UsableSource = false;
-                if (dep.Class <= 2)
-                {
-                    rank.Class = dep.Class == 2 ? 1 : 0;
-                    rank.Spec = dep.Spec;
-                    rank.UsableDest = true;
-                    rank.Seeded = dep.Seeded;
-                    rank.Label = dep.Label;
-                }
-                else
-                    rank.UsableDest = false;
-                return rank;
-            }
-            if (!rank.UsableDest && rank.Class >= 3)
-                rank.UsableDest = true;
+            var dep = StashRouting.RankDeposit(stash, item, ownerId, hasItem);
+            rank.Class = dep.Class;
+            rank.Spec = dep.Spec;
+            rank.Seeded = dep.Seeded;
+            rank.Label = dep.Label;
+            var belt = StashRouting.IsConveyorName(plate);
+            rank.UsableSource = !belt;
+            rank.UsableDest = belt ? dep.Class <= 2 : dep.Class <= 4;
             return rank;
         }
 
