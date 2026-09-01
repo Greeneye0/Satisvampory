@@ -96,8 +96,8 @@ namespace Satisvampory.Services
 
         /// <summary>
         /// Dest quality name: nameplate if set, else prefab/EntityName (never entity.ToString()).
-        /// Blank nameplate is still generic (class 3); prefab "Jewel Storage" does not
-        /// steal covering dests from unnamed treasury chests.
+        /// Blank plate on dest-quality furniture (Jewel Storage) still matches that dest.
+        /// Blank Small Chest / cabinet / bureau stay generic so covering can park there.
         /// </summary>
         public static string DestName(Entity stash)
         {
@@ -821,9 +821,9 @@ namespace Satisvampory.Services
         }
 
         /// <summary>
-        /// Rank unnamed from the nameplate. A blank plate is always generic so covering
-        /// can land on unnamed treasury chests; prefab DestName does not restrict them.
-        /// Named "Jewel Storage" still ranks as jewels.
+        /// Rank unnamed from the nameplate. Blank plate is still unnamed for unmatched
+        /// items so covering can park on unlabeled treasury. Dest-quality prefab names
+        /// (Jewel Storage) still category-match via RankMatchName.
         /// </summary>
         internal static bool IsUnnamedDest(string plate, string destName)
         {
@@ -843,8 +843,11 @@ namespace Satisvampory.Services
             var overflow = IsUnnamedDest("", "overflow");
             var namedJewel = IsUnnamedDest("jewels", "Jewel Storage");
             var blankMatch = RankMatchName("", "Jewel Storage");
+            var blankChestMatch = RankMatchName("", "Small Chest");
+            var blankBureauMatch = RankMatchName("", "Bureau");
             var namedMatch = RankMatchName("jewels", "Jewel Storage");
-            var matchOk = blankMatch.Length == 0 && namedMatch == "Jewel Storage";
+            var matchOk = blankMatch == "Jewel Storage" && blankChestMatch.Length == 0
+                && blankBureauMatch.Length == 0 && namedMatch == "Jewel Storage";
             var emptyGeneric = IsGenericName("Empty") && IsUnnamedDest("Empty", "Jewel Storage");
             var blankClass = RankClassUnmatched("", "Jewel Storage", false);
             var emptyClass = RankClassUnmatched("Empty", "Jewel Storage", false);
@@ -867,7 +870,9 @@ namespace Satisvampory.Services
                 + ",\"namedLeather\":" + (namedLeather ? "true" : "false")
                 + ",\"overflow\":" + (overflow ? "true" : "false")
                 + ",\"namedJewel\":" + (namedJewel ? "true" : "false")
-                + ",\"blankMatchEmpty\":" + (blankMatch.Length == 0 ? "true" : "false")
+                + ",\"blankMatchJewel\":" + (blankMatch == "Jewel Storage" ? "true" : "false")
+                + ",\"blankChestGeneric\":" + (blankChestMatch.Length == 0 ? "true" : "false")
+                + ",\"blankBureauGeneric\":" + (blankBureauMatch.Length == 0 ? "true" : "false")
                 + ",\"namedMatchJewel\":" + (namedMatch == "Jewel Storage" ? "true" : "false")
                 + ",\"emptyGeneric\":" + (emptyGeneric ? "true" : "false")
                 + ",\"blankClass\":" + blankClass
@@ -885,7 +890,8 @@ namespace Satisvampory.Services
         }
 
         /// <summary>
-        /// Dest class when exact/category miss (blank plate never inherits prefab category).
+        /// Dest class when exact/category miss. Blank plate stays class 3 unnamed even
+        /// when the prefab is Jewel Storage; jewels already hit category via RankMatchName.
         /// </summary>
         internal static int RankClassUnmatched(string plate, string destName, bool hasItem)
         {
@@ -897,14 +903,43 @@ namespace Satisvampory.Services
         }
 
         /// <summary>
-        /// Exact/category matching name. Blank nameplate does not inherit prefab DestName
-        /// (Jewel Storage / Woodworking Storage) so covering treats it as generic.
+        /// Exact/category matching name. Typed plates always count. Blank plate inherits
+        /// dest-quality prefab names (Jewel Storage, Woodworking Storage) so those boxes
+        /// are jewel/plank dests without renaming. Small Chest / cabinet / bureau stay
+        /// generic.
         /// </summary>
         internal static string RankMatchName(string plate, string destName)
         {
-            if (string.IsNullOrWhiteSpace(plate))
+            if (!string.IsNullOrWhiteSpace(plate))
+                return destName ?? "";
+            if (string.IsNullOrWhiteSpace(destName) || PrefabNameIsGenericDest(destName))
                 return "";
-            return destName ?? "";
+            return destName;
+        }
+
+        /// <summary>
+        /// Unlabeled furniture that is only a box (Small Chest, Cabinet, Bureau, Small
+        /// Storage). A dest word in the prefab name (Jewel Storage) is not generic.
+        /// </summary>
+        static bool PrefabNameIsGenericDest(string destName)
+        {
+            if (IsGenericName(destName) || IsOverflowDestName(destName) || IsFurnitureChestName(destName))
+                return true;
+            var tokens = RemainingNameTokens(destName);
+            if (tokens.Count == 0)
+                return true;
+            foreach (var token in tokens)
+            {
+                var t = token.Trim().ToLowerInvariant();
+                if (t == "chest" || t == "container" || t == "stash" || t == "inventory"
+                    || t == "storage" || t == "cabinet" || t == "bureau" || t == "wardrobe"
+                    || t == "cupboard" || t == "locker" || t == "crate" || t == "trunk"
+                    || t == "small" || t == "large" || t == "medium" || t == "tiny"
+                    || t == "big" || t == "the" || t == "of" || t == "a" || t == "an" || t == "and")
+                    continue;
+                return false;
+            }
+            return true;
         }
 
         public static DepositRank RankDeposit(Entity stash, PrefabGUID item, ulong ownerId, bool hasItem, int standingPlot = -1)
