@@ -1,3 +1,7 @@
+using HarmonyLib;
+using ProjectM;
+using ProjectM.Network;
+using Unity.Collections;
 
 namespace Satisvampory.Patches;
 
@@ -11,12 +15,7 @@ internal static class NameableInteractableSystemPatch
     {
         if (!Core.HasInitialized || Core.WorkQueue == null) return;
         var events = system._RenameQuery.ToComponentDataArray<InteractEvents_Client.RenameInteractable>(Allocator.Temp);
-        try
-        {
-            for (var i = 0; i < events.Length; i++)
-                if (Core.TryGetEntityFromNetworkId(events[i].InteractableId, out var interactable))
-                    Core.WorkQueue.EnqueueOwner(interactable);
-        }
+        try { for (var i = 0; i < events.Length; i++) if (Core.TryGetEntityFromNetworkId(events[i].InteractableId, out var interactable)) Core.WorkQueue.EnqueueOwner(interactable); }
         finally { events.Dispose(); }
     }
 }

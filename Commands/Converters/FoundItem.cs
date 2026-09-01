@@ -1,17 +1,15 @@
+using Stunlock.Core;
 using System;
-using Satisvampory.Services;
+using System.Collections.Generic;
 using System.Text;
+using VampireCommandFramework;
+using Satisvampory.Services;
 
 namespace Satisvampory.Commands.Converters;
 
 public record struct FoundItem(PrefabGUID prefab, bool Ambiguous = false);
 
-public enum ItemResolveStatus
-{
-    Unique,
-    None,
-    Ambiguous
-}
+public enum ItemResolveStatus { Unique, None, Ambiguous }
 
 class FoundItemConverter : CommandArgumentConverter<FoundItem>
 {
@@ -23,12 +21,7 @@ class FoundItemConverter : CommandArgumentConverter<FoundItem>
 
         if (status == ItemResolveStatus.Ambiguous)
         {
-            if (ctx is ChatCommandContext chat)
-            {
-                PendingItemChoiceService.BeginAmbiguous(chat.Event.User.PlatformId, candidates);
-                return new FoundItem(default, true);
-            }
-
+            if (ctx is ChatCommandContext chat) { PendingItemChoiceService.BeginAmbiguous(chat.Event.User.PlatformId, candidates); return new FoundItem(default, true); }
             throw MultipleResultsError(ctx, PrefabsFromCandidates(candidates), 60 + "\n...".Length);
         }
 

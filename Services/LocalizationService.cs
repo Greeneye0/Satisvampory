@@ -1,5 +1,13 @@
+using ProjectM;
 using ProjectM.Shared;
+using Stunlock.Core;
 using Stunlock.Localization;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Text.Json;
 
 namespace Satisvampory.Services;
 
@@ -11,11 +19,7 @@ internal class LocalizationService
     static readonly HashSet<int> BookTier2 = [1150376281, 686122001];
     const int DarkmatterPistols = -1265586439;
 
-    public LocalizationService()
-    {
-        localization = EmbeddedJson.Load<string, string>("Satisvampory.Localization.English.json");
-        prefabNames = EmbeddedJson.Load<int, string>("Satisvampory.Data.PrefabNames.json");
-    }
+    public LocalizationService() { localization = EmbeddedJson.Load<string, string>("Satisvampory.Localization.English.json"); prefabNames = EmbeddedJson.Load<int, string>("Satisvampory.Data.PrefabNames.json"); }
 
     public string GetLocalization(string guid) =>
         localization.TryGetValue(guid, out var text) ? text : $"<Localization not found for {guid}>";
@@ -43,10 +47,8 @@ internal class LocalizationService
             label = "Book " + label;
         if (prefab.Has<JewelInstance>() && prefab.Read<JewelInstance>().TierIndex != 0)
             label += $" Jewel Tier {prefab.Read<JewelInstance>().TierIndex + 1}";
-        if (prefab.Has<LegendaryItemInstance>())
-            label += $" Tier {prefab.Read<LegendaryItemInstance>().TierIndex + 1}";
-        if (prefab.Has<ShatteredItem>())
-            label += " Shattered";
+        if (prefab.Has<LegendaryItemInstance>()) label += $" Tier {prefab.Read<LegendaryItemInstance>().TierIndex + 1}";
+        if (prefab.Has<ShatteredItem>()) label += " Shattered";
         return label;
     }
 }

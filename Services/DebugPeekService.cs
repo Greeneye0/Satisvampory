@@ -232,7 +232,7 @@ namespace Satisvampory.Services
                 return "{\"error\":\"no plot\"}";
             if (Core.ConveyorService == null)
                 return "{\"error\":\"not ready\"}";
-            var lines = Core.ConveyorService.DescribeConveyorNeed(plot);
+            var lines = BeltInspect.Need(plot);
             var sb = new StringBuilder();
             sb.Append("{\"plot\":").Append(plot).Append(",\"lines\":[");
             for (var i = 0; i < lines.Count; i++)

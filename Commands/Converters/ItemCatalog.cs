@@ -272,7 +272,7 @@ internal static class ItemCatalog
             if (!listed.Add(prefab)) continue;
             var name = prefab.PrefabName();
             if (string.IsNullOrEmpty(name)) continue;
-            if (sb.Length + name.Length + lengthOfFail >= Core.MAX_REPLY_LENGTH)
+            if (sb.Length + name.Length + lengthOfFail >= Core.MaxChatReply)
             {
                 sb.AppendLine("...");
                 return ctx.Error(sb.ToString());

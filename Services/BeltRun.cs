@@ -287,7 +287,7 @@ namespace Satisvampory.Services
                 if (!StashRouting.TryGetExternalInventory(supplier, out var inv))
                     continue;
                 var plate = supplier.Has<NameableInteractable>() ? supplier.Read<NameableInteractable>().Name.ToString() : "";
-                var receiver = !string.IsNullOrEmpty(plate) && Core.Stash.ReceiverRegex.IsMatch(plate.ToLowerInvariant());
+                var receiver = !string.IsNullOrEmpty(plate) && Core.Stash.ReceiverPattern.IsMatch(plate.ToLowerInvariant());
                 pending.Clear();
                 if (!Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(inv, out var slots))
                     continue;

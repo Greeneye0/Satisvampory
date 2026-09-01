@@ -1,3 +1,8 @@
+using HarmonyLib;
+using ProjectM;
+using ProjectM.CastleBuilding;
+using Unity.Collections;
+using Unity.Entities;
 
 namespace Satisvampory.Patches;
 
@@ -12,19 +17,9 @@ internal static class ReactToInventoryChangedSystemPatch
         if (!Core.HasInitialized || Core.WorkQueue is not { IsSelfTransferring: false })
             return;
         var events = system.EntityQueries[0].ToComponentDataArray<InventoryChangedEvent>(Allocator.Temp);
-        try
-        {
-            for (var i = 0; i < events.Length; i++)
-                EnqueueCastle(events[i].InventoryEntity);
-        }
+        try { for (var i = 0; i < events.Length; i++) EnqueueCastle(events[i].InventoryEntity); }
         finally { events.Dispose(); }
     }
 
-    static void EnqueueCastle(Entity inventory)
-    {
-        if (!inventory.Has<InventoryConnection>()) return;
-        var owner = inventory.Read<InventoryConnection>().InventoryOwner;
-        if (owner != Entity.Null && owner.Has<CastleHeartConnection>())
-            Core.WorkQueue.EnqueueOwner(owner);
-    }
+    static void EnqueueCastle(Entity inventory) { if (!inventory.Has<InventoryConnection>()) return; var owner = inventory.Read<InventoryConnection>().InventoryOwner; if (owner != Entity.Null && owner.Has<CastleHeartConnection>()) Core.WorkQueue.EnqueueOwner(owner); }
 }

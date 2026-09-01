@@ -1,3 +1,13 @@
+using HarmonyLib;
+using Satisvampory;
+using ProjectM;
+using ProjectM.Behaviours;
+using ProjectM.Network;
+using Steamworks;
+using System;
+using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Entities;
 
 namespace Satisvampory.Patches;
 
@@ -14,14 +24,7 @@ public class SortSingleInventorySystemPatch
     static void Drain(SortSingleInventorySystem system)
     {
         var rows = system._EventQuery.ToEntityArray(Allocator.Temp);
-        try
-        {
-            var now = Core.ServerTime;
-            DropStale(stashArmed, now);
-            DropStale(trashArmed, now);
-            for (var i = 0; i < rows.Length; i++)
-                Handle(rows[i], now);
-        }
+        try { var now = Core.ServerTime; DropStale(stashArmed, now); DropStale(trashArmed, now); for (var i = 0; i < rows.Length; i++) Handle(rows[i], now); }
         finally { rows.Dispose(); }
     }
 
@@ -29,31 +32,18 @@ public class SortSingleInventorySystemPatch
     {
         if (entity.Equals(Entity.Null)) return;
         var from = entity.Read<FromCharacter>();
-        var sort = entity.Read<SortSingleInventoryEvent>();
+        var clicked = entity.Read<SortSingleInventoryEvent>();
         var steam = from.User.Read<User>().PlatformId;
-        if (sort.Inventory == from.Character.Read<NetworkId>())
-        {
-            if (Core.PlayerSettings.IsSortStashEnabled(steam) && Armed(stashArmed, steam, now))
-                Core.Stash.StashCharacterInventory(from.Character);
-            return;
-        }
+        if (clicked.Inventory == from.Character.Read<NetworkId>()) { if (Core.PlayerSettings.IsSortStashEnabled(steam) && Armed(stashArmed, steam, now)) Core.Stash.StashCharacterInventory(from.Character); return; }
         if (!Armed(trashArmed, steam, now)) return;
         var plot = Core.TerritoryService.GetTerritoryId(from.Character);
         foreach (var trash in Core.Stash.GetAllTrashStashes(plot))
-        {
-            if (trash.Read<NetworkId>() != sort.Inventory) continue;
-            Core.Trash.EmptyTrash(from.Character, trash);
-            break;
-        }
+            if (trash.Read<NetworkId>() == clicked.Inventory) { Core.Trash.EmptyTrash(from.Character, trash); break; }
     }
 
     static bool Armed(Dictionary<ulong, double> clicks, ulong steam, double now)
     {
-        if (clicks.TryGetValue(steam, out var armedAt) && now - armedAt < 1)
-        {
-            clicks.Remove(steam);
-            return true;
-        }
+        if (clicks.TryGetValue(steam, out var armedAt) && now - armedAt < 1) { clicks.Remove(steam); return true; }
         clicks[steam] = now;
         return false;
     }
@@ -63,10 +53,8 @@ public class SortSingleInventorySystemPatch
         if (clicks.Count == 0) return;
         List<ulong> stale = null;
         foreach (var kv in clicks)
-            if (now - kv.Value >= 1)
-                (stale ??= new List<ulong>()).Add(kv.Key);
+            if (now - kv.Value >= 1) (stale ??= new List<ulong>()).Add(kv.Key);
         if (stale == null) return;
-        for (var i = 0; i < stale.Count; i++)
-            clicks.Remove(stale[i]);
+        for (var i = 0; i < stale.Count; i++) clicks.Remove(stale[i]);
     }
 }

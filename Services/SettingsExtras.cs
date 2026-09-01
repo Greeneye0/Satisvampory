@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
 using Stunlock.Core;
 
 namespace Satisvampory.Services
@@ -1048,6 +1050,58 @@ namespace Satisvampory.Services
             S.Put(playerId, settings);
             S.MarkDirty();
             return restored;
+        }
+
+        internal static void ImportGroundScoop(PlayerSettingsService store)
+        {
+            var scoopPath = Path.Combine(BepInEx.Paths.ConfigPath, "GroundScoop", "playerSettings.json");
+            if (!File.Exists(scoopPath)) return;
+            try
+            {
+                using var doc = JsonDocument.Parse(File.ReadAllText(scoopPath));
+                if (doc.RootElement.ValueKind != JsonValueKind.Object) return;
+                foreach (var player in doc.RootElement.EnumerateObject())
+                {
+                    if (!ulong.TryParse(player.Name, out var id)) continue;
+                    var s = store.GetOrCreate(id);
+                    var el = player.Value;
+                    if (el.TryGetProperty("AutoScoop", out var auto)) s.AutoScoop = auto.GetBoolean();
+                    if (el.TryGetProperty("AutoFilter", out var filter)) s.AutoFilter = filter.GetString();
+                    if (el.TryGetProperty("NotifyMode", out var notify)) s.NotifyMode = notify.GetString();
+                    if (el.TryGetProperty("Radius", out var radius) && radius.TryGetSingle(out var r)) s.Radius = r;
+                    if (el.TryGetProperty("Mode", out var mode)) s.ScoopMode = mode.GetString();
+                    CopyStringList(el, "Excludes", s.ScoopExcludes);
+                    CopyStringMap(el, "ExcludeNames", s.ScoopExcludeNames);
+                    CopyIntMap(el, "Caps", s.ScoopCaps);
+                    CopyStringMap(el, "CapNames", s.ScoopCapNames);
+                    store.Rows[id] = s;
+                }
+                store.MarkDirty();
+            }
+            catch { }
+        }
+
+        static void CopyStringList(JsonElement el, string name, List<string> dest)
+        {
+            if (!el.TryGetProperty(name, out var arr) || arr.ValueKind != JsonValueKind.Array) return;
+            foreach (var item in arr.EnumerateArray())
+            {
+                var v = item.GetString();
+                if (!string.IsNullOrEmpty(v) && !dest.Contains(v)) dest.Add(v);
+            }
+        }
+
+        static void CopyStringMap(JsonElement el, string name, Dictionary<string, string> dest)
+        {
+            if (!el.TryGetProperty(name, out var obj) || obj.ValueKind != JsonValueKind.Object) return;
+            foreach (var p in obj.EnumerateObject()) dest[p.Name] = p.Value.GetString();
+        }
+
+        static void CopyIntMap(JsonElement el, string name, Dictionary<string, int> dest)
+        {
+            if (!el.TryGetProperty(name, out var obj) || obj.ValueKind != JsonValueKind.Object) return;
+            foreach (var p in obj.EnumerateObject())
+                if (p.Value.TryGetInt32(out var n)) dest[p.Name] = n;
         }
     }
 }

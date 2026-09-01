@@ -1,4 +1,10 @@
+using HarmonyLib;
+using ProjectM;
+using ProjectM.Network;
 using ProjectM.Shared.Systems;
+using System;
+using System.Collections.Generic;
+using Unity.Entities;
 using Satisvampory.Services;
 using System.Reflection;
 using UnityEngine;
@@ -11,98 +17,51 @@ public static class ServantMissionUpdateSystemPatch
     static int lastStashFrame = -1;
     static readonly HashSet<int> stashed = new();
 
-    static void Prefix(ServantMissionUpdateSystem __instance) => TryStash(__instance, "prefix");
-    static void Postfix(ServantMissionUpdateSystem __instance) => TryStash(__instance, "postfix");
+    static void Prefix(ServantMissionUpdateSystem system) => TryStash(system, "prefix");
+    static void Postfix(ServantMissionUpdateSystem system) => TryStash(system, "postfix");
 
     internal static void TryStash(ServantMissionUpdateSystem instance, string via)
     {
-        if (instance == null || !Core.HasInitialized)
-            return;
+        if (instance == null || !Core.HasInitialized) return;
         var frame = Time.frameCount;
-        if (frame != lastStashFrame)
-        {
-            lastStashFrame = frame;
-            stashed.Clear();
-        }
+        if (frame != lastStashFrame) { lastStashFrame = frame; stashed.Clear(); }
 
         var missions = instance._TempFinishedMissions;
         var servants = instance._TempServantList;
         try
         {
             var any = false;
-            if (missions.IsCreated && missions.Length > 0)
-            {
-                foreach (var mission in missions)
+            if (missions.IsCreated)
+                for (var i = 0; i < missions.Length; i++)
                 {
                     any = true;
-                    var steamId = 0UL;
-                    try
-                    {
-                        var ownerEnt = mission.MissionOwner;
-                        if (ownerEnt != Entity.Null && Core.EntityManager.Exists(ownerEnt) && ownerEnt.Has<UserOwner>())
-                        {
-                            var userEnt = ownerEnt.Read<UserOwner>().Owner._Entity;
-                            if (userEnt != Entity.Null && Core.EntityManager.Exists(userEnt) && userEnt.Has<User>())
-                                steamId = userEnt.Read<User>().PlatformId;
-                        }
-                    }
-                    catch { }
-
-                    if (steamId != 0 && !Core.PlayerSettings.IsAutoStashMissionsEnabled(steamId))
-                    {
-                        DestDebugLog.Miss("servant", -1, default, 0, 0, "asm-off steam=" + steamId + " via=" + via);
-                        continue;
-                    }
-
-                    StashOne(mission.MissionOwner, steamId, via);
+                    var steamId = SteamOf(missions[i].MissionOwner);
+                    if (steamId != 0 && !Core.PlayerSettings.IsAutoStashMissionsEnabled(steamId)) { DestDebugLog.Miss("servant", -1, default, 0, 0, "asm-off steam=" + steamId + " via=" + via); continue; }
+                    StashOne(missions[i].MissionOwner, steamId);
                 }
-            }
-
-            if (servants.IsCreated && servants.Length > 0)
-            {
-                foreach (var servant in servants)
-                {
-                    any = true;
-                    StashOne(servant, 0, via);
-                }
-            }
-
-            if (any)
-                DestDebugLog.Note("servant", -1, 0, "tick via=" + via + " stashed=" + stashed.Count);
+            if (servants.IsCreated)
+                for (var i = 0; i < servants.Length; i++) { any = true; StashOne(servants[i], 0); }
+            if (any) DestDebugLog.Note("servant", -1, 0, "tick via=" + via + " stashed=" + stashed.Count);
         }
-        catch (System.Exception e)
-        {
-            Core.Log.LogError($"Exited ServantMission stash ({via}): {e}");
-        }
+        catch (System.Exception e) { Core.Log.LogError($"Exited ServantMission stash ({via}): {e}"); }
     }
 
-    static void StashOne(Entity servant, ulong steamId, string via)
+    static ulong SteamOf(Entity owner)
     {
-        if (servant == Entity.Null || !Core.EntityManager.Exists(servant))
-            return;
-        if (!stashed.Add(servant.Index))
-            return;
-        if (steamId != 0 && !Core.PlayerSettings.IsAutoStashMissionsEnabled(steamId))
-            return;
-        Utilities.StashServantInventory(servant);
+        try { if (owner == Entity.Null || !Core.EntityManager.Exists(owner) || !owner.Has<UserOwner>()) return 0; var userEnt = owner.Read<UserOwner>().Owner._Entity; return userEnt != Entity.Null && Core.EntityManager.Exists(userEnt) && userEnt.Has<User>() ? userEnt.Read<User>().PlatformId : 0; }
+        catch { return 0; }
     }
+
+    static void StashOne(Entity servant, ulong steamId) { if (servant == Entity.Null || !Core.EntityManager.Exists(servant)) return; if (!stashed.Add(servant.Index)) return; if (steamId != 0 && !Core.PlayerSettings.IsAutoStashMissionsEnabled(steamId)) return; Utilities.StashServantInventory(servant); }
 }
 
 [HarmonyPatch]
 public static class ServantMissionFinishMissionsPatch
 {
     static bool Prepare() => TargetMethod() != null;
+    static MethodBase TargetMethod() =>
+        AccessTools.Method(typeof(ServantMissionUpdateSystem), "FinishMissions")
+        ?? AccessTools.DeclaredMethod(typeof(ServantMissionUpdateSystem), "FinishMissions");
 
-    static MethodBase TargetMethod()
-    {
-        return AccessTools.Method(typeof(ServantMissionUpdateSystem), "FinishMissions")
-            ?? AccessTools.DeclaredMethod(typeof(ServantMissionUpdateSystem), "FinishMissions");
-    }
-
-    static void Postfix(ServantMissionUpdateSystem __instance)
-    {
-        if (__instance == null)
-            return;
-        ServantMissionUpdateSystemPatch.TryStash(__instance, "finish");
-    }
+    static void Postfix(ServantMissionUpdateSystem system) { if (system != null) ServantMissionUpdateSystemPatch.TryStash(system, "finish"); }
 }

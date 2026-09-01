@@ -1,3 +1,9 @@
+using Il2CppInterop.Runtime;
+using ProjectM;
+using Stunlock.Core;
+using System;
+using System.Runtime.InteropServices;
+using Unity.Entities;
 
 namespace Satisvampory;
 

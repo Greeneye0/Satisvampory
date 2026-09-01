@@ -289,7 +289,7 @@ namespace Satisvampory.Services
             ulong ownerId, Entity sendingStash)
         {
             if (!Core.PlayerSettings.IsConveyorLoopsAllowed() && sendingStash != Entity.Null
-                && StashHasToken(sendingStash, Core.Stash.ReceiverRegex, group))
+                && StashHasToken(sendingStash, Core.Stash.ReceiverPattern, group))
             {
                 // Default OFF: an r# source does not refill an s# dest on the same group.
             }
@@ -298,7 +298,7 @@ namespace Satisvampory.Services
             HonorReserve(stock, ownerId, apply: true);
             var loops = Core.PlayerSettings.IsConveyorLoopsAllowed();
             var srcPlot = sendingStash != Entity.Null ? Core.TerritoryService.GetTerritoryId(sendingStash) : -1;
-            var srcIsReceiver = sendingStash != Entity.Null && StashHasToken(sendingStash, Core.Stash.ReceiverRegex, group);
+            var srcIsReceiver = sendingStash != Entity.Null && StashHasToken(sendingStash, Core.Stash.ReceiverPattern, group);
 
             foreach (var (item, available) in stock)
             {
@@ -316,7 +316,7 @@ namespace Satisvampory.Services
                         continue;
                     var destStash = StashFromInventory(sink.Inventory, sendingStash);
                     if (!loops && destStash != Entity.Null && destStash != sendingStash
-                        && srcIsReceiver && StashHasToken(destStash, Core.Stash.SenderRegex, group))
+                        && srcIsReceiver && StashHasToken(destStash, Core.Stash.SenderPattern, group))
                         continue;
                     var take = sink.Unlimited ? left : (sink.Wanted < left ? sink.Wanted : left);
                     if (take <= 0)

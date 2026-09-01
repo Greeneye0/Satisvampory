@@ -1,27 +1,13 @@
-using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using System;
+using Stunlock.Core;
 
-namespace Satisvampory.Services
-{
-    internal enum CapMode
-    {
-        Bags = 0,
-        Guild = 1
-    }
-
-    internal enum AutoFilter
-    {
-        Around = 0,
-        All = 1
-    }
-
-    internal enum NotifyMode
-    {
-        Off = 0,
-        Manual = 1,
-        On = 2
-    }
+namespace Satisvampory.Services;
+    internal enum CapMode { Bags = 0, Guild = 1 }
+    internal enum AutoFilter { Around = 0, All = 1 }
+    internal enum NotifyMode { Off = 0, Manual = 1, On = 2 }
 
     /// <summary>Owns playerSettings.json and every flag/reserve/cap/clan/group row.</summary>
     internal class PlayerSettingsService
@@ -83,11 +69,7 @@ namespace Satisvampory.Services
         static readonly string ConfigDir = Path.Combine(BepInEx.Paths.ConfigPath, MyPluginInfo.PLUGIN_NAME);
         static readonly string SettingsFile = Path.Combine(ConfigDir, "playerSettings.json");
 
-        static readonly JsonSerializerOptions JsonOpts = new()
-        {
-            WriteIndented = true,
-            IncludeFields = true
-        };
+        static readonly JsonSerializerOptions JsonOpts = new() { WriteIndented = true, IncludeFields = true };
 
         SettingsRow defaultSettings = new();
 
@@ -96,213 +78,64 @@ namespace Satisvampory.Services
         DateTime lastSaveUtc = DateTime.MinValue;
         const double SaveDebounceSeconds = 1.5;
 
-        public PlayerSettingsService()
-        {
-            Hydrate();
+        public PlayerSettingsService() { Hydrate(); if (!TryRow(WorldId, out var world)) Put(WorldId, SgAllOn(new SettingsRow())); else if (!world.AppliedSgAllOn) Put(WorldId, SgAllOn(world)); FlushSettings(force: true); }
 
-            if (!TryRow(WorldId, out var world))
-            {
-                Put(WorldId, SgAllOn(new SettingsRow()));
-            }
-            else if (!world.AppliedSgAllOn)
-            {
-                Put(WorldId, SgAllOn(world));
-            }
-            FlushSettings(force: true);
-        }
-
-        static SettingsRow SgAllOn(SettingsRow s)
-        {
-            s.SortStash = true;
-            s.Pull = true;
-            s.CraftPull = true;
-            s.AutoStashMissions = true;
-            s.Conveyor = true;
-            s.Salvage = true;
-            s.UnitSpawner = true;
-            s.Brazier = true;
-            s.Named = true;
-            s.Trash = true;
-            s.RrGlobalAllow = true;
-            s.AppliedSgAllOn = true;
-            return s;
-        }
+        static SettingsRow SgAllOn(SettingsRow s) { s.SortStash = s.Pull = s.CraftPull = s.AutoStashMissions = s.Conveyor = s.Salvage = s.UnitSpawner = s.Brazier = s.Named = s.Trash = s.RrGlobalAllow = s.AppliedSgAllOn = true; return s; }
 
         void Hydrate()
         {
-            try
-            {
-                if (!Directory.Exists(ConfigDir))
-                    Directory.CreateDirectory(ConfigDir);
-
-                if (File.Exists(SettingsFile))
-                {
-                    var json = File.ReadAllText(SettingsFile);
-                    playerSettings = JsonSerializer.Deserialize<Dictionary<ulong, SettingsRow>>(json) ?? [];
-                }
-
-                MergeGroundScoopSettings();
-            }
-            catch
-            {
-                playerSettings ??= [];
-            }
+            try { if (!Directory.Exists(ConfigDir)) Directory.CreateDirectory(ConfigDir); if (File.Exists(SettingsFile)) playerSettings = JsonSerializer.Deserialize<Dictionary<ulong, SettingsRow>>(File.ReadAllText(SettingsFile)) ?? []; SettingsExtras.ImportGroundScoop(this); }
+            catch { playerSettings ??= []; }
         }
 
-        void MergeGroundScoopSettings()
-        {
-            var scoopPath = Path.Combine(BepInEx.Paths.ConfigPath, "GroundScoop", "playerSettings.json");
-            if (!File.Exists(scoopPath))
-                return;
-            try
-            {
-                using var doc = JsonDocument.Parse(File.ReadAllText(scoopPath));
-                if (doc.RootElement.ValueKind != JsonValueKind.Object)
-                    return;
-                foreach (var player in doc.RootElement.EnumerateObject())
-                {
-                    if (!ulong.TryParse(player.Name, out var id))
-                        continue;
-                    var s = GetOrCreate(id);
-                    var el = player.Value;
-                    if (el.TryGetProperty("AutoScoop", out var auto))
-                        s.AutoScoop = auto.GetBoolean();
-                    if (el.TryGetProperty("AutoFilter", out var filter))
-                        s.AutoFilter = filter.GetString();
-                    if (el.TryGetProperty("NotifyMode", out var notify))
-                        s.NotifyMode = notify.GetString();
-                    if (el.TryGetProperty("Radius", out var radius) && radius.TryGetSingle(out var r))
-                        s.Radius = r;
-                    if (el.TryGetProperty("Mode", out var mode))
-                        s.ScoopMode = mode.GetString();
-                    CopyStringList(el, "Excludes", s.ScoopExcludes);
-                    CopyStringMap(el, "ExcludeNames", s.ScoopExcludeNames);
-                    CopyIntMap(el, "Caps", s.ScoopCaps);
-                    CopyStringMap(el, "CapNames", s.ScoopCapNames);
-                    playerSettings[id] = s;
-                }
-                saveDirty = true;
-            }
-            catch
-            {
-            }
-        }
-
-        static void CopyStringList(JsonElement el, string name, List<string> dest)
-        {
-            if (!el.TryGetProperty(name, out var arr) || arr.ValueKind != JsonValueKind.Array)
-                return;
-            foreach (var item in arr.EnumerateArray())
-            {
-                var v = item.GetString();
-                if (!string.IsNullOrEmpty(v) && !dest.Contains(v))
-                    dest.Add(v);
-            }
-        }
-
-        static void CopyStringMap(JsonElement el, string name, Dictionary<string, string> dest)
-        {
-            if (!el.TryGetProperty(name, out var obj) || obj.ValueKind != JsonValueKind.Object)
-                return;
-            foreach (var p in obj.EnumerateObject())
-                dest[p.Name] = p.Value.GetString();
-        }
-
-        static void CopyIntMap(JsonElement el, string name, Dictionary<string, int> dest)
-        {
-            if (!el.TryGetProperty(name, out var obj) || obj.ValueKind != JsonValueKind.Object)
-                return;
-            foreach (var p in obj.EnumerateObject())
-            {
-                if (p.Value.TryGetInt32(out var n))
-                    dest[p.Name] = n;
-            }
-        }
-
-        internal void MarkDirty()
-        {
-            saveDirty = true;
-            ClanTreasuryLend.BumpSettings();
-        }
+        internal void MarkDirty() { saveDirty = true; ClanTreasuryLend.BumpSettings(); }
 
         internal bool TryRow(ulong id, out SettingsRow settings) => playerSettings.TryGetValue(id, out settings);
 
         public void FlushSettings(bool force = false)
         {
-            if (!saveDirty)
-                return;
-            if (!force && (DateTime.UtcNow - lastSaveUtc).TotalSeconds < SaveDebounceSeconds)
-                return;
+            if (!saveDirty) return;
+            if (!force && (DateTime.UtcNow - lastSaveUtc).TotalSeconds < SaveDebounceSeconds) return;
             try
             {
-                if (!Directory.Exists(ConfigDir))
-                    Directory.CreateDirectory(ConfigDir);
-                var json = JsonSerializer.Serialize(playerSettings, JsonOpts);
+                if (!Directory.Exists(ConfigDir)) Directory.CreateDirectory(ConfigDir);
                 var tmp = SettingsFile + ".tmp";
-                File.WriteAllText(tmp, json);
+                File.WriteAllText(tmp, JsonSerializer.Serialize(playerSettings, JsonOpts));
                 File.Copy(tmp, SettingsFile, overwrite: true);
                 File.Delete(tmp);
                 saveDirty = false;
                 lastSaveUtc = DateTime.UtcNow;
             }
-            catch
-            {
-            }
+            catch { }
         }
 
         internal SettingsRow GetOrCreate(ulong platformId)
         {
-            if (!playerSettings.TryGetValue(platformId, out var settings))
-                settings = new SettingsRow();
+            if (!playerSettings.TryGetValue(platformId, out var settings)) settings = new SettingsRow();
             settings.ScoopExcludes ??= new List<string>();
             settings.ScoopExcludeNames ??= new Dictionary<string, string>();
             settings.ScoopCaps ??= new Dictionary<string, int>();
             settings.ScoopCapNames ??= new Dictionary<string, string>();
-            if (string.IsNullOrEmpty(settings.ScoopMode))
-                settings.ScoopMode = "bags";
-            if (string.IsNullOrEmpty(settings.AutoFilter))
-                settings.AutoFilter = "all";
-            if (string.IsNullOrEmpty(settings.NotifyMode))
-                settings.NotifyMode = "manual";
-            if (settings.Radius < 1f)
-                settings.Radius = 10f;
+            if (string.IsNullOrEmpty(settings.ScoopMode)) settings.ScoopMode = "bags";
+            if (string.IsNullOrEmpty(settings.AutoFilter)) settings.AutoFilter = "all";
+            if (string.IsNullOrEmpty(settings.NotifyMode)) settings.NotifyMode = "manual";
+            if (settings.Radius < 1f) settings.Radius = 10f;
             return settings;
         }
 
-        internal void Put(ulong platformId, SettingsRow settings)
-        {
-            playerSettings[platformId] = settings;
-            MarkDirty();
-        }
+        internal void Put(ulong platformId, SettingsRow settings) { playerSettings[platformId] = settings; MarkDirty(); }
 
-        internal SettingsRow Snapshot(ulong id, bool create)
-        {
-            if (playerSettings.TryGetValue(id, out var row))
-                return row;
-            return create ? new SettingsRow() : defaultSettings;
-        }
+        internal SettingsRow Snapshot(ulong id, bool create) =>
+            playerSettings.TryGetValue(id, out var row) ? row : create ? new SettingsRow() : defaultSettings;
 
-        bool ReadFlag(ulong id, Func<SettingsRow, bool> read, bool requireGlobal = false)
-        {
-            var value = read(Snapshot(id, false));
-            if (!requireGlobal)
-                return value;
-            return value && read(Snapshot(WorldId, false));
-        }
+        bool ReadFlag(ulong id, Func<SettingsRow, bool> read, bool requireGlobal = false) =>
+            requireGlobal ? read(Snapshot(id, false)) && read(Snapshot(WorldId, false)) : read(Snapshot(id, false));
 
-        bool FlipFlag(ulong id, Func<SettingsRow, bool> read, Func<SettingsRow, bool, SettingsRow> write)
-        {
-            var row = Snapshot(id, true);
-            var next = !read(row);
-            playerSettings[id] = write(row, next);
-            MarkDirty();
-            return next;
-        }
+        bool FlipFlag(ulong id, Func<SettingsRow, bool> read, Func<SettingsRow, bool, SettingsRow> write) { var row = Snapshot(id, true); var next = !read(row); playerSettings[id] = write(row, next); MarkDirty(); return next; }
 
-        SettingsRow GetGlobalMutable()
+        internal SettingsRow GetGlobalMutable()
         {
-            if (!TryRow(0, out var settings))
-                settings = new SettingsRow();
+            if (!TryRow(0, out var settings)) settings = new SettingsRow();
             settings.ClanShareByClan ??= new Dictionary<string, bool>();
             settings.ClanShareExcludedTerritories ??= new List<string>();
             settings.StarterKitSeeded ??= new List<string>();
@@ -313,17 +146,8 @@ namespace Satisvampory.Services
             return settings;
         }
 
-        public SettingsRow GetSettings(ulong playerId)
-        {
-            if (!TryRow(playerId, out var settings))
-                return new SettingsRow();
-            return settings;
-        }
-
-        public SettingsRow GetGlobalSettings()
-        {
-            return playerSettings[WorldId];
-        }
+        public SettingsRow GetSettings(ulong playerId) => TryRow(playerId, out var settings) ? settings : new SettingsRow();
+        public SettingsRow GetGlobalSettings() => playerSettings[WorldId];
 
 
 
@@ -402,4 +226,3 @@ namespace Satisvampory.Services
         public bool RestoreBuiltInGroup(ulong playerId, string name) => SettingsExtras.RestoreBuiltInGroup(playerId, name);
         public List<string> RestoreAllBuiltInGroups(ulong playerId, IEnumerable<string> builtInNames) => SettingsExtras.RestoreAllBuiltInGroups(playerId, builtInNames);
     }
-}

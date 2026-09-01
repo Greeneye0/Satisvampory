@@ -1,3 +1,9 @@
+using ProjectM;
+using ProjectM.Network;
+using ProjectM.Shared;
+using Stunlock.Core;
+using System.Collections;
+using Unity.Entities;
 
 namespace Satisvampory;
 

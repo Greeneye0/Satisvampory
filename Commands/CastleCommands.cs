@@ -101,7 +101,7 @@ namespace Satisvampory.Commands
         [Command(name: "finditem", shortHand: "fi", usage: ".s fi <item>", description: "Finds the item in chests. Shows the plot you are standing on. ClanShare ON: groups by plot and heart level.")]
         public static void FindItemAlias(ChatCommandContext ctx, FoundItem item)
         {
-            AdditionalCommands.FindItem(ctx, item);
+            InventoryCommands.LocateItem(ctx, item);
         }
 
         [Command(name: "rrglobal", shortHand: "rrg", usage: ".s rrglobal", description: "Toggle RR/stash off-plot. OFF by default. Does not change on-plot dest: ClanShare still dumps to all clan plots as one.")]
@@ -723,7 +723,7 @@ namespace Satisvampory.Commands
                 return;
             }
 
-            foreach (var line in Core.ConveyorService.DescribeProductConveyor(standing, item.prefab))
+            foreach (var line in BeltInspect.Product(standing, item.prefab))
                 ctx.Reply(line);
         }
 
@@ -743,7 +743,7 @@ namespace Satisvampory.Commands
                 return;
             }
 
-            foreach (var line in Core.ConveyorService.DescribeConveyorNeed(standing))
+            foreach (var line in BeltInspect.Need(standing))
                 ctx.Reply(line);
         }
 
@@ -894,6 +894,59 @@ namespace Satisvampory.Commands
             {
                 ctx.Reply("peek failed: " + e.Message);
             }
+        }
+
+        internal static IEnumerable<string> SettingsLines(ChatCommandContext ctx)
+        {
+            var steam = ctx.Event.User.PlatformId;
+            var settings = Core.PlayerSettings.GetSettings(steam);
+            var globalSettings = Core.PlayerSettings.GetGlobalSettings();
+            var leftoverLine = "DontPullLast: " + LogisticsCommands.OnOff(settings.DontPullLast);
+            var capsLine = "";
+            var salvageLine = globalSettings.Salvage
+                ? "Salvage: stand on a claimed plot to view/toggle (.s sal)"
+                : "Salvage: <color=red>Server Off</color>";
+            if (ItemGroupService.TryGetStandingCastleSettingsOwner(ctx, out var castleId, out var castleName, replyIfMissing: false))
+            {
+                var castleReserve = Core.PlayerSettings.GetPullReserve(castleId);
+                var overrideCount = Core.PlayerSettings.GetItemReserveOverrideCount(castleId);
+                leftoverLine += $" | Castle reserves ({castleName}): <color=green>leave {castleReserve}</color>" +
+                    (overrideCount > 0 ? $", {overrideCount} item override{(overrideCount == 1 ? "" : "s")}" : "");
+                var capCount = Core.PlayerSettings.GetItemCapOverrideCount(castleId);
+                capsLine = $"Castle caps ({castleName}): {(capCount > 0 ? $"<color=green>{capCount} item cap{(capCount == 1 ? "" : "s")}</color>" : "<color=white>none</color>")}";
+                var territoryId = Core.TerritoryService.GetTerritoryId(ctx.Event.SenderCharacterEntity);
+                var castleHeartEntity = Core.TerritoryService.GetCastleHeart(territoryId);
+                var clanShareOn = false;
+                if (castleHeartEntity != Entity.Null && castleHeartEntity.Has<UserOwner>())
+                {
+                    var heartUserEntity = castleHeartEntity.Read<UserOwner>().Owner.GetEntityOnServer();
+                    if (heartUserEntity != Entity.Null && heartUserEntity.Has<User>())
+                        clanShareOn = Core.TerritoryService.IsClanShareOn(heartUserEntity.Read<User>());
+                }
+                var excluded = Core.PlayerSettings.IsTerritoryClanShareExcluded(territoryId);
+                capsLine += $"\nClanShare (clan-wide): {LogisticsCommands.OnOff(clanShareOn)} (OFF by default; all members, all castles. .s cs)";
+                capsLine += $"\nRR global: {LogisticsCommands.OnOff(Core.PlayerSettings.IsRrGlobalEnabled(steam))} (OFF by default; only allows RR/stash off-plot. On-plot dest is ClanShare. .s rrglobal)";
+                capsLine += $"\nClanShare exclude (this plot, {castleName}): {(excluded ? "<color=red>Excluded / local-only</color>" : "<color=green>Included</color>")} (owner-only .s cse)";
+                var plotSalvage = Core.PlayerSettings.GetPlotSalvageFlag(castleId, territoryId);
+                salvageLine = !globalSettings.Salvage
+                    ? $"Salvage (this plot, {castleName}): {LogisticsCommands.OnOff(plotSalvage)} | <color=red>Server Off</color>"
+                    : $"Salvage (this plot, {castleName}): {LogisticsCommands.OnOff(plotSalvage)}";
+                salvageLine += $"\nHeartFeed (this plot, {castleName}): {LogisticsCommands.OnOff(Core.PlayerSettings.IsHeartFeedEnabled(castleId, territoryId))} (ON by default; .s hf)";
+            }
+            yield return "Satisvampory Settings:";
+            yield return "SortStash: " + LogisticsCommands.CombinedFlag(globalSettings.SortStash, settings.SortStash);
+            yield return "Pull (server): " + (globalSettings.Pull ? "<color=green>Server On</color>" : "<color=red>Server Off</color>");
+            yield return "CraftPull: " + LogisticsCommands.CombinedFlag(globalSettings.CraftPull, settings.CraftPull);
+            yield return leftoverLine;
+            if (capsLine.Length > 0) yield return capsLine;
+            yield return "AutoStashMissions: " + LogisticsCommands.CombinedFlag(globalSettings.AutoStashMissions, settings.AutoStashMissions);
+            yield return "Conveyor: " + LogisticsCommands.CombinedFlag(globalSettings.Conveyor, settings.Conveyor);
+            yield return "ConveyorLoops: " + LogisticsCommands.OnOff(globalSettings.ConveyorLoops) + " (admin .sg convloop; default OFF)";
+            yield return ".s conv <item> troubleshoot conveyor for a crafted item (station, line, why not moving).";
+            yield return salvageLine;
+            yield return "UnitSpawner: " + LogisticsCommands.CombinedFlag(globalSettings.UnitSpawner, settings.UnitSpawner);
+            yield return "Brazier: " + LogisticsCommands.CombinedFlag(globalSettings.Brazier, settings.Brazier) + " | Named: " + (globalSettings.Named ? "<color=green>Server On</color>" : "<color=red>Server Off</color>");
+            yield return "Silent pull " + LogisticsCommands.OnOff(settings.SilentPull) + " | stash " + LogisticsCommands.OnOff(settings.SilentStash);
         }
 
         [Command(name: "catalog", shortHand: "ic", usage: ".s catalog", description: "Dump the live PrefabCollection item catalog to BepInEx\\Log\\item-catalog.csv without a restart.")]

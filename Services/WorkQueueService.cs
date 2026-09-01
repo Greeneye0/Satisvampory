@@ -1,3 +1,9 @@
+using ProjectM;
+using ProjectM.CastleBuilding;
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using Unity.Entities;
 
 namespace Satisvampory.Services;
 
@@ -21,33 +27,16 @@ internal class WorkQueueService
 
     public void Enqueue(int plot)
     {
-        if (plot is < TerritoryService.MIN_TERRITORY_ID or > TerritoryService.MAX_TERRITORY_ID)
-            return;
+        if (plot is < TerritoryService.MIN_TERRITORY_ID or > TerritoryService.MAX_TERRITORY_ID) return;
         Core.Stash?.InvalidateTerritory(plot);
         ClanTreasuryLend.MarkDirty(plot);
         if (plot == processing) { reprocessCurrent = true; return; }
         if (queued.Add(plot)) pending.Enqueue(plot);
     }
 
-    public void EnqueueOwner(Entity owner)
-    {
-        if (owner != Entity.Null)
-            Enqueue(Core.TerritoryService.GetTerritoryId(owner));
-    }
+    public void EnqueueOwner(Entity owner) { if (owner != Entity.Null) Enqueue(Core.TerritoryService.GetTerritoryId(owner)); }
 
-    public void EnqueueAll()
-    {
-        for (var plot = TerritoryService.MIN_TERRITORY_ID; plot <= TerritoryService.MAX_TERRITORY_ID; plot++)
-            if (Core.TerritoryService.GetCastleHeart(plot) != Entity.Null)
-                Enqueue(plot);
-    }
+    public void EnqueueAll() { for (var plot = TerritoryService.MIN_TERRITORY_ID; plot <= TerritoryService.MAX_TERRITORY_ID; plot++) if (Core.TerritoryService.GetCastleHeart(plot) != Entity.Null) Enqueue(plot); }
 
-    internal void FlushRebuildDeferred()
-    {
-        if (rebuildDeferred.Count == 0) return;
-        var parked = new List<int>(rebuildDeferred);
-        rebuildDeferred.Clear();
-        for (var i = 0; i < parked.Count; i++)
-            Enqueue(parked[i]);
-    }
+    internal void FlushRebuildDeferred() { if (rebuildDeferred.Count == 0) return; var parked = new List<int>(rebuildDeferred); rebuildDeferred.Clear(); for (var i = 0; i < parked.Count; i++) Enqueue(parked[i]); }
 }

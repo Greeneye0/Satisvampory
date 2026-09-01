@@ -1,9 +1,14 @@
 using Il2CppInterop.Runtime;
+using ProjectM;
+using ProjectM.CastleBuilding;
+using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Entities;
 
-namespace Satisvampory.Services
+namespace Satisvampory.Services;
+
+internal sealed class UnitSpawnerstationService
 {
-    internal sealed class UnitSpawnerstationService
-    {
         readonly HeartBoundIndex index;
 
         static ComponentType[] QueryTypes =>
@@ -17,14 +22,10 @@ namespace Satisvampory.Services
             ComponentType.ReadOnly(Il2CppType.Of<CastleWorkstation>()),
         ];
 
-        public UnitSpawnerstationService()
-        {
-            index = HeartBoundIndex.Scan(includeDisabled: true, QueryTypes);
-        }
+        public UnitSpawnerstationService() { index = HeartBoundIndex.Scan(includeDisabled: true, QueryTypes); }
 
         internal void AddUnitSpawnerStation(Entity station) => index.Track(station);
         internal void RemoveUnitSpawnerStation(Entity station) => index.Untrack(station);
 
         public IEnumerable<Entity> GetAllUnitSpawners(int territoryId) => index.OnTerritory(territoryId);
-    }
 }

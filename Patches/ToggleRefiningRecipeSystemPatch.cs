@@ -1,3 +1,7 @@
+using HarmonyLib;
+using ProjectM;
+using ProjectM.Network;
+using Unity.Collections;
 
 namespace Satisvampory.Patches;
 
@@ -11,12 +15,7 @@ internal static class ToggleRefiningRecipeSystemPatch
     {
         if (!Core.HasInitialized || Core.WorkQueue == null) return;
         var events = system._EventQuery.ToComponentDataArray<ToggleRefiningRecipeEvent>(Allocator.Temp);
-        try
-        {
-            for (var i = 0; i < events.Length; i++)
-                if (Core.TryGetEntityFromNetworkId(events[i].RefinementStation, out var station))
-                    Core.WorkQueue.EnqueueOwner(station);
-        }
+        try { for (var i = 0; i < events.Length; i++) if (Core.TryGetEntityFromNetworkId(events[i].RefinementStation, out var station)) Core.WorkQueue.EnqueueOwner(station); }
         finally { events.Dispose(); }
     }
 }
