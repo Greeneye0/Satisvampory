@@ -49,7 +49,7 @@ Local file mailbox. No network socket. No give/spawn (except covering `sim` with
 - Read `res.json`
 - Poll ~0.25s, main thread only
 
-Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, `settings`, `dest`, `sim`, `fair`, `occupy`, `guest`, `cover`, `unstick`, `need`, `selftest`, `log`, `perf`, `logdump`, `servants`, `servantstash`, `thrones`, `gotothrone`, `hunt`, `huntsend`, `hunttime`.
+Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, `settings`, `dest`, `sim`, `fair`, `occupy`, `guest`, `cover`, `unstick`, `need`, `selftest`, `log`, `perf`, `logdump`, `servants`, `servantstash`, `thrones`, `gotothrone`, `hunt`, `huntsend`, `hunttime`, `revive`, `rhmax`.
 
 `thrones` dumps throne positions, connected players, `.s throne` picks, last rewrite (sitting/selected/from/to), last `gotothrone`, whether Request and Interactor were patched, and servant names on the last `ServantInfoEvent.Response`.
 
@@ -58,6 +58,10 @@ Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, 
 `huntsend` actually injects `SendOnMissionEvent` (same auto-send path as repeat hunts). `{ "op":"huntsend", "plot":86, "name":"Raven", "dest":"Fishing Lake" }`. Omit `dest` to reuse the plot’s last hunt zone. `name` is servant numbers (`"1 2"`) or name fragments. Does not require sitting the throne.
 
 `hunttime` writes remaining seconds on matching active missions. `{ "op":"hunttime", "plot":86, "name":"Raven", "seconds":30 }`. Empty `name` = every hunt on that plot. Sets start=now and length=seconds.
+
+`revive` starts vanilla revive on matching dead coffins (no blood cost). `{ "op":"revive", "plot":86, "name":"Corey Lewie" }`. Sets `Reviving` and `ConvertionProgress=600`. Wait until `ServantAlive`.
+
+`rhmax` sets `.sg rhmax` and, at **100**, also writes `ServantMissionSetting.SuccessRateBonus=1` / `InjuryChance=0` so the vanilla finish roll can actually succeed. Set back to 95 to restore the table. `{ "op":"rhmax", "seconds":100 }`.
 
 `players` is the bounce gate. `selftest` includes dest-ranking assertions (`StashRouting.SelfTestDest`).
 

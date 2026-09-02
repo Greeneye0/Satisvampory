@@ -851,6 +851,142 @@ namespace Satisvampory.Services
                 + ",\"who\":\"" + EscJson(string.Join(", ", names)) + "\"}";
         }
 
+        public static string DebugRevive(int plot, string who)
+        {
+            if (plot < 0)
+                return "{\"error\":\"need plot\"}";
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<ServantCoffinstation>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            var names = new List<string>();
+            var changed = 0;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var coffin = rows[i];
+                    if (coffin == Entity.Null || !Core.EntityManager.Exists(coffin) || !coffin.Has<ServantCoffinstation>())
+                        continue;
+                    if (Core.TerritoryService.GetTerritoryId(coffin) != plot)
+                        continue;
+                    var st = coffin.Read<ServantCoffinstation>();
+                    var n = st.ServantName.ToString();
+                    if (string.IsNullOrWhiteSpace(n))
+                        n = "unnamed";
+                    if (!NameHit(n, who))
+                        continue;
+                    if (st.State != ServantCoffinState.ServantRevivable && st.State != ServantCoffinState.Reviving)
+                        continue;
+                    st.State = ServantCoffinState.Reviving;
+                    st.ConvertionProgress = 600f;
+                    st.Injury = default;
+                    st.InjuryEndTimeTicks = 1;
+                    coffin.Write(st);
+                    names.Add(n);
+                    changed++;
+                }
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
+            if (changed == 0)
+                return "{\"error\":\"no revivable coffin\",\"who\":\"" + EscJson(who) + "\"}";
+            DestDebugLog.Note("throne", plot, 0, "debug revive " + string.Join(",", names));
+            return "{\"ok\":true,\"plot\":" + plot
+                + ",\"reviving\":" + changed
+                + ",\"who\":\"" + EscJson(string.Join(", ", names)) + "\"}";
+        }
+
+        static bool NameHit(string name, string who)
+        {
+            if (string.IsNullOrWhiteSpace(who))
+                return true;
+            var parts = who.Replace(',', ' ').Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < parts.Length; i++)
+            {
+                if (name.IndexOf(parts[i], StringComparison.OrdinalIgnoreCase) >= 0)
+                    return true;
+            }
+            return false;
+        }
+
+        static List<ServantMissionSetting> savedMissionSettings;
+
+        public static string DebugRhMax(int percent)
+        {
+            if (percent < 1)
+                percent = 1;
+            if (percent > 100)
+                percent = 100;
+            var n = Core.PlayerSettings.SetRepeatHuntMaxSuccess(percent);
+            var rolled = ApplyMissionRoll(percent >= 100);
+            DestDebugLog.Note("throne", -1, 0, "debug rhmax " + n + " roll=" + (rolled ? "force" : "vanilla"));
+            return "{\"ok\":true,\"max\":" + n + ",\"roll\":\"" + (rolled ? "force100" : "vanilla") + "\"}";
+        }
+
+        static bool ApplyMissionRoll(bool force100)
+        {
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<ServantMissionSetting>(), ComponentType.AccessMode.ReadWrite));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            var wrote = false;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var e = rows[i];
+                    if (e == Entity.Null || !e.Has<ServantMissionSetting>())
+                        continue;
+                    DynamicBuffer<ServantMissionSetting> buf;
+                    try { buf = e.ReadBuffer<ServantMissionSetting>(); }
+                    catch { continue; }
+                    if (buf.Length == 0)
+                        continue;
+                    if (force100)
+                    {
+                        if (savedMissionSettings == null)
+                        {
+                            savedMissionSettings = new List<ServantMissionSetting>(buf.Length);
+                            for (var s = 0; s < buf.Length; s++)
+                                savedMissionSettings.Add(buf[s]);
+                        }
+                        for (var s = 0; s < buf.Length; s++)
+                        {
+                            var row = buf[s];
+                            row.SuccessRateBonus = 1f;
+                            row.InjuryChance = 0f;
+                            buf[s] = row;
+                        }
+                        wrote = true;
+                    }
+                    else if (savedMissionSettings != null)
+                    {
+                        var n = Math.Min(buf.Length, savedMissionSettings.Count);
+                        for (var s = 0; s < n; s++)
+                            buf[s] = savedMissionSettings[s];
+                        savedMissionSettings = null;
+                        wrote = true;
+                    }
+                }
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
+            return force100 && wrote;
+        }
+
         static bool TryPickIdle(int plot, string who, out List<NetworkId> nids, out List<string> names, out string error)
         {
             nids = new List<NetworkId>(3);

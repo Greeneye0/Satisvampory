@@ -132,7 +132,7 @@ namespace Satisvampory.Services
             switch (op)
             {
                 case "help":
-                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\",\"gotothrone\",\"hunt\",\"huntsend\",\"hunttime\"],"
+                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\",\"gotothrone\",\"hunt\",\"huntsend\",\"hunttime\",\"revive\",\"rhmax\"],"
                         + "\"req\":\"" + Esc(ReqPath) + "\",\"res\":\"" + Esc(ResPath) + "\","
                         + "\"hint\":\"{\\\"op\\\":\\\"log\\\",\\\"name\\\":\\\"dupe\\\"}\","
                         + "\"sim\":\"dry-run covering as if you are standing on plot. apply:true actually moves\","
@@ -150,6 +150,8 @@ namespace Satisvampory.Services
                         + "\"hunt\":\"arm next vanilla map click (plot:N name:'1 2')\","
                         + "\"huntsend\":\"actually send idle servants now (plot, name:'Raven' or '1 2', dest:'Fishing Lake' or last zone)\","
                         + "\"hunttime\":\"set remaining seconds on an active hunt (plot, name:servant filter, seconds:N)\","
+                        + "\"revive\":\"start revive on dead coffins (plot, name:'Corey Lewie')\","
+                        + "\"rhmax\":\"set repeat max success % (seconds:N). 100 also forces vanilla mission success/injury table\","
                         + "\"servantstash\":\"stash all returned servants now (plot:N optional)\"}";
                 case "players":
                     return PeekPlayers();
@@ -200,6 +202,11 @@ namespace Satisvampory.Services
                 case "hunttime":
                 case "missiontime":
                     return RepeatHunts.DebugSetTime(plot, name, seconds > 0 ? seconds : users);
+                case "revive":
+                case "rez":
+                    return RepeatHunts.DebugRevive(plot, name);
+                case "rhmax":
+                    return RepeatHunts.DebugRhMax(seconds > 0 ? seconds : (users > 0 ? users : 99));
                 case "servantstash":
                 case "asmstash":
                     return Core.Stash.DebugStashAllServants(plot);
