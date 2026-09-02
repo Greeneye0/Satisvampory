@@ -43,8 +43,63 @@ namespace Satisvampory.Services
         static readonly Dictionary<ulong, List<int>> pendingList = new();
         static readonly TimeSpan ListTtl = TimeSpan.FromMinutes(2);
         static readonly Dictionary<ulong, DateTime> pendingListAt = new();
+        static int capSuccessFrames;
 
         public static bool IsOn(int plot) => Core.PlayerSettings.IsRepeatHuntPlotOn(plot);
+
+        public static bool ShouldCapSuccess => capSuccessFrames > 0;
+
+        public static void TickCapFrames()
+        {
+            if (capSuccessFrames > 0)
+                capSuccessFrames--;
+        }
+
+        public static void CaptureActiveMissions(int plotFilter = -1)
+        {
+            if (!Core.HasInitialized)
+                return;
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<ActiveServantMission>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> hearts = default;
+            try
+            {
+                hearts = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < hearts.Length; i++)
+                {
+                    var heart = hearts[i];
+                    if (heart == Entity.Null || !Core.EntityManager.Exists(heart))
+                        continue;
+                    var plot = Core.TerritoryService.GetTerritoryId(heart);
+                    if (plot < 0 || (plotFilter >= 0 && plot != plotFilter))
+                        continue;
+                    DynamicBuffer<ActiveServantMission> buf;
+                    try { buf = heart.ReadBuffer<ActiveServantMission>(); }
+                    catch { continue; }
+                    for (var m = 0; m < buf.Length; m++)
+                    {
+                        var mission = buf[m];
+                        var recipe = RecipeFromMission(plot, heart, mission);
+                        if (!Core.TryGetEntityFromNetworkId(recipe.Throne, out _))
+                            continue;
+                        byPlot[plot] = recipe;
+                        DestDebugLog.Note("throne", plot, 0, "capture in-flight hunt");
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Core.LogException(e);
+            }
+            finally
+            {
+                if (hearts.IsCreated)
+                    hearts.Dispose();
+                query.Dispose();
+            }
+        }
 
         public static void Remember(Entity eventEntity)
         {
@@ -234,7 +289,8 @@ namespace Satisvampory.Services
                     MissionDataID = hunt.MissionDataId,
                     MapZoneId = hunt.Zone
                 });
-                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send");
+                capSuccessFrames = 5;
+                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send cap=" + Core.PlayerSettings.GetRepeatHuntMaxSuccess());
             }
             catch (Exception e)
             {
@@ -244,18 +300,53 @@ namespace Satisvampory.Services
 
         static Recipe RecipeFromMission(int plot, Entity heart, ActiveServantMission mission)
         {
-            var throne = Entity.Null;
-            // best-effort: plot throne is not on the mission struct
+            var throne = ClanThroneServants.FindThrone(plot);
+            var throneNid = throne != Entity.Null && throne.Has<NetworkId>() ? throne.Read<NetworkId>() : default;
+            TryZoneForMission(mission.MissionID, out var zone);
             return new Recipe
             {
                 Plot = plot,
-                Throne = default,
+                Throne = throneNid,
                 S1 = NidOf(mission.Servant1),
                 S2 = NidOf(mission.Servant2),
                 S3 = NidOf(mission.Servant3),
                 MissionDataId = mission.MissiontDataId,
-                Zone = default
+                Zone = zone
             };
+        }
+
+        static bool TryZoneForMission(PrefabGUID mission, out MapZoneId zone)
+        {
+            zone = default;
+            if (mission.GuidHash == 0)
+                return false;
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<MapZoneData>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var e = rows[i];
+                    if (e == Entity.Null || !e.Has<MapZoneData>())
+                        continue;
+                    var data = e.Read<MapZoneData>();
+                    if (data.ServantMissionAsset.GuidHash != mission.GuidHash)
+                        continue;
+                    zone = new MapZoneId { ChunkCoordinate = data.ChunkCoordinate, ZoneId = data.ZoneIndex };
+                    return true;
+                }
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
+            return false;
         }
 
         static NetworkId NidOf(NetworkedEntity ne)
@@ -444,7 +535,8 @@ namespace Satisvampory.Services
             pendingListAt[steam] = DateTime.UtcNow + ListTtl;
             var standing = character != Entity.Null ? Core.TerritoryService.GetStandingTerritoryId(character) : -1;
             var sb = new StringBuilder();
-            sb.Append("Repeat hunts (server <color=green>ON</color>)\n");
+            sb.Append("Repeat hunts (server <color=green>ON</color>, max ")
+                .Append(Core.PlayerSettings.GetRepeatHuntMaxSuccess()).Append("% )\n");
             for (var i = 0; i < ids.Count; i++)
             {
                 var plot = ids[i];

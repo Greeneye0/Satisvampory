@@ -38,7 +38,35 @@ namespace Satisvampory.Services;
 
         public bool IsRepeatHuntEnabled() => TryRow(WorldId, out var world) && world.RepeatHunt;
 
-        public bool ToggleRepeatHunt() => FlipFlag(WorldId, static s => s.RepeatHunt, static (s, v) => { s.RepeatHunt = v; return s; });
+        public bool ToggleRepeatHunt()
+        {
+            var on = FlipFlag(WorldId, static s => s.RepeatHunt, static (s, v) => { s.RepeatHunt = v; return s; });
+            if (on)
+                RepeatHunts.CaptureActiveMissions();
+            return on;
+        }
+
+        public int GetRepeatHuntMaxSuccess()
+        {
+            if (!TryRow(WorldId, out var world) || world.RepeatHuntMaxSuccess <= 0)
+                return 99;
+            if (world.RepeatHuntMaxSuccess > 100)
+                return 100;
+            return world.RepeatHuntMaxSuccess;
+        }
+
+        public int SetRepeatHuntMaxSuccess(int percent)
+        {
+            if (percent < 1)
+                percent = 1;
+            if (percent > 100)
+                percent = 100;
+            var row = Snapshot(WorldId, true);
+            row.RepeatHuntMaxSuccess = percent;
+            playerSettings[WorldId] = row;
+            MarkDirty();
+            return percent;
+        }
 
         public bool IsRepeatHuntPlotOn(int plot)
         {
@@ -61,6 +89,8 @@ namespace Satisvampory.Services;
             row.RepeatHuntOffPlots = list;
             playerSettings[WorldId] = row;
             MarkDirty();
+            if (on)
+                RepeatHunts.CaptureActiveMissions(plot);
         }
 
         public bool IsConveyorEnabled(ulong playerId) => ReadFlag(playerId, static s => s.Conveyor, requireGlobal: true);

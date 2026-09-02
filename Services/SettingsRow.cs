@@ -23,6 +23,7 @@ namespace Satisvampory.Services
             ClanShareByClan = new Dictionary<string, bool>();
             ClanShareExcludedTerritories = new List<string>();
             RepeatHuntOffPlots = new List<string>();
+            RepeatHuntMaxSuccess = 99;
             StarterKitSeeded = new List<string>();
             StarterKitChestSeeded = new List<string>();
             StarterKitChestOptOut = new List<string>();
@@ -95,6 +96,8 @@ namespace Satisvampory.Services
         public bool RepeatHunt { get; set; }
         // Plots with repeat hunts OFF ("t{id}"). Missing = ON when .sg rh is on.
         public List<string> RepeatHuntOffPlots { get; set; }
+        // 1-100. 0 in old json = 99. Repeat sends only.
+        public int RepeatHuntMaxSuccess { get; set; }
     }
 
 }

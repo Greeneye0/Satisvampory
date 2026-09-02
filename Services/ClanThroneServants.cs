@@ -1263,7 +1263,7 @@ namespace Satisvampory.Services
 
         static string F(float v) => v.ToString("0.###", CultureInfo.InvariantCulture);
 
-        static Entity FindThrone(int plot)
+        internal static Entity FindThrone(int plot)
         {
             if (learnedThroneByPlot.TryGetValue(plot, out var learned)
                 && learned != Entity.Null && Core.EntityManager.Exists(learned) && learned.Has<NetworkId>()

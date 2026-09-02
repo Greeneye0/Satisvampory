@@ -1,4 +1,5 @@
 using HarmonyLib;
+using ProjectM;
 using ProjectM.Shared.Systems;
 using Satisvampory.Services;
 using System;
@@ -50,6 +51,24 @@ namespace Satisvampory.Patches
             {
                 Core.LogException(e);
             }
+        }
+
+        static void Postfix()
+        {
+            RepeatHunts.TickCapFrames();
+        }
+    }
+
+    [HarmonyPatch(typeof(ServantHelper), nameof(ServantHelper.GetMissionSuccessChanceForServant_Server))]
+    public static class RepeatHuntSuccessCapPatch
+    {
+        static void Postfix(ref float __result)
+        {
+            if (!RepeatHunts.ShouldCapSuccess || !Core.HasInitialized)
+                return;
+            var cap = Core.PlayerSettings.GetRepeatHuntMaxSuccess() / 100f;
+            if (__result > cap)
+                __result = cap;
         }
     }
 

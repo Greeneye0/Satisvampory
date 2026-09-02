@@ -19,6 +19,10 @@ Per castle (needs server ON): **`.s rh`** lists every ClanShare / standing castl
 
 When a plot is ON: each time a hunt **returns**, surviving (not dead, not injured) servants are sent again on the **same** zone / mission / throne after a short delay. Dead or injured servants are skipped. If none can go, no resend. Raided hearts do not resend.
 
+Turning **`.sg rh` ON**, **`.s rh on`**, or **`.s rh all`** captures hunts **already in the field** so they loop when they get back.
+
+**`.sg rhmax [1-100]`** caps success chance on **repeat** sends only (vanilla first send unchanged). Default **99**. `.sg rhmax` with no number shows the current cap.
+
 On every return (repeat on or off), the castle **heart owner** (if connected) gets a system chat line: who came back, loot stacks, or who **died** / injured. Then auto-stash runs as today.
 
 Do not Harmony-patch Burst `GetResponseEntries`. Remember the hunt from `SendOnMissionEvent` (after any throne rewrite). Abort clears that memory.

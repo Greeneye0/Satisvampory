@@ -124,7 +124,8 @@ Needs `save-data\Settings\adminlist.txt` SteamID64 **and** console `adminauth`.
 | `.sg p` | Allow `.pull` |
 | `.sg cr` | Allow craft-pull |
 | `.sg asm` | Allow servant auto-stash |
-| `.sg rh` / `.sg repeathunt` | Repeat hunts: servants go back out on the same hunt when they return. Default **OFF**. Chat the owner loot or death |
+| `.sg rh` / `.sg repeathunt` | Repeat hunts: servants go back out on the same hunt when they return. Default **OFF**. Chat the owner loot or death. Turning ON captures hunts already out |
+| `.sg rhmax [n]` | Max success **%** for **repeat** sends only (first throne send is vanilla). Default **99**. `.sg rhmax` shows |
 | `.sg co` | Allow conveyors |
 | `.sg convloop` / `.sg cloop` | Allow s# chest → r# chest **loops** (dest is also s# on the same group). Default **OFF**. Chest→chest without a cycle works even when this is off |
 | `.sg sal` | Allow devourer salvage |
