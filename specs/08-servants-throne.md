@@ -23,7 +23,7 @@ Turning **`.sg rh` ON**, **`.s rh on`**, or **`.s rh all`** captures hunts **alr
 
 **`.sg rhmax [1-100]`** caps success chance on **repeat** sends only (vanilla first send unchanged). Default **99**. `.sg rhmax` with no number shows the current cap.
 
-On every return (repeat on or off), the castle **heart owner** (if connected) gets a system chat line: who came back, loot stacks, or who **died** / injured. Then auto-stash runs as today.
+On every return (repeat on or off), the castle **heart owner** (if connected) gets a system chat line: destination, survival %, who came back, loot stacks, or who **died** / injured. Then auto-stash runs as today. Example: `Hunt returned (plot 86 L4) — Bandit Logging Camp (99%): Corey — 120 Plank. Repeat: sent again.`
 
 Do not Harmony-patch Burst `GetResponseEntries`. Remember the hunt from `SendOnMissionEvent` (after any throne rewrite). Abort clears that memory.
 

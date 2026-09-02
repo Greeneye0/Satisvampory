@@ -64,11 +64,15 @@ namespace Satisvampory.Patches
     {
         static void Postfix(ref float __result)
         {
-            if (!RepeatHunts.ShouldCapSuccess || !Core.HasInitialized)
+            if (!Core.HasInitialized)
                 return;
-            var cap = Core.PlayerSettings.GetRepeatHuntMaxSuccess() / 100f;
-            if (__result > cap)
-                __result = cap;
+            if (RepeatHunts.ShouldCapSuccess)
+            {
+                var cap = Core.PlayerSettings.GetRepeatHuntMaxSuccess() / 100f;
+                if (__result > cap)
+                    __result = cap;
+            }
+            RepeatHunts.NoteSuccess(__result);
         }
     }
 

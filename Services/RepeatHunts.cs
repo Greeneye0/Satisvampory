@@ -29,6 +29,18 @@ namespace Satisvampory.Services
             public NetworkId S3;
             public int MissionDataId;
             public MapZoneId Zone;
+            public string DestName;
+            public float SuccessPct;
+        }
+
+        static float lastSuccess = -1f;
+
+        public static void NoteSuccess(float chance)
+        {
+            if (chance < 0f)
+                return;
+            if (lastSuccess < 0f || chance < lastSuccess)
+                lastSuccess = chance;
         }
 
         struct PendingReturn
@@ -120,9 +132,12 @@ namespace Satisvampory.Services
                 S2 = ev.Servant2,
                 S3 = ev.Servant3,
                 MissionDataId = ev.MissionDataID,
-                Zone = ev.MapZoneId
+                Zone = ev.MapZoneId,
+                DestName = DestLabel(ev.MapZoneId, default),
+                SuccessPct = lastSuccess
             };
-            DestDebugLog.Note("throne", plot, 0, "remember hunt");
+            lastSuccess = -1f;
+            DestDebugLog.Note("throne", plot, 0, "remember hunt " + byPlot[plot].DestName + " " + (int)(byPlot[plot].SuccessPct * 100f + 0.5f) + "%");
         }
 
         public static void ForgetAbort(Entity eventEntity)
@@ -214,6 +229,10 @@ namespace Satisvampory.Services
             sb.Append("Hunt returned");
             if (row.Hunt.Plot >= 0)
                 sb.Append(" (").Append(Core.TerritoryService.FormatPlotLabel(row.Hunt.Plot)).Append(')');
+            if (!string.IsNullOrWhiteSpace(row.Hunt.DestName))
+                sb.Append(" — ").Append(row.Hunt.DestName);
+            if (row.Hunt.SuccessPct >= 0f)
+                sb.Append(" (").Append((int)(row.Hunt.SuccessPct * 100f + 0.5f)).Append("%)");
             sb.Append(": ");
             if (aliveNames.Count > 0)
                 sb.Append(string.Join(", ", aliveNames));
@@ -302,7 +321,7 @@ namespace Satisvampory.Services
         {
             var throne = ClanThroneServants.FindThrone(plot);
             var throneNid = throne != Entity.Null && throne.Has<NetworkId>() ? throne.Read<NetworkId>() : default;
-            TryZoneForMission(mission.MissionID, out var zone);
+            TryZoneForMission(mission.MissionID, default, out var zone, out var dest);
             return new Recipe
             {
                 Plot = plot,
@@ -311,15 +330,22 @@ namespace Satisvampory.Services
                 S2 = NidOf(mission.Servant2),
                 S3 = NidOf(mission.Servant3),
                 MissionDataId = mission.MissiontDataId,
-                Zone = zone
+                Zone = zone,
+                DestName = dest,
+                SuccessPct = -1f
             };
         }
 
-        static bool TryZoneForMission(PrefabGUID mission, out MapZoneId zone)
+        static string DestLabel(MapZoneId zone, PrefabGUID mission)
+        {
+            TryZoneForMission(mission, zone, out _, out var name);
+            return name;
+        }
+
+        static bool TryZoneForMission(PrefabGUID mission, MapZoneId want, out MapZoneId zone, out string destName)
         {
             zone = default;
-            if (mission.GuidHash == 0)
-                return false;
+            destName = "";
             var qb = new EntityQueryBuilder(Allocator.Temp)
                 .AddAll(new(Il2CppType.Of<MapZoneData>(), ComponentType.AccessMode.ReadOnly));
             var query = Core.EntityManager.CreateEntityQuery(ref qb);
@@ -334,10 +360,14 @@ namespace Satisvampory.Services
                     if (e == Entity.Null || !e.Has<MapZoneData>())
                         continue;
                     var data = e.Read<MapZoneData>();
-                    if (data.ServantMissionAsset.GuidHash != mission.GuidHash)
+                    var matchAsset = mission.GuidHash != 0 && data.ServantMissionAsset.GuidHash == mission.GuidHash;
+                    var matchZone = want.ZoneId != 0 && data.ZoneIndex == want.ZoneId
+                        && data.ChunkCoordinate.Equals(want.ChunkCoordinate);
+                    if (!matchAsset && !matchZone)
                         continue;
                     zone = new MapZoneId { ChunkCoordinate = data.ChunkCoordinate, ZoneId = data.ZoneIndex };
-                    return true;
+                    destName = ZoneLabel(data);
+                    return destName.Length > 0 || matchAsset;
                 }
             }
             finally
@@ -346,7 +376,43 @@ namespace Satisvampory.Services
                     rows.Dispose();
                 query.Dispose();
             }
+            if (mission.GuidHash != 0)
+            {
+                destName = PrettyMission(mission);
+                return destName.Length > 0;
+            }
             return false;
+        }
+
+        static string ZoneLabel(MapZoneData data)
+        {
+            try
+            {
+                var loc = Core.Localization.GetLocalization(data.Name);
+                if (!string.IsNullOrWhiteSpace(loc) && loc.IndexOf("not found", StringComparison.OrdinalIgnoreCase) < 0)
+                    return loc;
+            }
+            catch { }
+            if (data.ServantMissionAsset.GuidHash != 0)
+                return PrettyMission(data.ServantMissionAsset);
+            return "";
+        }
+
+        static string PrettyMission(PrefabGUID guid)
+        {
+            var pretty = Core.Localization.GetPrefabName(guid);
+            if (!string.IsNullOrWhiteSpace(pretty) && pretty.IndexOf("not found", StringComparison.OrdinalIgnoreCase) < 0)
+                return pretty;
+            var raw = guid.LookupName();
+            if (string.IsNullOrWhiteSpace(raw))
+                return "";
+            var cut = raw.IndexOf(' ');
+            if (cut > 0)
+                raw = raw.Substring(0, cut);
+            const string prefix = "ServantMission_";
+            if (raw.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                raw = raw.Substring(prefix.Length);
+            return raw.Replace('_', ' ');
         }
 
         static NetworkId NidOf(NetworkedEntity ne)
