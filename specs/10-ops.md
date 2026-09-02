@@ -55,7 +55,7 @@ Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, 
 
 `gotothrone` is debug-only movement. `hunt` with `plot:N` and `name:"1 2"` arms the next vanilla map click.
 
-`huntsend` actually injects `SendOnMissionEvent` (same auto-send path as repeat hunts). `{ "op":"huntsend", "plot":86, "name":"Raven", "dest":"Fishing Lake" }`. Omit `dest` to reuse the plot’s last hunt zone. `name` is servant numbers (`"1 2"`) or name fragments. Does not require sitting the throne.
+`huntsend` writes the heart mission buffer (same path as repeat hunts). `{ "op":"huntsend", "plot":86, "name":"Raven", "dest":"Fishing Lake" }`. Omit `dest` to reuse the plot’s last hunt zone. `name` is servant numbers (`"1 2"`) or name fragments. Does not require sitting the throne or a connected player.
 
 `hunttime` writes remaining seconds on matching active missions. `{ "op":"hunttime", "plot":86, "name":"Raven", "seconds":30 }`. Empty `name` = every hunt on that plot. Sets start=now and length=seconds.
 

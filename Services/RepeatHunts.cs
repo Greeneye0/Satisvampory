@@ -504,38 +504,7 @@ namespace Satisvampory.Services
                     return false;
                 }
                 hunt.MissionDataId = ClampSetting(hunt.MissionDataId);
-                var haveSender = TryFromSend(heart, throne, out var userEnt, out var character)
-                    && character != Entity.Null;
-                var connected = haveSender && userEnt != Entity.Null && userEnt.Has<User>()
-                    && userEnt.Read<User>().IsConnected;
                 skipSendChat = true;
-                if (connected)
-                {
-                    autoThrone = throne;
-                    autoCharacter = character;
-                    autoUser = userEnt;
-                    autoFrames = 600;
-                    ArmInteractor(character, throne);
-                    var entity = Core.EntityManager.CreateEntity();
-                    entity.Add<FromCharacter>();
-                    entity.Add<SendOnMissionEvent>();
-                    entity.Write(new FromCharacter { User = userEnt, Character = character });
-                    entity.Write(new SendOnMissionEvent
-                    {
-                        Throne = hunt.Throne,
-                        Servant1 = CoffinNid(hunt.S1),
-                        Servant2 = CoffinNid(hunt.S2),
-                        Servant3 = CoffinNid(hunt.S3),
-                        MissionDataID = hunt.MissionDataId,
-                        MapZoneId = hunt.Zone
-                    });
-                    capSuccessFrames = 5;
-                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send " + hunt.DestName
-                        + " z=" + ZoneTag(hunt.Zone) + " slot=" + hunt.MissionDataId
-                        + " prefab=" + hunt.MissionPrefab.GuidHash
-                        + " as=" + SenderName(userEnt));
-                    return true;
-                }
                 if (!ForceHunt(heart, hunt))
                 {
                     lastFail = "could not start hunt";
