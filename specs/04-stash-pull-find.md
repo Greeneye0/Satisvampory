@@ -32,6 +32,14 @@ Take items into bags from dest chests on this plot or clan island.
 - `.s sp` silent pull (no “from where” chat).
 - Needs `.sg p` allow and player pull toggle where that gate is used.
 
+## `.pull <group> [amount]`
+
+Pull **one max stack of each member** of a built-in or castle group (`seeds`, `ore`, `flowers`, …).
+
+- Exact item names still win (`plank` is the item; `planks` is the group).
+- Omit amount, or `1`: one stack of each. Amount `> 1`: that many of each.
+- Same source pass and reserve ignore as item pull. Chat is a summary (not per chest).
+
 ## Craft-pull / repair / forge (`.s cr`)
 
 Right-click recipe (and repair/forge retrieve) pulls missing ingredients.

@@ -39,9 +39,10 @@ Not scoop bagcap.
 
 ## Item groups (castle)
 
-Built-in groups (aliases in parentheses): ore, flowers (herb/herbs), mushrooms, tailoring (thread), hides (leather), wood, gems, alchemy, blood, bones, ingots, planks, stone, coins, fish, knowledge (scroll/paper/book), minerals (material/tech), consumables (potion), weapons, armor, jewels, magic, soulshards, bags, saddles, relics.
+Built-in groups (aliases in parentheses): ore, flowers (herb/herbs), seeds (seed), mushrooms, tailoring (thread), hides (leather), wood, gems, alchemy, blood, bones, ingots, planks, stone, coins, fish, knowledge (scroll/paper/book), minerals (material/tech), consumables (potion), weapons, armor, jewels, magic, soulshards, bags, saddles, relics.
 
 - Hell’s Clarion is **mushrooms**, not flowers. `.s group restore` puts that back.
+- Plant seeds (Blood Rose Seed, Cotton Seed, mushroom spores, …) are **seeds**. Saplings stay **wood**. Herb / mushroom / cotton chests still accept those plantables.
 - First edit of a built-in **copies** the default list, then mutates the copy.
 - `.s group <name>` lists each member’s **island stock** (ClanShare = clan island), sorted by have, then **total** of those totals.
 - `.s group <name> full` also prints each item’s **reserve** and **production cap**.

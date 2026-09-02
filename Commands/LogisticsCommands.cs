@@ -32,7 +32,7 @@ namespace Satisvampory.Commands;
             var item = new FoundItem(picked.Prefab);
             var name = string.IsNullOrEmpty(picked.Name) ? item.prefab.PrefabName() : picked.Name;
             var cmd = pending.Command;
-            if (cmd == PendingItemCommand.Pull) { ctx.Reply($"Using {name}. Pulling {pending.Amount}."); InventoryCommands.PullItem(ctx, item, pending.Amount); return; }
+            if (cmd == PendingItemCommand.Pull) { ctx.Reply($"Using {name}. Pulling {pending.Amount}."); InventoryCommands.PullItem(ctx, FoundItemOrGroup.FromItem(item), pending.Amount); return; }
             ctx.Reply($"Using {name}.");
             if (cmd == PendingItemCommand.ReserveShow) CastleCommands.ShowItemReserve(ctx, FoundItemOrGroup.FromItem(item));
             else if (cmd == PendingItemCommand.ReserveSet) CastleCommands.SetItemReserveCmd(ctx, FoundItemOrGroup.FromItem(item), pending.Amount);
@@ -272,8 +272,26 @@ namespace Satisvampory.Commands;
         public static void PickItemByNumber(ChatCommandContext ctx, int number) =>
             LogisticsCommands.ReplayPendingPick(ctx, number);
 
-        [Command(name: "pull", description: "Pull an item from dest chests on this plot or clan island.")]
-        public static void PullItem(ChatCommandContext ctx, FoundItem item, int quantity = 1) { if (!LogisticsCommands.HandleAmbiguousItem(ctx, item, PendingItemCommand.Pull, quantity)) PlayerWithdraw.Pull(ctx.Event.SenderCharacterEntity, item.prefab, quantity); }
+        [Command(name: "pull", description: "Pull an item, or a stack of each item in a group, from dest chests on this plot or clan island.")]
+        public static void PullItem(ChatCommandContext ctx, FoundItemOrGroup target, int quantity = 1)
+        {
+            if (target.IsGroup)
+            {
+                var ownerId = ctx.Event.User.PlatformId;
+                if (ItemGroupService.TryGetStandingCastleSettingsOwner(ctx, out var castleId, out _, replyIfMissing: false))
+                    ownerId = castleId;
+                if (!ItemGroupService.TryResolveGroup(ownerId, target.GroupName, out var groupName, out _))
+                {
+                    ctx.Reply($"Unknown group <color=green>{target.GroupName}</color>.");
+                    return;
+                }
+                var members = ItemGroupService.ResolveMembers(ownerId, groupName);
+                PlayerWithdraw.PullGroup(ctx.Event.SenderCharacterEntity, groupName, members, quantity);
+                return;
+            }
+            if (!LogisticsCommands.HandleAmbiguousItem(ctx, target.Item, PendingItemCommand.Pull, quantity))
+                PlayerWithdraw.Pull(ctx.Event.SenderCharacterEntity, target.Item.prefab, quantity);
+        }
 
         [Command(name: "finditem", shortHand: "fi", description: "Finds the item in chests. Shows the plot you are standing on. ClanShare ON: groups by plot and heart level.")]
         public static void LocateItem(ChatCommandContext ctx, FoundItem item) {

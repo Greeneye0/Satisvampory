@@ -79,7 +79,7 @@ With Clan Share on, scoop stops iron ore once your bags plus clan chests hold 50
 
 **Craft pulling.** Turn on `.s cr` (server allow `.sg cr`). Right-click a recipe that is missing ingredients and the mod pulls them from the island into your bags, honoring reserves.
 
-**Pull commands.** `.pull <item> <n>` grabs items directly into your bags from anywhere on the island. Pull ignores reserves. Turn on `.s dpl` (default ON) so it never takes the last stack out of a chest. Pull is the one feature still flagged as a little buggy.
+**Pull commands.** `.pull <item> <n>` grabs items directly into your bags from anywhere on the island. `.pull <group>` grabs **one stack of each member** (`seed` / `seeds`, `ore`, `flowers`, …). `.pull seeds 20` is 20 of each. Pull ignores reserves. Turn on `.s dpl` (default ON) so it never takes the last stack out of a chest. Pull is the one feature still flagged as a little buggy.
 
 **Worked example: build at castle B with mats stored at castle A**
 
@@ -97,6 +97,14 @@ Stand at castle B, open the workbench, right-click a recipe. Missing planks come
 ```
 
 Chat tells you which chests they came from unless `.s sp` (silent pull) is on.
+
+**Worked example: grab a stack of every seed**
+
+```
+.pull seeds
+```
+
+Same for any built-in or castle group: `.pull ore`, `.pull flowers`. Exact item names still win (`plank` is the item; `planks` is the group).
 
 **New castle on the island.** With Clan Share on, a fresh plot is already shared. Place the heart, lay foundations, place one chest. In a few seconds it fills with a starter kit (planks, stone bricks, gem dust, copper, iron, stone). Build a small treasury-floor room and place about three large chests so the covering buffer can land. Covering only runs while a clan member is standing on the plot. To dismantle a filled chest, empty it. It stays empty for 5 minutes.
 
@@ -150,7 +158,7 @@ Tells you the station, the line, and the reason: no sender, reserve reached, cap
 
 ## 5. Item groups
 
-**What it does.** Built-in groups such as `ore`, `mushrooms`, `flowers` let you set reserves, caps, scoop caps, and chest names by category instead of one item at a time. Groups are per castle and fully editable.
+**What it does.** Built-in groups such as `ore`, `mushrooms`, `flowers`, `seeds` let you set reserves, caps, scoop caps, and chest names by category instead of one item at a time. Groups are per castle and fully editable. Plant seeds dest to `seeds` (alias `seed`); saplings stay `wood`.
 
 **Worked example: see what ore the clan has and where**
 
@@ -392,6 +400,7 @@ Players can still stash and use belts on their own plot, but nothing leaves ches
 | `.s ssh` | Silent stash | `.s ssh` |
 | `.s rrglobal` / `.s rrg` | Allow off-plot stash | `.s rrglobal` |
 | `.pull <item> <n>` | Pull into bags, ignores reserve | `.pull plank 50` |
+| `.pull <group> [n]` | One stack of each member (or `n` of each) | `.pull seeds` |
 | `.s sp` | Silent pull | `.s sp` |
 | `.s dpl` | Never pull the last stack (default ON) | `.s dpl` |
 | `.s cr` | Craft-pull, honors reserve | `.s cr` |

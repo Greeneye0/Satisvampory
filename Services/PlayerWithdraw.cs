@@ -19,35 +19,118 @@ namespace Satisvampory.Services
     {
         public static void Pull(Entity character, PrefabGUID item, int quantity)
         {
-            if (Core.PlayerSettings.IsPullEnabled())
-            {
-                var user = character.Has<PlayerCharacter>() ? character.Read<PlayerCharacter>().UserEntity.Read<User>() : default;
-                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Pulling is globally disabled.");
+            if (!TryBeginPull(character, out var ctx, out var bag))
                 return;
-            }
             if (!Core.GameDataSystem.ItemHashLookupMap.TryGetValue(item, out _))
             {
-                var user = character.Read<PlayerCharacter>().UserEntity.Read<User>();
-                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Invalid item specified.");
-                return;
-            }
-            if (!PlayerActionGate.TryOpen(character, "pull", requireAlliedHeart: true, out var ctx, out var deny))
-            {
-                if (ctx.UserEntity != Entity.Null)
-                    PlayerActionGate.Deny(ctx.User, deny);
-                return;
-            }
-            if (!InventoryUtilities.TryGetInventoryEntity(Core.EntityManager, character, out var bag))
-            {
-                Core.Log.LogWarning($"No inventory found for character {character}.");
+                PlayerActionGate.Deny(ctx.User, "Invalid item specified.");
                 return;
             }
 
             var silent = Core.PlayerSettings.IsSilentPullEnabled(ctx.User.PlatformId);
-            var remaining = quantity;
-            var found = false;
-            var slot = 0;
+            var got = PullFromIsland(character, ctx, bag, item, quantity, chatEachChest: !silent, out var found, out var full);
+            if (!found)
+                PlayerActionGate.Deny(ctx.User, "Unable to pull as no available stashes found in your current territory!");
+            else if (got >= quantity)
+                PlayerActionGate.Deny(ctx.User, $"Pulled {quantity}x {item.PrefabName()} from containers.");
+            else
+            {
+                PlayerActionGate.Deny(ctx.User, $"Was able to only pull {got}x out of desired {quantity}x {item.PrefabName()} from containers.");
+                DestDebugLog.Miss("pull", ctx.StandingPlot, item, got, quantity, "short steam=" + ctx.User.PlatformId);
+            }
+            if (full)
+                PlayerActionGate.Deny(ctx.User, "Inventory is full, unable to pull more items.");
+            if (found)
+                PlayerActionGate.Deny(ctx.User, $"Remaining in stores: {CountStores(character, item)}");
+        }
+
+        public static void PullGroup(Entity character, string groupName, IReadOnlyList<ItemGroupService.GroupMember> members, int quantity)
+        {
+            if (!TryBeginPull(character, out var ctx, out var bag))
+                return;
+            if (members == null || members.Count == 0)
+            {
+                PlayerActionGate.Deny(ctx.User, $"Group <color=green>{groupName}</color> is empty.");
+                return;
+            }
+
+            var silent = Core.PlayerSettings.IsSilentPullEnabled(ctx.User.PlatformId);
+            var stackEach = quantity <= 1;
+            var ok = 0;
+            var missing = new List<string>();
+            var pulled = new List<string>();
+            var foundAnyChest = false;
             var full = false;
+            foreach (var member in members)
+            {
+                if (full)
+                    break;
+                if (member.GuidHash == 0 || !Core.GameDataSystem.ItemHashLookupMap.TryGetValue(member.Prefab, out _))
+                    continue;
+                var want = stackEach ? ItemGroupService.MaxStack(member.Prefab) : quantity;
+                if (want <= 0)
+                    want = 1;
+                var got = PullFromIsland(character, ctx, bag, member.Prefab, want, chatEachChest: false, out var found, out full);
+                if (found)
+                    foundAnyChest = true;
+                var label = string.IsNullOrEmpty(member.Name) ? member.Prefab.PrefabName() : member.Name;
+                if (got <= 0)
+                    missing.Add(label);
+                else
+                {
+                    ok++;
+                    pulled.Add($"{got}x {label}");
+                    if (got < want)
+                        missing.Add($"{label} {got}/{want}");
+                }
+            }
+
+            if (!foundAnyChest)
+            {
+                PlayerActionGate.Deny(ctx.User, "Unable to pull as no available stashes found in your current territory!");
+                return;
+            }
+
+            var how = stackEach ? "1 stack of each" : quantity + " of each";
+            PlayerActionGate.Deny(ctx.User, $"Pulled {how} from <color=green>{groupName}</color> ({ok}/{members.Count}).");
+            if (!silent && pulled.Count > 0 && pulled.Count <= 16)
+                PlayerActionGate.Deny(ctx.User, ItemGroupService.FormatMemberNames(pulled, 280));
+            if (missing.Count > 0 && missing.Count <= 16)
+                PlayerActionGate.Deny(ctx.User, "Short: " + ItemGroupService.FormatMemberNames(missing, 220));
+            if (full)
+                PlayerActionGate.Deny(ctx.User, "Inventory is full, unable to pull more items.");
+        }
+
+        static bool TryBeginPull(Entity character, out PlayerActionGate.Context ctx, out Entity bag)
+        {
+            bag = Entity.Null;
+            ctx = default;
+            if (Core.PlayerSettings.IsPullEnabled())
+            {
+                var user = character.Has<PlayerCharacter>() ? character.Read<PlayerCharacter>().UserEntity.Read<User>() : default;
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, "Pulling is globally disabled.");
+                return false;
+            }
+            if (!PlayerActionGate.TryOpen(character, "pull", requireAlliedHeart: true, out ctx, out var deny))
+            {
+                if (ctx.UserEntity != Entity.Null)
+                    PlayerActionGate.Deny(ctx.User, deny);
+                return false;
+            }
+            if (!InventoryUtilities.TryGetInventoryEntity(Core.EntityManager, character, out bag))
+            {
+                Core.Log.LogWarning($"No inventory found for character {character}.");
+                return false;
+            }
+            return true;
+        }
+
+        static int PullFromIsland(Entity character, PlayerActionGate.Context ctx, Entity bag, PrefabGUID item, int quantity, bool chatEachChest, out bool found, out bool full)
+        {
+            var remaining = quantity;
+            found = false;
+            full = false;
+            var slot = 0;
             var seen = new HashSet<Entity>();
             var sgm = Core.ServerGameManager;
             for (var pass = 0; pass < 3 && remaining > 0 && !full; pass++)
@@ -74,7 +157,7 @@ namespace Satisvampory.Services
                             break;
                         continue;
                     }
-                    if (!silent)
+                    if (chatEachChest)
                         Utilities.SendSystemMessageToClient(Core.EntityManager, ctx.User,
                             $"<color=white>{got}</color>x <color=green>{item.PrefabName()}</color> fetched from <color=#FFC0CB>{stash.EntityName()}</color>");
                     DestDebugLog.Move("pull", ctx.StandingPlot, item, got, stash, Entity.Null, "player", 0, "stays");
@@ -83,20 +166,7 @@ namespace Satisvampory.Services
                         break;
                 }
             }
-
-            if (!found)
-                PlayerActionGate.Deny(ctx.User, "Unable to pull as no available stashes found in your current territory!");
-            else if (remaining <= 0)
-                PlayerActionGate.Deny(ctx.User, $"Pulled {quantity}x {item.PrefabName()} from containers.");
-            else
-            {
-                PlayerActionGate.Deny(ctx.User, $"Was able to only pull {quantity - remaining}x out of desired {quantity}x {item.PrefabName()} from containers.");
-                DestDebugLog.Miss("pull", ctx.StandingPlot, item, quantity - remaining, quantity, "short steam=" + ctx.User.PlatformId);
-            }
-            if (full)
-                PlayerActionGate.Deny(ctx.User, "Inventory is full, unable to pull more items.");
-            if (found)
-                PlayerActionGate.Deny(ctx.User, $"Remaining in stores: {CountStores(character, item)}");
+            return quantity - remaining;
         }
 
         static int Take(ServerGameManager sgm, Entity from, Entity to, PrefabGUID item, int amount, ref int slot, ref bool full)

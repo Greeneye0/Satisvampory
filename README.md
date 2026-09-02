@@ -115,6 +115,7 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 | `.s ssh` | Silent stash | `.s ssh` |
 | `.s rrglobal` / `.s rrg` | Allow off-plot stash | `.s rrglobal` |
 | `.pull <item> <n>` | Pull into bags, ignores reserve | `.pull plank 50` |
+| `.pull <group> [n]` | One stack of each member (or `n` of each) | `.pull seeds` |
 | `.s sp` | Silent pull | `.s sp` |
 | `.s dpl` | Never pull the last stack (default ON) | `.s dpl` |
 | `.s cr` | Craft-pull, honors reserve | `.s cr` |

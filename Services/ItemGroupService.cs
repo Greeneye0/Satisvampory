@@ -19,6 +19,7 @@ namespace Satisvampory.Services
     {
         public const string GroupOre = "ore";
         public const string GroupFlowers = "flowers";
+        public const string GroupSeeds = "seeds";
         public const string GroupMushrooms = "mushrooms";
         public const string GroupTailoring = "tailoring";
         public const string GroupHides = "hides";
@@ -54,6 +55,8 @@ namespace Satisvampory.Services
             [GroupFlowers] = GroupFlowers,
             ["herb"] = GroupFlowers,
             ["herbs"] = GroupFlowers,
+            [GroupSeeds] = GroupSeeds,
+            ["seed"] = GroupSeeds,
             [GroupMushrooms] = GroupMushrooms,
             [GroupTailoring] = GroupTailoring,
             ["thread"] = GroupTailoring,
@@ -132,7 +135,7 @@ namespace Satisvampory.Services
         public static IReadOnlyList<string> MissingRequestedNames => missingRequested;
         public static IEnumerable<string> BuiltInNames => new[]
         {
-            GroupOre, GroupFlowers, GroupMushrooms, GroupTailoring, GroupHides, GroupWood, GroupPlanks,
+            GroupOre, GroupFlowers, GroupSeeds, GroupMushrooms, GroupTailoring, GroupHides, GroupWood, GroupPlanks,
             GroupGems, GroupAlchemy, GroupBlood, GroupBones, GroupIngots, GroupStone, GroupCoins,
             GroupFish, GroupKnowledge, GroupMinerals, GroupConsumables, GroupWeapons, GroupArmor,
             GroupJewels, GroupMagic, GroupSoulshards, GroupBags, GroupSaddles, GroupRelics
@@ -689,6 +692,28 @@ namespace Satisvampory.Services
                 if (primary != GroupIngots)
                     yield return GroupIngots;
             }
+            // Seeds dest to a Seeds chest, but existing Herbs / Mushrooms / Cotton plates still match.
+            if (primary == GroupSeeds)
+            {
+                if (nl.Contains("shroom") || nl.Contains("clarion") || nl.Contains("spore")
+                    || pl.Contains("shroom") || pl.Contains("clarion"))
+                    yield return GroupMushrooms;
+                else if (nl.Contains("cotton") || pl.Contains("cotton"))
+                    yield return GroupTailoring;
+                else
+                    yield return GroupFlowers;
+            }
+        }
+
+        static bool IsPlantSeed(string prefab, string loc)
+        {
+            var pl = (prefab ?? "").ToLowerInvariant();
+            var nl = (loc ?? "").ToLowerInvariant();
+            if (pl.StartsWith("item_building_sapling") || nl.Contains("sapling"))
+                return false;
+            if (pl.StartsWith("item_building_plants_") && pl.Contains("seed"))
+                return true;
+            return nl.EndsWith(" seed") || nl.EndsWith(" seeds");
         }
 
         static bool IsRecipePlaceholder(string prefab, string loc)
@@ -840,6 +865,9 @@ namespace Satisvampory.Services
                 return GroupFish;
             }
 
+            if (IsPlantSeed(p, n))
+                return GroupSeeds;
+
             if (nl.Contains("shroom") || nl.Contains("mushroom") || nl.Contains("clarion")
                 || pl.Contains("shroom") || pl.Contains("hellsclarion") || pl.Contains("clarion"))
                 return GroupMushrooms;
@@ -951,6 +979,31 @@ namespace Satisvampory.Services
             if (builtInMembers.TryGetValue(NormalizeName(name), out var list))
                 return list;
             return Array.Empty<GroupMember>();
+        }
+
+        public static int MaxStack(PrefabGUID item)
+        {
+            try
+            {
+                if (Core.GameDataSystem != null
+                    && Core.GameDataSystem.ItemHashLookupMap.TryGetValue(item, out var data)
+                    && data.MaxAmount > 0)
+                    return data.MaxAmount;
+            }
+            catch { }
+            try
+            {
+                if (Core.PrefabCollectionSystem != null
+                    && Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(item, out var ent)
+                    && ent != Entity.Null && ent.Has<ItemData>() && Core.EntityManager.Exists(ent))
+                {
+                    var max = ent.Read<ItemData>().MaxAmount;
+                    if (max > 0)
+                        return max;
+                }
+            }
+            catch { }
+            return 1;
         }
 
         public static bool IsHardcodedMember(string groupName, int guidHash)
