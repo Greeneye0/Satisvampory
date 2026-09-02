@@ -495,11 +495,6 @@ namespace Satisvampory.Services
                     lastFail = "no throne";
                     return false;
                 }
-                if (!TryFromSend(heart, throne, out var userEnt, out var character) || character == Entity.Null)
-                {
-                    lastFail = "no connected clan member to send as";
-                    return false;
-                }
                 FillDest(ref hunt);
                 if (!ZoneLooksSet(hunt.Zone))
                 {
@@ -509,30 +504,46 @@ namespace Satisvampory.Services
                     return false;
                 }
                 hunt.MissionDataId = ClampSetting(hunt.MissionDataId);
+                var haveSender = TryFromSend(heart, throne, out var userEnt, out var character)
+                    && character != Entity.Null;
+                var connected = haveSender && userEnt != Entity.Null && userEnt.Has<User>()
+                    && userEnt.Read<User>().IsConnected;
                 skipSendChat = true;
-                autoThrone = throne;
-                autoCharacter = character;
-                autoUser = userEnt;
-                autoFrames = 600;
-                ArmInteractor(character, throne);
-                var entity = Core.EntityManager.CreateEntity();
-                entity.Add<FromCharacter>();
-                entity.Add<SendOnMissionEvent>();
-                entity.Write(new FromCharacter { User = userEnt, Character = character });
-                entity.Write(new SendOnMissionEvent
+                if (connected)
                 {
-                    Throne = hunt.Throne,
-                    Servant1 = CoffinNid(hunt.S1),
-                    Servant2 = CoffinNid(hunt.S2),
-                    Servant3 = CoffinNid(hunt.S3),
-                    MissionDataID = hunt.MissionDataId,
-                    MapZoneId = hunt.Zone
-                });
-                capSuccessFrames = 5;
-                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send " + hunt.DestName
+                    autoThrone = throne;
+                    autoCharacter = character;
+                    autoUser = userEnt;
+                    autoFrames = 600;
+                    ArmInteractor(character, throne);
+                    var entity = Core.EntityManager.CreateEntity();
+                    entity.Add<FromCharacter>();
+                    entity.Add<SendOnMissionEvent>();
+                    entity.Write(new FromCharacter { User = userEnt, Character = character });
+                    entity.Write(new SendOnMissionEvent
+                    {
+                        Throne = hunt.Throne,
+                        Servant1 = CoffinNid(hunt.S1),
+                        Servant2 = CoffinNid(hunt.S2),
+                        Servant3 = CoffinNid(hunt.S3),
+                        MissionDataID = hunt.MissionDataId,
+                        MapZoneId = hunt.Zone
+                    });
+                    capSuccessFrames = 5;
+                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send " + hunt.DestName
+                        + " z=" + ZoneTag(hunt.Zone) + " slot=" + hunt.MissionDataId
+                        + " prefab=" + hunt.MissionPrefab.GuidHash
+                        + " as=" + SenderName(userEnt));
+                    return true;
+                }
+                if (!ForceHunt(heart, hunt))
+                {
+                    lastFail = "could not start hunt";
+                    return false;
+                }
+                DestDebugLog.Note("throne", hunt.Plot, 0, "force hunt " + hunt.DestName
                     + " z=" + ZoneTag(hunt.Zone) + " slot=" + hunt.MissionDataId
-                    + " prefab=" + hunt.MissionPrefab.GuidHash
-                    + " as=" + SenderName(userEnt));
+                    + " prefab=" + hunt.MissionPrefab.GuidHash);
                 return true;
             }
             catch (Exception e)
@@ -541,6 +552,145 @@ namespace Satisvampory.Services
                 Core.LogException(e);
                 return false;
             }
+        }
+
+        static bool ForceHunt(Entity heart, Recipe hunt)
+        {
+            if (heart == Entity.Null || !Core.EntityManager.Exists(heart) || !heart.Has<ActiveServantMission>())
+                return false;
+            var n1 = NetServant(hunt.S1, out var e1);
+            var n2 = NetServant(hunt.S2, out var e2);
+            var n3 = NetServant(hunt.S3, out var e3);
+            var n = 0;
+            if (e1 != Entity.Null) n++;
+            if (e2 != Entity.Null) n++;
+            if (e3 != Entity.Null) n++;
+            if (n == 0)
+                return false;
+            if (e1 != Entity.Null && OnMission(e1))
+                return false;
+            if (e2 != Entity.Null && OnMission(e2))
+                return false;
+            if (e3 != Entity.Null && OnMission(e3))
+                return false;
+            var prefab = hunt.MissionPrefab;
+            if (prefab.GuidHash == 0)
+                TryZoneByName(hunt.DestName ?? "", out _, out _, out prefab);
+            if (prefab.GuidHash == 0)
+                return false;
+            var mission = new ActiveServantMission
+            {
+                MissionID = prefab,
+                MissionStartTimeTicks = DateTime.UtcNow.Ticks,
+                MissionLengthSeconds = SettingLength(hunt.MissionDataId),
+                MissiontDataId = hunt.MissionDataId,
+                Servant1 = n1,
+                Servant2 = n2,
+                Servant3 = n3,
+                NumberOfServants = n
+            };
+            var buf = heart.ReadBuffer<ActiveServantMission>();
+            buf.Add(mission);
+            MarkOnMission(e1);
+            MarkOnMission(e2);
+            MarkOnMission(e3);
+            TryApplyMissionBuff(heart, e1);
+            TryApplyMissionBuff(heart, e2);
+            TryApplyMissionBuff(heart, e3);
+            return true;
+        }
+
+        static NetworkedEntity NetServant(NetworkId nid, out Entity servant)
+        {
+            servant = Entity.Null;
+            if (!TryServant(nid, out servant))
+                return NetworkedEntity.Empty;
+            var coffin = CoffinOf(servant);
+            if (coffin != Entity.Null && coffin.Has<ServantCoffinstation>())
+                return coffin.Read<ServantCoffinstation>().ConnectedServant;
+            return NetworkedEntity.ServerEntity(servant);
+        }
+
+        static void MarkOnMission(Entity servant)
+        {
+            if (servant == Entity.Null || !Core.EntityManager.Exists(servant) || !servant.Has<ServantData>())
+                return;
+            var data = servant.Read<ServantData>();
+            data.IsOnMission = true;
+            servant.Write(data);
+        }
+
+        static float SettingLength(int slot)
+        {
+            slot = ClampSetting(slot);
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<ServantMissionSetting>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var e = rows[i];
+                    if (e == Entity.Null || !e.Has<ServantMissionSetting>())
+                        continue;
+                    DynamicBuffer<ServantMissionSetting> buf;
+                    try { buf = e.ReadBuffer<ServantMissionSetting>(); }
+                    catch { continue; }
+                    if (slot < buf.Length && buf[slot].MissionLength > 0)
+                        return buf[slot].MissionLength;
+                }
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
+            return 7200f;
+        }
+
+        static void TryApplyMissionBuff(Entity heart, Entity servant)
+        {
+            if (servant == Entity.Null || !Core.EntityManager.Exists(servant))
+                return;
+            if (!TryFromHeart(heart, out var userEnt, out var character) || userEnt == Entity.Null)
+                return;
+            var buff = MissionBuffPrefab();
+            if (buff.GuidHash == 0)
+                return;
+            FindBuff.TryApply(userEnt, servant, buff, 0, true);
+        }
+
+        static PrefabGUID MissionBuffPrefab()
+        {
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<ServantMissionSettingsSingleton>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var e = rows[i];
+                    if (e == Entity.Null || !e.Has<ServantMissionSettingsSingleton>())
+                        continue;
+                    var guid = e.Read<ServantMissionSettingsSingleton>().MissionBuff;
+                    if (guid.GuidHash != 0)
+                        return guid;
+                }
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
+            return default;
         }
 
         static bool ServantsReady(ref Recipe hunt)
