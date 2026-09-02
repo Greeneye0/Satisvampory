@@ -28,7 +28,7 @@ Turning **`.sg rh` ON**, **`.s rh on`**, or **`.s rh all`** captures hunts **alr
 
 On every **send**, the sender (else heart owner) gets: who went, destination, survival % (after cap), and Repeat ON/OFF with the max. Example: `Hunt sent (plot 45 L2) — Haunted Iron Mine (99%): Stephen. Repeat ON (max 99%).`
 
-On every **return** (repeat on or off), connected **clan members** (and the heart owner) get destination, who came back, loot stacks, or who **died** / injured. Example: `Hunt returned (plot 86 L4) — Pools of Rebirth: Raven — 10 Oil. Repeat ON — sending again.` After vanilla accepts: `Repeat: sent Raven to Pools of Rebirth.`
+On every **return** (repeat on or off), connected **clan members** (and the heart owner) get destination, who came back, loot stacks, or who **died** / injured. Example: `Hunt returned (plot 86 L4) — Pools of Rebirth: Raven — 10 Oil. Repeat ON — sending again.` After the resend: `Repeat: sent Raven to Pools of Rebirth (95% repeat hunt).` The % is **`.sg rhmax`**, labeled repeat hunt so it is not the vanilla throne 100%. Return dest/zone/prefab come from the **finishing mission**, not the plot’s last send (two hunts from the same castle can be different lakes).
 
 Do not cap the throne UI via HuntClock on `GetMissionSuccessChanceForServant_Client` (same trampoline crash).
 

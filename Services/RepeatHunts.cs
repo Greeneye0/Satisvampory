@@ -323,14 +323,13 @@ namespace Satisvampory.Services
                 var plot = Core.TerritoryService.GetTerritoryId(heart);
                 if (plot < 0)
                     plot = Core.TerritoryService.GetTerritoryId(mission.Servant1.GetEntityOnServer());
-                if (!byPlot.TryGetValue(plot, out var recipe))
-                    recipe = RecipeFromMission(plot, heart, mission);
-                else
+                var recipe = RecipeFromMission(plot, heart, mission);
+                if (byPlot.TryGetValue(plot, out var remembered))
                 {
-                    var live = RecipeFromMission(plot, heart, mission);
-                    MergeRecipe(ref recipe, live);
-                    if (recipe.MissionPrefab.GuidHash == 0)
-                        recipe.MissionPrefab = live.MissionPrefab;
+                    if (recipe.Throne.Equals(default(NetworkId)))
+                        recipe.Throne = remembered.Throne;
+                    if (!IsSettingIndex(recipe.MissionDataId) && IsSettingIndex(remembered.MissionDataId))
+                        recipe.MissionDataId = remembered.MissionDataId;
                 }
                 FillDest(ref recipe);
                 var servants = new List<Entity>(3);
@@ -456,8 +455,9 @@ namespace Satisvampory.Services
                 yield return new WaitForSeconds(1f);
                 if (AnyOnMission(hunt))
                 {
-                    TellClan(heart, Trim("Repeat: sent " + who + " to " + dest + "."));
-                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat accepted " + dest);
+                    var pct = Core.PlayerSettings.GetRepeatHuntMaxSuccess();
+                    TellClan(heart, Trim("Repeat: sent " + who + " to " + dest + " (" + pct + "% repeat hunt)."));
+                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat accepted " + dest + " " + pct + "%");
                     yield break;
                 }
                 lastFail = "vanilla did not accept";
@@ -1166,16 +1166,8 @@ namespace Satisvampory.Services
 
         static bool FillDest(ref Recipe hunt)
         {
-            if (!string.IsNullOrWhiteSpace(hunt.DestName)
-                && TryZoneByName(hunt.DestName, out var zone, out var name, out var asset))
-            {
-                hunt.Zone = zone;
-                hunt.DestName = name;
-                if (hunt.MissionPrefab.GuidHash == 0)
-                    hunt.MissionPrefab = asset;
-                hunt.MissionDataId = ClampSetting(hunt.MissionDataId);
-                return true;
-            }
+            MapZoneId zone;
+            string name;
             if (hunt.MissionPrefab.GuidHash != 0
                 && TryZoneForMission(hunt.MissionPrefab, hunt.Zone, out zone, out name)
                 && ZoneLooksSet(zone))
@@ -1183,6 +1175,16 @@ namespace Satisvampory.Services
                 hunt.Zone = zone;
                 if (!string.IsNullOrWhiteSpace(name))
                     hunt.DestName = name;
+                hunt.MissionDataId = ClampSetting(hunt.MissionDataId);
+                return true;
+            }
+            if (!string.IsNullOrWhiteSpace(hunt.DestName)
+                && TryZoneByName(hunt.DestName, out zone, out name, out var asset))
+            {
+                hunt.Zone = zone;
+                hunt.DestName = name;
+                if (hunt.MissionPrefab.GuidHash == 0)
+                    hunt.MissionPrefab = asset;
                 hunt.MissionDataId = ClampSetting(hunt.MissionDataId);
                 return true;
             }
