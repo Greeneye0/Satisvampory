@@ -1,3 +1,7 @@
+// Satisvampory - a modified fork of KindredLogistics by Odjit and Zfolmt
+// (https://github.com/Odjit/KindredLogistics), used under AGPL-3.0.
+// Modified by Greeneye, 2026. See NOTICE.md for the attribution and modification notice.
+
 using BepInEx;
 using BepInEx.Logging;
 using BepInEx.Unity.IL2CPP;

@@ -1,6 +1,8 @@
 # Satisvampory
 
-Current version **1.0.84**. Server-only V Rising 1.1 BepInEx plugin for dedicated servers.
+> **Attribution:** Satisvampory is a modified fork of **[KindredLogistics](https://github.com/Odjit/KindredLogistics)** by **Odjit** and **Zfolmt**, used under the AGPL-3.0 license. It was forked from KindredLogistics 1.6.1 and modified by Greeneye from August 2026 onward; this is not the original project and is not maintained or endorsed by its authors. Full notice: [NOTICE.md](https://github.com/Greeneye0/Satisvampory/blob/main/NOTICE.md). Thank you Dj and Mitch for the foundation this is built on.
+
+Current version **1.0.85**. Server-only V Rising 1.1 BepInEx plugin for dedicated servers.
 
 Satisvampory is a server-side quality-of-life addon. It was built so playing the game stops feeling like a chore: less running between chests, less babysitting castle hearts and servants, and more actually playing. Nothing to install on the client.
 
@@ -194,6 +196,8 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 | `NS` or trailing `''` | Skip entirely |
 | blank, `General`, `Empty`, `Everything Else` | Generic dump |
 
-## License
+## Credits and license
 
-AGPL-3.0. See [LICENSE](LICENSE).
+Based on [KindredLogistics](https://github.com/Odjit/KindredLogistics) by Odjit and Zfolmt (AGPL-3.0). Modified by Greeneye, 2026. See [NOTICE.md](NOTICE.md) for the full attribution and modification notice.
+
+Satisvampory is AGPL-3.0. See [LICENSE](LICENSE). Source: https://github.com/Greeneye0/Satisvampory
