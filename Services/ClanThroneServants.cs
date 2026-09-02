@@ -1413,7 +1413,7 @@ namespace Satisvampory.Services
                     list.Add(new ServantRow
                     {
                         Name = string.IsNullOrWhiteSpace(name) ? "unnamed" : name,
-                        Nid = servant.Read<NetworkId>(),
+                        Nid = coffin.Has<NetworkId>() ? coffin.Read<NetworkId>() : servant.Read<NetworkId>(),
                         Servant = servant
                     });
                 }

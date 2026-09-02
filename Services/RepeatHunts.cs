@@ -2,6 +2,7 @@ using Il2CppInterop.Runtime;
 using ProjectM;
 using ProjectM.CastleBuilding;
 using ProjectM.Network;
+using ProjectM.Shared;
 using ProjectM.Shared.Systems;
 using ProjectM.Terrain;
 using Stunlock.Core;
@@ -10,6 +11,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Text;
 using Unity.Collections;
 using Unity.Entities;
@@ -85,6 +87,8 @@ namespace Satisvampory.Services
         {
             if (autoFrames > 0)
                 autoFrames--;
+            if (autoFrames <= 0)
+                RestoreInteractor();
         }
 
         public static void TickCapFrames()
@@ -176,7 +180,8 @@ namespace Satisvampory.Services
             if (IsOn(plot))
                 capThisTick = true;
             DestDebugLog.Note("throne", plot, 0, "remember hunt " + recipe.DestName
-                + " z=" + ZoneTag(recipe.Zone) + " m=" + recipe.MissionDataId);
+                + " z=" + ZoneTag(recipe.Zone) + " slot=" + ClampSetting(recipe.MissionDataId)
+                + " prefab=" + recipe.MissionPrefab.GuidHash);
         }
 
         public static void AfterSends()
@@ -240,7 +245,7 @@ namespace Satisvampory.Services
 
         static void AddServantName(List<string> names, NetworkId nid)
         {
-            if (!Core.TryGetEntityFromNetworkId(nid, out var servant) || servant == Entity.Null)
+            if (!TryServant(nid, out var servant))
                 return;
             names.Add(ServantName(servant));
         }
@@ -457,7 +462,7 @@ namespace Satisvampory.Services
                 }
                 lastFail = "vanilla did not accept";
                 DestDebugLog.Note("throne", hunt.Plot, 0, "repeat not accepted try=" + (attempt + 1)
-                    + " z=" + ZoneTag(hunt.Zone) + " m=" + hunt.MissionDataId);
+                    + " z=" + ZoneTag(hunt.Zone) + " slot=" + ClampSetting(hunt.MissionDataId));
             }
             var why = string.IsNullOrWhiteSpace(lastFail) ? "throne or servants not ready" : lastFail;
             TellClan(heart, Trim("Repeat: could not send " + who + " to " + dest + " — " + why + "."));
@@ -496,18 +501,20 @@ namespace Satisvampory.Services
                     return false;
                 }
                 FillDest(ref hunt);
-                if (!ZoneLooksSet(hunt.Zone) || hunt.MissionDataId == 0)
+                if (!ZoneLooksSet(hunt.Zone))
                 {
                     lastFail = "no hunt zone";
                     DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send missing dest name=" + hunt.DestName
                         + " z=" + ZoneTag(hunt.Zone) + " m=" + hunt.MissionDataId);
                     return false;
                 }
+                hunt.MissionDataId = ClampSetting(hunt.MissionDataId);
                 skipSendChat = true;
                 autoThrone = throne;
                 autoCharacter = character;
                 autoUser = userEnt;
                 autoFrames = 600;
+                ArmInteractor(character, throne);
                 var entity = Core.EntityManager.CreateEntity();
                 entity.Add<FromCharacter>();
                 entity.Add<SendOnMissionEvent>();
@@ -515,15 +522,16 @@ namespace Satisvampory.Services
                 entity.Write(new SendOnMissionEvent
                 {
                     Throne = hunt.Throne,
-                    Servant1 = hunt.S1,
-                    Servant2 = hunt.S2,
-                    Servant3 = hunt.S3,
+                    Servant1 = CoffinNid(hunt.S1),
+                    Servant2 = CoffinNid(hunt.S2),
+                    Servant3 = CoffinNid(hunt.S3),
                     MissionDataID = hunt.MissionDataId,
                     MapZoneId = hunt.Zone
                 });
                 capSuccessFrames = 5;
                 DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send " + hunt.DestName
-                    + " z=" + ZoneTag(hunt.Zone) + " m=" + hunt.MissionDataId);
+                    + " z=" + ZoneTag(hunt.Zone) + " slot=" + hunt.MissionDataId
+                    + " prefab=" + hunt.MissionPrefab.GuidHash);
                 return true;
             }
             catch (Exception e)
@@ -550,13 +558,25 @@ namespace Satisvampory.Services
 
         static void TryReady(NetworkId nid, List<NetworkId> ready)
         {
-            if (!Core.TryGetEntityFromNetworkId(nid, out var servant) || servant == Entity.Null)
+            if (!TryServant(nid, out var servant))
                 return;
-            if (!Core.EntityManager.Exists(servant) || IsDead(servant) || IsInjured(servant))
+            if (IsDead(servant) || IsInjured(servant) || OnMission(servant))
                 return;
-            if (OnMission(servant))
-                return;
-            ready.Add(nid);
+            ready.Add(CoffinNid(nid));
+        }
+
+        static bool TryServant(NetworkId nid, out Entity servant)
+        {
+            servant = Entity.Null;
+            if (!Core.TryGetEntityFromNetworkId(nid, out var e) || e == Entity.Null)
+                return false;
+            if (e.Has<ServantCoffinstation>())
+            {
+                servant = e.Read<ServantCoffinstation>().ConnectedServant.GetEntityOnServer();
+                return servant != Entity.Null && Core.EntityManager.Exists(servant);
+            }
+            servant = e;
+            return Core.EntityManager.Exists(servant);
         }
 
         static bool AnyOnMission(Recipe hunt)
@@ -566,9 +586,7 @@ namespace Satisvampory.Services
 
         static bool OnMissionNid(NetworkId nid)
         {
-            if (!Core.TryGetEntityFromNetworkId(nid, out var servant) || servant == Entity.Null)
-                return false;
-            return OnMission(servant);
+            return TryServant(nid, out var servant) && OnMission(servant);
         }
 
         static bool OnMission(Entity servant)
@@ -742,26 +760,30 @@ namespace Satisvampory.Services
             destName = "";
             missionId = 0;
             error = "";
-            if (!string.IsNullOrWhiteSpace(dest) && TryZoneByName(dest, out zone, out destName, out missionId))
+            if (!string.IsNullOrWhiteSpace(dest) && TryZoneByName(dest, out zone, out destName, out _))
+            {
+                if (byPlot.TryGetValue(plot, out var named) && IsSettingIndex(named.MissionDataId))
+                    missionId = named.MissionDataId;
                 return true;
-            if (byPlot.TryGetValue(plot, out var last) && (!string.IsNullOrWhiteSpace(last.DestName) || last.MissionDataId != 0))
+            }
+            if (byPlot.TryGetValue(plot, out var last) && (ZoneLooksSet(last.Zone) || !string.IsNullOrWhiteSpace(last.DestName)))
             {
                 zone = last.Zone;
                 destName = last.DestName;
-                missionId = last.MissionDataId;
+                missionId = ClampSetting(last.MissionDataId);
                 if (string.IsNullOrWhiteSpace(destName))
-                    destName = DestLabel(zone, default);
+                    destName = DestLabel(zone, last.MissionPrefab);
                 return true;
             }
             error = "no dest (pass dest:\\\"Fishing Lake\\\" or send once from the map)";
             return false;
         }
 
-        static bool TryZoneByName(string want, out MapZoneId zone, out string destName, out int missionId)
+        static bool TryZoneByName(string want, out MapZoneId zone, out string destName, out PrefabGUID asset)
         {
             zone = default;
             destName = "";
-            missionId = 0;
+            asset = default;
             var needle = want.Trim();
             if (needle.Length < 2)
                 return false;
@@ -791,7 +813,7 @@ namespace Satisvampory.Services
                     bestLen = label.Length;
                     zone = new MapZoneId { ChunkCoordinate = data.ChunkCoordinate, ZoneId = data.ZoneIndex };
                     destName = label;
-                    missionId = data.ServantMissionAsset.GuidHash;
+                    asset = data.ServantMissionAsset;
                 }
             }
             finally
@@ -853,9 +875,9 @@ namespace Satisvampory.Services
             {
                 Plot = plot,
                 Throne = throneNid,
-                S1 = NidOf(mission.Servant1),
-                S2 = NidOf(mission.Servant2),
-                S3 = NidOf(mission.Servant3),
+                S1 = CoffinNid(NidOf(mission.Servant1)),
+                S2 = CoffinNid(NidOf(mission.Servant2)),
+                S3 = CoffinNid(NidOf(mission.Servant3)),
                 MissionDataId = mission.MissiontDataId,
                 MissionPrefab = mission.MissionID,
                 Zone = zone,
@@ -876,7 +898,7 @@ namespace Satisvampory.Services
         {
             if (string.IsNullOrWhiteSpace(recipe.DestName))
                 recipe.DestName = old.DestName;
-            if (recipe.MissionDataId == 0)
+            if (!IsSettingIndex(recipe.MissionDataId) && IsSettingIndex(old.MissionDataId))
                 recipe.MissionDataId = old.MissionDataId;
             if (recipe.MissionPrefab.GuidHash == 0)
                 recipe.MissionPrefab = old.MissionPrefab;
@@ -889,12 +911,13 @@ namespace Satisvampory.Services
         static bool FillDest(ref Recipe hunt)
         {
             if (!string.IsNullOrWhiteSpace(hunt.DestName)
-                && TryZoneByName(hunt.DestName, out var zone, out var name, out var mid))
+                && TryZoneByName(hunt.DestName, out var zone, out var name, out var asset))
             {
                 hunt.Zone = zone;
                 hunt.DestName = name;
-                if (hunt.MissionDataId == 0)
-                    hunt.MissionDataId = mid;
+                if (hunt.MissionPrefab.GuidHash == 0)
+                    hunt.MissionPrefab = asset;
+                hunt.MissionDataId = ClampSetting(hunt.MissionDataId);
                 return true;
             }
             if (hunt.MissionPrefab.GuidHash != 0
@@ -904,6 +927,7 @@ namespace Satisvampory.Services
                 hunt.Zone = zone;
                 if (!string.IsNullOrWhiteSpace(name))
                     hunt.DestName = name;
+                hunt.MissionDataId = ClampSetting(hunt.MissionDataId);
                 return true;
             }
             if (ZoneLooksSet(hunt.Zone))
@@ -911,10 +935,15 @@ namespace Satisvampory.Services
                 var label = DestLabel(hunt.Zone, hunt.MissionPrefab);
                 if (!string.IsNullOrWhiteSpace(label))
                     hunt.DestName = label;
-                return hunt.MissionDataId != 0 || !string.IsNullOrWhiteSpace(hunt.DestName);
+                hunt.MissionDataId = ClampSetting(hunt.MissionDataId);
+                return true;
             }
             return false;
         }
+
+        static bool IsSettingIndex(int id) => id >= 0 && id <= 4;
+
+        static int ClampSetting(int id) => IsSettingIndex(id) ? id : 0;
 
         static bool ZoneLooksSet(MapZoneId zone)
         {
@@ -1006,6 +1035,61 @@ namespace Satisvampory.Services
             if (e == Entity.Null || !Core.EntityManager.Exists(e) || !e.Has<NetworkId>())
                 return default;
             return e.Read<NetworkId>();
+        }
+
+        static NetworkId CoffinNid(NetworkId nid)
+        {
+            if (!Core.TryGetEntityFromNetworkId(nid, out var e) || e == Entity.Null)
+                return nid;
+            if (e.Has<ServantCoffinstation>() && e.Has<NetworkId>())
+                return e.Read<NetworkId>();
+            var coffin = CoffinOf(e);
+            if (coffin != Entity.Null && coffin.Has<NetworkId>())
+                return coffin.Read<NetworkId>();
+            return nid;
+        }
+
+        static Entity autoInteractChar;
+        static Entity autoInteractOldTarget;
+        static NetworkId autoInteractOldNid;
+        static bool autoInteractSaved;
+
+        static unsafe void ArmInteractor(Entity character, Entity throne)
+        {
+            RestoreInteractor();
+            if (character == Entity.Null || throne == Entity.Null
+                || !Core.EntityManager.Exists(character) || !Core.EntityManager.Exists(throne)
+                || !character.Has<Interactor>() || !throne.Has<NetworkId>())
+                return;
+            var type = new ComponentType(Il2CppType.Of<Interactor>());
+            var raw = Core.EntityManager.GetComponentDataRawRW(character, type.TypeIndex);
+            if (raw == null)
+                return;
+            var ptr = new IntPtr(raw);
+            autoInteractChar = character;
+            autoInteractOldNid = Marshal.PtrToStructure<NetworkId>(IntPtr.Add(ptr, 8));
+            autoInteractOldTarget = Marshal.PtrToStructure<Entity>(IntPtr.Add(ptr, 20));
+            autoInteractSaved = true;
+            Marshal.StructureToPtr(throne.Read<NetworkId>(), IntPtr.Add(ptr, 8), false);
+            Marshal.StructureToPtr(throne, IntPtr.Add(ptr, 20), false);
+        }
+
+        static unsafe void RestoreInteractor()
+        {
+            if (!autoInteractSaved)
+                return;
+            autoInteractSaved = false;
+            var character = autoInteractChar;
+            autoInteractChar = Entity.Null;
+            if (character == Entity.Null || !Core.EntityManager.Exists(character) || !character.Has<Interactor>())
+                return;
+            var type = new ComponentType(Il2CppType.Of<Interactor>());
+            var raw = Core.EntityManager.GetComponentDataRawRW(character, type.TypeIndex);
+            if (raw == null)
+                return;
+            var ptr = new IntPtr(raw);
+            Marshal.StructureToPtr(autoInteractOldNid, IntPtr.Add(ptr, 8), false);
+            Marshal.StructureToPtr(autoInteractOldTarget, IntPtr.Add(ptr, 20), false);
         }
 
         static void AddServant(List<Entity> list, NetworkedEntity ne)
