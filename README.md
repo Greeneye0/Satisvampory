@@ -1,10 +1,49 @@
 # Satisvampory
 
-Server-only V Rising 1.1 BepInEx plugin. Castle logistics (named dest, ClanShare, conveyors, reserve/caps, treasury lend) plus ground scoop.
+Current version **1.0.81**. Server-only V Rising 1.1 BepInEx plugin for dedicated servers.
 
-Current version **1.0.63**.
+Satisvampory is a server-side quality-of-life addon. It was built so playing the game stops feeling like a chore: less running between chests, less babysitting castle hearts and servants, and more actually playing. Nothing to install on the client.
 
-Satisvampory should be the only logistics/scoop plugin in `BepInEx/plugins`.
+## Main features
+
+- **Item pickup (scoop)** - Pick up items around you with a configurable radius (1-50). Choose between grabbing everything you walk past or only items that drop near you. Per-item caps and an exclude list so your bags don't fill with cotton.
+- **Clan Share** - Treat every clan plot as one island. If the clan has the mats, you can build and craft with them from any castle (craft-pull honors reserves). Includes **.pull** commands to grab items straight into your bags (still a little buggy).
+- **Heart top-off** - Keeps castle hearts fed with Blood Essence automatically.
+- **Improved conveyor belts** - Name chests **s#** (sender) and **r#** (receiver) and items flow between them. Like Kindred's belts, but with production caps, chest reserves, and box-to-box support.
+- **Item groups** - Predefined groups (ore, mushrooms, and more), fully customizable per castle. **.s group ore** lists every member's stock and where it is.
+- **Quick deposit (RR)** - Double-tap R or **.stash** to dump your inventory into the right chests. Works on the local castle, across all clan castles with Clan Share on, or from anywhere with **.s rrglobal**.
+- **Priority containers** - Deposits go to the best chest in order: conveyors, exact name match, similar group or type name, then everything else. Chests can be excluded with **NS** or a trailing **''** in the name.
+- **Servant deposits** - Servants returning from hunts stash their loot automatically using the same chest rules as you.
+- **Auto rerun hunts** - Servants go straight back out on the same hunt when they get home. Toggle per castle.
+- **Find item / find chest** - **.fi "Blood Essence"** and **.fc salvage** tell you which plot and chest, with **(here)** marking where you stand.
+- **.s need** - Shows the top 10 things your stations are hungriest for, so you know what to hunt or farm next.
+- **Item aliases** - Out of the box: BE (Blood Essence), GBE (Greater), PBE (Primal), ABE (Ancestral), GSS (Greater Stygian Shard), SGS (Siege Golem Stone), DSI (Dark Silver Ingot), OT (Onyx Tear). Admins can add their own with **.sg alias add**.
+- **Detailed hunt results** - Loot and losses from each servant hunt reported in chat to the owner.
+
+## Getting started
+
+Type **.s help** in game. Player commands use the **.s** prefix, admin toggles use **.sg**. The full command table with scopes and examples is in COMMANDS.md inside the zip and on GitHub.
+
+## Diagnostics
+
+- `.s conv <item>` - Why a conveyor is not moving that item (station, line, reason).
+- **.s need** - Station demand, total stock, and reserve for the top 10 inputs.
+- **.s diag** - Drops a marker in the server's rolling log for dupes, missing items, or lag. Tell your admin the time.
+- **.s settings** - Your toggles plus the reserve on the castle you're standing on.
+- **.s vq** - Work-queue depth (admin).
+
+## Install
+
+- Stop the dedicated server.
+- Remove any other logistics or scoop plugin DLLs from BepInEx\plugins. Satisvampory should be the only one.
+- Copy everything from the zip's plugins folder (Satisvampory.dll, HookDOTS.API.dll, VampireCommandFramework.dll) into BepInEx\plugins.
+- Start the server.
+
+## Quickest way to get help
+
+Point ChatGPT, Claude, or any LLM at the GitHub repo and ask it your question. The specs folder and COMMANDS.md describe every behavior, so it will usually give you a better answer than I can at 2am.
+
+Source (AGPL-3.0): [github.com/Greeneye0/Satisvampory](https://github.com/Greeneye0/Satisvampory)
 
 ## Specs
 
@@ -34,12 +73,7 @@ To **dismantle** a filled chest: empty it. Kit/covering will not restuff that ch
 
 To keep this castle **out of ClanShare**: stand on it as the heart owner and run **`.s cse`**. Standing there is then this plot only. Run `.s cse` again to include it.
 
-## Install
-
-1. Stop `VRisingServer`.
-2. Remove any older logistics or scoop plugin DLLs from `BepInEx/plugins`.
-3. Copy `Satisvampory.dll` plus `HookDOTS.API.dll` and VampireCommandFramework.
-4. Start the server.
+## Build from source
 
 Build from this repo (needs a V Rising dedicated-server interop tree; `Satisvampory.csproj` points at `C:\VRisingServer\BepInEx\` by default):
 
