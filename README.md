@@ -1,6 +1,6 @@
 # Satisvampory
 
-Current version **1.0.81**. Server-only V Rising 1.1 BepInEx plugin for dedicated servers.
+Current version **1.0.82**. Server-only V Rising 1.1 BepInEx plugin for dedicated servers.
 
 Satisvampory is a server-side quality-of-life addon. It was built so playing the game stops feeling like a chore: less running between chests, less babysitting castle hearts and servants, and more actually playing. Nothing to install on the client.
 
@@ -19,10 +19,13 @@ Satisvampory is a server-side quality-of-life addon. It was built so playing the
 - **.s need** - Shows the top 10 things your stations are hungriest for, so you know what to hunt or farm next.
 - **Item aliases** - Out of the box: BE (Blood Essence), GBE (Greater), PBE (Primal), ABE (Ancestral), GSS (Greater Stygian Shard), SGS (Siege Golem Stone), DSI (Dark Silver Ingot), OT (Onyx Tear). Admins can add their own with **.sg alias add**.
 - **Detailed hunt results** - Loot and losses from each servant hunt reported in chat to the owner.
+- **Server admin toggles** - Every feature has a server-wide allow under the **.sg** prefix (pull, craft-pull, conveyors, salvage, repeat hunts, and more), so admins decide what players can turn on.
 
 ## Getting started
 
-Type **.s help** in game. Player commands use the **.s** prefix, admin toggles use **.sg**. The full command table with scopes and examples is in COMMANDS.md inside the zip and on GitHub.
+Type **.s help** in game. Player commands use the **.s** prefix, admin toggles use **.sg**.
+
+**Full help guide with every command and an example for each:** [GUIDE.md](https://github.com/Greeneye0/Satisvampory/blob/main/GUIDE.md) (also included in the zip). Quick reference table: [COMMANDS.md](https://github.com/Greeneye0/Satisvampory/blob/main/COMMANDS.md).
 
 ## Diagnostics
 
@@ -51,7 +54,7 @@ Product contract (dest ranking, tidy, covering, ClanShare, belts, scoop, servant
 
 ## Commands
 
-Full list, scopes (you / plot / castle / clan / server), and examples: **[COMMANDS.md](COMMANDS.md)**.
+Quick table: **[COMMANDS.md](COMMANDS.md)**. Full guide with an example per command: **[GUIDE.md](GUIDE.md)**.
 
 In game: **`.s help`**. Prefix **`.s`**. Admin **`.sg`**. Chest floors are **`.s reserve`** (there is no leftover command). `.s cap` is castle production; `.s bagcap` is personal scoop.
 
