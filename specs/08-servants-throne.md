@@ -18,7 +18,9 @@ Admin **`.sg rh` / `.sg repeathunt`**. Default **OFF**. Server-wide allow. Not t
 
 Per castle (needs server ON): **`.s rh`** lists every ClanShare / standing castle and ON/OFF. Missing plot = **ON**. **`.s rh all`** enables all listed. **`.s rh off`** / **`.s rh on`** this standing castle. **`.s rh 2`** toggles that row (list TTL 2 minutes).
 
-When a plot is ON: each time a hunt **returns**, surviving (not dead, not injured) servants are sent again on the **same** zone / mission / throne after they are idle. Dead or injured servants are skipped. If vanilla does not accept the send, chat **could not send** — do not claim they left. Raided hearts do not resend. Auto-send bypasses “must be sitting the throne”.
+When a plot is ON: each time a hunt **returns**, surviving (not dead, not injured) servants are sent again on the **same** zone / mission / throne after they are idle. Dead or injured servants are skipped. If vanilla does not accept the send, chat **could not send** with the real reason (missing zone, servants not ready, vanilla rejected) — do not claim they left. Raided hearts do not resend. Auto-send bypasses “must be sitting the throne”.
+
+The send event needs a **MapZoneId**, not just the destination name. If the zone was not remembered (server bounce while they were out, or an empty auto-send overwriting the last hunt), look up the zone by destination name / mission prefab before injecting `SendOnMissionEvent`. Do not overwrite a remembered dest with an empty auto-send event. Capture in-flight hunts on **boot** when `.sg rh` is already ON, not only when someone toggles it.
 
 Turning **`.sg rh` ON**, **`.s rh on`**, or **`.s rh all`** captures hunts **already in the field** so they loop when they get back.
 

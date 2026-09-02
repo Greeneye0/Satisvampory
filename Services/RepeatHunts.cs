@@ -13,6 +13,7 @@ using System.IO;
 using System.Text;
 using Unity.Collections;
 using Unity.Entities;
+using Unity.Mathematics;
 using UnityEngine;
 
 namespace Satisvampory.Services
@@ -30,6 +31,7 @@ namespace Satisvampory.Services
             public NetworkId S2;
             public NetworkId S3;
             public int MissionDataId;
+            public PrefabGUID MissionPrefab;
             public MapZoneId Zone;
             public string DestName;
             public float SuccessPct;
@@ -66,6 +68,7 @@ namespace Satisvampory.Services
         static Entity autoUser;
         static int autoFrames;
         static bool skipSendChat;
+        static string lastFail = "";
 
         public static bool IsOn(int plot) => Core.PlayerSettings.IsRepeatHuntPlotOn(plot);
 
@@ -159,6 +162,9 @@ namespace Satisvampory.Services
                 DestName = DestLabel(ev.MapZoneId, default),
                 SuccessPct = -1f
             };
+            if (byPlot.TryGetValue(plot, out var old))
+                MergeRecipe(ref recipe, old);
+            FillDest(ref recipe);
             byPlot[plot] = recipe;
             var userEnt = Entity.Null;
             if (eventEntity.Has<FromCharacter>())
@@ -166,17 +172,11 @@ namespace Satisvampory.Services
                 var from = eventEntity.Read<FromCharacter>();
                 userEnt = from.User;
             }
-            if (byPlot.TryGetValue(plot, out var old))
-            {
-                if (string.IsNullOrWhiteSpace(recipe.DestName))
-                    recipe.DestName = old.DestName;
-                if (recipe.MissionDataId == 0)
-                    recipe.MissionDataId = old.MissionDataId;
-            }
             pendingStarts.Add((recipe, userEnt));
             if (IsOn(plot))
                 capThisTick = true;
-            DestDebugLog.Note("throne", plot, 0, "remember hunt " + recipe.DestName);
+            DestDebugLog.Note("throne", plot, 0, "remember hunt " + recipe.DestName
+                + " z=" + ZoneTag(recipe.Zone) + " m=" + recipe.MissionDataId);
         }
 
         public static void AfterSends()
@@ -189,6 +189,9 @@ namespace Satisvampory.Services
                     var userEnt = pendingStarts[i].User;
                     if (lastSuccess >= 0f)
                         hunt.SuccessPct = lastSuccess;
+                    if (byPlot.TryGetValue(hunt.Plot, out var keep))
+                        MergeRecipe(ref hunt, keep);
+                    FillDest(ref hunt);
                     byPlot[hunt.Plot] = hunt;
                     if (!skipSendChat)
                         ChatSent(hunt, userEnt);
@@ -317,6 +320,14 @@ namespace Satisvampory.Services
                     plot = Core.TerritoryService.GetTerritoryId(mission.Servant1.GetEntityOnServer());
                 if (!byPlot.TryGetValue(plot, out var recipe))
                     recipe = RecipeFromMission(plot, heart, mission);
+                else
+                {
+                    var live = RecipeFromMission(plot, heart, mission);
+                    MergeRecipe(ref recipe, live);
+                    if (recipe.MissionPrefab.GuidHash == 0)
+                        recipe.MissionPrefab = live.MissionPrefab;
+                }
+                FillDest(ref recipe);
                 var servants = new List<Entity>(3);
                 AddServant(servants, mission.Servant1);
                 AddServant(servants, mission.Servant2);
@@ -418,7 +429,9 @@ namespace Satisvampory.Services
             AddServantName(names, hunt.S2);
             AddServantName(names, hunt.S3);
             var who = names.Count > 0 ? string.Join(", ", names) : "servants";
+            FillDest(ref hunt);
             var dest = string.IsNullOrWhiteSpace(hunt.DestName) ? "hunt" : hunt.DestName;
+            lastFail = "";
             for (var attempt = 0; attempt < 8; attempt++)
             {
                 yield return new WaitForSeconds(attempt == 0 ? 3f : 1f);
@@ -426,12 +439,13 @@ namespace Satisvampory.Services
                     yield break;
                 if (!ServantsReady(ref hunt))
                 {
+                    lastFail = "servants not ready";
                     DestDebugLog.Note("throne", hunt.Plot, 0, "repeat wait servants not ready try=" + (attempt + 1));
                     continue;
                 }
                 if (!TrySend(heart, hunt, requireRepeatOn: true))
                 {
-                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat TrySend false try=" + (attempt + 1));
+                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat TrySend false try=" + (attempt + 1) + " " + lastFail);
                     continue;
                 }
                 yield return new WaitForSeconds(1f);
@@ -441,32 +455,59 @@ namespace Satisvampory.Services
                     DestDebugLog.Note("throne", hunt.Plot, 0, "repeat accepted " + dest);
                     yield break;
                 }
-                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat not accepted try=" + (attempt + 1));
+                lastFail = "vanilla did not accept";
+                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat not accepted try=" + (attempt + 1)
+                    + " z=" + ZoneTag(hunt.Zone) + " m=" + hunt.MissionDataId);
             }
-            TellClan(heart, Trim("Repeat: could not send " + who + " — throne or servants not ready."));
-            DestDebugLog.Note("throne", hunt.Plot, 0, "repeat gave up " + dest);
+            var why = string.IsNullOrWhiteSpace(lastFail) ? "throne or servants not ready" : lastFail;
+            TellClan(heart, Trim("Repeat: could not send " + who + " to " + dest + " — " + why + "."));
+            DestDebugLog.Note("throne", hunt.Plot, 0, "repeat gave up " + dest + " " + why);
         }
 
         static bool TrySend(Entity heart, Recipe hunt, bool requireRepeatOn = true)
         {
             try
             {
+                lastFail = "";
                 if (requireRepeatOn && !IsOn(hunt.Plot))
+                {
+                    lastFail = "repeat off";
                     return false;
+                }
                 if (heart == Entity.Null || !Core.EntityManager.Exists(heart))
+                {
+                    lastFail = "no heart";
                     return false;
+                }
                 if (TerritoryService.IsHeartRaided(heart))
+                {
+                    lastFail = "heart raided";
                     return false;
+                }
                 if (!Core.TryGetEntityFromNetworkId(hunt.Throne, out var throne)
                     || throne == Entity.Null || !Core.EntityManager.Exists(throne))
+                {
+                    lastFail = "no throne";
                     return false;
+                }
                 if (!TryFromHeart(heart, out var userEnt, out var character) || character == Entity.Null)
+                {
+                    lastFail = "heart owner not in world";
                     return false;
+                }
+                FillDest(ref hunt);
+                if (!ZoneLooksSet(hunt.Zone) || hunt.MissionDataId == 0)
+                {
+                    lastFail = "no hunt zone";
+                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send missing dest name=" + hunt.DestName
+                        + " z=" + ZoneTag(hunt.Zone) + " m=" + hunt.MissionDataId);
+                    return false;
+                }
                 skipSendChat = true;
                 autoThrone = throne;
                 autoCharacter = character;
                 autoUser = userEnt;
-                autoFrames = 20;
+                autoFrames = 600;
                 var entity = Core.EntityManager.CreateEntity();
                 entity.Add<FromCharacter>();
                 entity.Add<SendOnMissionEvent>();
@@ -481,11 +522,13 @@ namespace Satisvampory.Services
                     MapZoneId = hunt.Zone
                 });
                 capSuccessFrames = 5;
-                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send " + hunt.DestName);
+                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send " + hunt.DestName
+                    + " z=" + ZoneTag(hunt.Zone) + " m=" + hunt.MissionDataId);
                 return true;
             }
             catch (Exception e)
             {
+                lastFail = "send error";
                 Core.LogException(e);
                 return false;
             }
@@ -806,7 +849,7 @@ namespace Satisvampory.Services
             var throne = ClanThroneServants.FindThrone(plot);
             var throneNid = throne != Entity.Null && throne.Has<NetworkId>() ? throne.Read<NetworkId>() : default;
             TryZoneForMission(mission.MissionID, default, out var zone, out var dest);
-            return new Recipe
+            var recipe = new Recipe
             {
                 Plot = plot,
                 Throne = throneNid,
@@ -814,16 +857,73 @@ namespace Satisvampory.Services
                 S2 = NidOf(mission.Servant2),
                 S3 = NidOf(mission.Servant3),
                 MissionDataId = mission.MissiontDataId,
+                MissionPrefab = mission.MissionID,
                 Zone = zone,
                 DestName = dest,
                 SuccessPct = -1f
             };
+            FillDest(ref recipe);
+            return recipe;
         }
 
         static string DestLabel(MapZoneId zone, PrefabGUID mission)
         {
             TryZoneForMission(mission, zone, out _, out var name);
             return name;
+        }
+
+        static void MergeRecipe(ref Recipe recipe, Recipe old)
+        {
+            if (string.IsNullOrWhiteSpace(recipe.DestName))
+                recipe.DestName = old.DestName;
+            if (recipe.MissionDataId == 0)
+                recipe.MissionDataId = old.MissionDataId;
+            if (recipe.MissionPrefab.GuidHash == 0)
+                recipe.MissionPrefab = old.MissionPrefab;
+            if (!ZoneLooksSet(recipe.Zone) && ZoneLooksSet(old.Zone))
+                recipe.Zone = old.Zone;
+            if (recipe.Throne.Equals(default(NetworkId)))
+                recipe.Throne = old.Throne;
+        }
+
+        static bool FillDest(ref Recipe hunt)
+        {
+            if (!string.IsNullOrWhiteSpace(hunt.DestName)
+                && TryZoneByName(hunt.DestName, out var zone, out var name, out var mid))
+            {
+                hunt.Zone = zone;
+                hunt.DestName = name;
+                if (hunt.MissionDataId == 0)
+                    hunt.MissionDataId = mid;
+                return true;
+            }
+            if (hunt.MissionPrefab.GuidHash != 0
+                && TryZoneForMission(hunt.MissionPrefab, hunt.Zone, out zone, out name)
+                && ZoneLooksSet(zone))
+            {
+                hunt.Zone = zone;
+                if (!string.IsNullOrWhiteSpace(name))
+                    hunt.DestName = name;
+                return true;
+            }
+            if (ZoneLooksSet(hunt.Zone))
+            {
+                var label = DestLabel(hunt.Zone, hunt.MissionPrefab);
+                if (!string.IsNullOrWhiteSpace(label))
+                    hunt.DestName = label;
+                return hunt.MissionDataId != 0 || !string.IsNullOrWhiteSpace(hunt.DestName);
+            }
+            return false;
+        }
+
+        static bool ZoneLooksSet(MapZoneId zone)
+        {
+            return zone.ZoneId != 0 || !zone.ChunkCoordinate.Equals(default(int2));
+        }
+
+        static string ZoneTag(MapZoneId zone)
+        {
+            return zone.ChunkCoordinate + ":" + zone.ZoneId;
         }
 
         static bool TryZoneForMission(PrefabGUID mission, MapZoneId want, out MapZoneId zone, out string destName)
@@ -845,7 +945,8 @@ namespace Satisvampory.Services
                         continue;
                     var data = e.Read<MapZoneData>();
                     var matchAsset = mission.GuidHash != 0 && data.ServantMissionAsset.GuidHash == mission.GuidHash;
-                    var matchZone = want.ZoneId != 0 && data.ZoneIndex == want.ZoneId
+                    var wantSet = want.ZoneId != 0 || !want.ChunkCoordinate.Equals(default(int2));
+                    var matchZone = wantSet && data.ZoneIndex == want.ZoneId
                         && data.ChunkCoordinate.Equals(want.ChunkCoordinate);
                     if (!matchAsset && !matchZone)
                         continue;

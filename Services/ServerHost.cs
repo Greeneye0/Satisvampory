@@ -64,6 +64,8 @@ namespace Satisvampory.Services
             Core.MarkBooted();
             Core.WorkQueue.EnqueueAll();
             RepeatHunts.PublishClientState();
+            if (Core.PlayerSettings.IsRepeatHuntEnabled())
+                RepeatHunts.CaptureActiveMissions();
 
             Start(ClanTreasuryLend.Loop());
             Start(DebugPeekService.Loop());
