@@ -465,8 +465,8 @@ namespace Satisvampory.Services
                 return false;
             if (IsDestClassToken(token))
                 return false;
-            if (ItemGroupService.IsGbeAliasText(token))
-                return ItemGroupService.IsGreaterBloodEssence(item);
+            if (ItemGroupService.TryExactEssenceAlias(token, out var essenceHash))
+                return item.GuidHash == essenceHash;
             var variants = TokenVariants(token);
 
             var tokenIsDestGroup = false;
@@ -564,9 +564,10 @@ namespace Satisvampory.Services
             var tokens = RemainingNameTokens(chestName);
             if (tokens.Count == 0)
                 return false;
-            if (ItemGroupService.IsGbeAliasText(remaining) || (tokens.Count == 1 && ItemGroupService.IsGbeAliasText(tokens[0])))
+            if (ItemGroupService.TryExactEssenceAlias(remaining, out var essenceHash)
+                || (tokens.Count == 1 && ItemGroupService.TryExactEssenceAlias(tokens[0], out essenceHash)))
             {
-                if (ItemGroupService.IsGreaterBloodEssence(item))
+                if (item.GuidHash == essenceHash)
                 {
                     specificity = 22;
                     return true;

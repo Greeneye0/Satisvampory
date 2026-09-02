@@ -112,7 +112,8 @@ namespace Satisvampory.Services
 
         // Dest groups rebuilt at startup from PrefabCollection ItemData.
         // Flags first, then name/prefab overlay rules. No frozen GUID table. CSV is debug-only.
-        // GBE alias = Greater Blood Essence (exact dest / find / pull). Not Blood Essence / potions.
+        // GBE/PBE/ABE = Greater/Primal/Ancestral Blood Essence (exact dest / find / pull).
+        // Not regular Blood Essence and not potions. `blood` dest stays BE only.
         // FakeItem_ / Any * recipe placeholders are not stash dests and are omitted from unresolved chat.
         static readonly Dictionary<string, List<GroupMember>> builtInMembers = new(StringComparer.OrdinalIgnoreCase);
         static readonly List<string> missingRequested = new();
@@ -120,6 +121,8 @@ namespace Satisvampory.Services
         static readonly List<string> catalogRows = new();
 
         public static int GreaterBloodEssenceHash { get; private set; }
+        public static int PrimalBloodEssenceHash { get; private set; }
+        public static int AncestralBloodEssenceHash { get; private set; }
 
         public static IReadOnlyList<string> MissingRequestedNames => missingRequested;
         public static IEnumerable<string> BuiltInNames => new[]
@@ -133,6 +136,36 @@ namespace Satisvampory.Services
         public static bool IsGreaterBloodEssence(PrefabGUID item)
         {
             return item.GuidHash != 0 && GreaterBloodEssenceHash != 0 && item.GuidHash == GreaterBloodEssenceHash;
+        }
+
+        public static bool TryExactEssenceAlias(string s, out int hash)
+        {
+            hash = 0;
+            if (string.IsNullOrWhiteSpace(s))
+                return false;
+            var t = FoundItemConverter.Normalize(s);
+            if (t.Equals("gbe", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("greater blood essence", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("greater blood", StringComparison.OrdinalIgnoreCase))
+            {
+                hash = GreaterBloodEssenceHash;
+                return hash != 0;
+            }
+            if (t.Equals("pbe", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("primal blood essence", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("primal blood", StringComparison.OrdinalIgnoreCase))
+            {
+                hash = PrimalBloodEssenceHash;
+                return hash != 0;
+            }
+            if (t.Equals("abe", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("ancestral blood essence", StringComparison.OrdinalIgnoreCase)
+                || t.Equals("ancestral blood", StringComparison.OrdinalIgnoreCase))
+            {
+                hash = AncestralBloodEssenceHash;
+                return hash != 0;
+            }
+            return false;
         }
 
         public static bool TryGetDestGroup(int guidHash, out string group)
@@ -160,17 +193,19 @@ namespace Satisvampory.Services
 
         public static bool IsGbeAliasText(string s)
         {
-            if (string.IsNullOrWhiteSpace(s))
-                return false;
-            var t = FoundItemConverter.Normalize(s);
-            return t.Equals("gbe", StringComparison.OrdinalIgnoreCase)
-                || t.Equals("greater blood essence", StringComparison.OrdinalIgnoreCase);
+            return TryExactEssenceAlias(s, out var hash) && hash == GreaterBloodEssenceHash;
         }
 
         public static string CatalogAliases(int guidHash)
         {
-            if (guidHash != 0 && guidHash == GreaterBloodEssenceHash)
+            if (guidHash == 0)
+                return "";
+            if (guidHash == GreaterBloodEssenceHash)
                 return "GBE";
+            if (guidHash == PrimalBloodEssenceHash)
+                return "PBE";
+            if (guidHash == AncestralBloodEssenceHash)
+                return "ABE";
             return "";
         }
 
@@ -181,12 +216,16 @@ namespace Satisvampory.Services
             destGroupByHash.Clear();
             catalogRows.Clear();
             GreaterBloodEssenceHash = 0;
+            PrimalBloodEssenceHash = 0;
+            AncestralBloodEssenceHash = 0;
 
             foreach (var n in BuiltInNames)
                 builtInMembers[n] = new List<GroupMember>();
 
             ScanPrefabCollection();
-            ResolveGreaterBloodEssence();
+            ResolveNamedEssence("Greater Blood Essence", "GBE", v => GreaterBloodEssenceHash = v);
+            ResolveNamedEssence("Primal Blood Essence", "PBE", v => PrimalBloodEssenceHash = v);
+            ResolveNamedEssence("Ancestral Blood Essence", "ABE", v => AncestralBloodEssenceHash = v);
 
             foreach (var kv in builtInMembers)
             {
@@ -197,34 +236,37 @@ namespace Satisvampory.Services
             DumpItemCatalog();
             if (missingRequested.Count > 0)
                 Core.Log.LogWarning("Item groups unresolved " + missingRequested.Count + " ItemData names: " + string.Join(", ", missingRequested));
-            Core.Log.LogInfo("GBE alias -> Greater Blood Essence guid=" + GreaterBloodEssenceHash + " (dest works without item-catalog.csv)");
+            Core.Log.LogInfo("Essence aliases GBE=" + GreaterBloodEssenceHash
+                + " PBE=" + PrimalBloodEssenceHash
+                + " ABE=" + AncestralBloodEssenceHash
+                + " (dest works without item-catalog.csv)");
         }
 
-        static void ResolveGreaterBloodEssence()
+        static void ResolveNamedEssence(string locName, string alias, Action<int> setHash)
         {
-            if (FoundItemConverter.TryGetExact("Greater Blood Essence", out var exact) && exact.prefab.GuidHash != 0)
+            if (FoundItemConverter.TryGetExact(locName, out var exact) && exact.prefab.GuidHash != 0)
             {
                 var loc = FoundItemConverter.Normalize(exact.prefab.PrefabName() ?? "");
-                if (loc.Equals("Greater Blood Essence", StringComparison.OrdinalIgnoreCase))
+                if (loc.Equals(locName, StringComparison.OrdinalIgnoreCase))
                 {
-                    GreaterBloodEssenceHash = exact.prefab.GuidHash;
-                    FoundItemConverter.RegisterExactAlias("GBE", exact.prefab);
+                    setHash(exact.prefab.GuidHash);
+                    FoundItemConverter.RegisterExactAlias(alias, exact.prefab);
                     return;
                 }
             }
 
             foreach (var kvp in FoundItemConverter.ExactItemNames)
             {
-                if (!kvp.Key.Equals("Greater Blood Essence", StringComparison.OrdinalIgnoreCase))
+                if (!kvp.Key.Equals(locName, StringComparison.OrdinalIgnoreCase))
                     continue;
                 if (kvp.Value.GuidHash == 0)
                     continue;
-                GreaterBloodEssenceHash = kvp.Value.GuidHash;
-                FoundItemConverter.RegisterExactAlias("GBE", kvp.Value);
+                setHash(kvp.Value.GuidHash);
+                FoundItemConverter.RegisterExactAlias(alias, kvp.Value);
                 return;
             }
 
-            Core.Log.LogWarning("GBE alias: Greater Blood Essence not found in PrefabCollection by name");
+            Core.Log.LogWarning(alias + " alias: " + locName + " not found in PrefabCollection by name");
         }
 
         static void ScanPrefabCollection()

@@ -143,7 +143,7 @@ internal static class ItemCatalog
                 continue;
             itemNamesToPrefabs[NormalizeName(label)] = pair.Value;
         }
-        RegisterGreaterBloodEssenceAlias();
+        RegisterBloodEssenceAliases();
     }
 
     static bool IsLiveItemPrefab(string spawnName, PrefabGUID prefab)
@@ -164,14 +164,23 @@ internal static class ItemCatalog
         itemNamesToPrefabs[NormalizeName(alias)] = prefab;
     }
 
-    static void RegisterGreaterBloodEssenceAlias()
+    static void RegisterBloodEssenceAliases()
     {
-        if (!itemNamesToPrefabs.TryGetValue(NormalizeName("Greater Blood Essence"), out var prefab))
+        RegisterEssenceAlias("Greater Blood Essence", "GBE", "greater blood");
+        RegisterEssenceAlias("Primal Blood Essence", "PBE", "primal blood");
+        RegisterEssenceAlias("Ancestral Blood Essence", "ABE", "ancestral blood");
+    }
+
+    static void RegisterEssenceAlias(string locName, string shortAlias, string midAlias)
+    {
+        if (!itemNamesToPrefabs.TryGetValue(NormalizeName(locName), out var prefab))
             return;
         var loc = NormalizeName(prefab.PrefabName());
-        if (!loc.Equals(NormalizeName("Greater Blood Essence"), StringComparison.OrdinalIgnoreCase))
+        if (!loc.Equals(NormalizeName(locName), StringComparison.OrdinalIgnoreCase))
             return;
-        itemNamesToPrefabs[NormalizeName("GBE")] = prefab;
+        itemNamesToPrefabs[NormalizeName(shortAlias)] = prefab;
+        if (!string.IsNullOrEmpty(midAlias))
+            itemNamesToPrefabs[NormalizeName(midAlias)] = prefab;
     }
 
 

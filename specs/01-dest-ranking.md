@@ -67,8 +67,8 @@ After stripping conveyor tokens and overflow/generic filler:
 - Built-in dest words (`blood`, `stone`, `bone`, `jewel`, …) match **dest-group membership only** — not ItemCategory flags and not a substring of the item name.
   - **Blood Jewel** → jewels, not blood.
   - **Miststone** → not stone.
-- `blood` as a dest word is **Blood Essence**, not Greater/Primal. Ranks above Alchemy category.
-- Greater Blood Essence aliases (`gbe`, `greater blood`, …) match GBE only.
+- `blood` as a dest word is **Blood Essence**, not Greater/Primal/Ancestral. Ranks above Alchemy category.
+- Greater / Primal / Ancestral Blood Essence aliases (`gbe` / `pbe` / `abe`, `greater blood`, `primal blood`, `ancestral blood`) match that item only.
 - Spelling fold: fiber/fibre, sulfur/sulphur, armor/armour, gray/grey, jewelry/jewellery, etc.
 
 ## Source pass (lend / `.pull` sources)
