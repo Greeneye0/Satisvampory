@@ -495,9 +495,9 @@ namespace Satisvampory.Services
                     lastFail = "no throne";
                     return false;
                 }
-                if (!TryFromHeart(heart, out var userEnt, out var character) || character == Entity.Null)
+                if (!TryFromSend(heart, throne, out var userEnt, out var character) || character == Entity.Null)
                 {
-                    lastFail = "heart owner not in world";
+                    lastFail = "no connected clan member to send as";
                     return false;
                 }
                 FillDest(ref hunt);
@@ -531,7 +531,8 @@ namespace Satisvampory.Services
                 capSuccessFrames = 5;
                 DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send " + hunt.DestName
                     + " z=" + ZoneTag(hunt.Zone) + " slot=" + hunt.MissionDataId
-                    + " prefab=" + hunt.MissionPrefab.GuidHash);
+                    + " prefab=" + hunt.MissionPrefab.GuidHash
+                    + " as=" + SenderName(userEnt));
                 return true;
             }
             catch (Exception e)
@@ -1187,6 +1188,66 @@ namespace Satisvampory.Services
                 return false;
             character = userEnt.Read<User>().LocalCharacter.GetEntityOnServer();
             return character != Entity.Null && Core.EntityManager.Exists(character);
+        }
+
+        static bool TryFromSend(Entity heart, Entity throne, out Entity userEnt, out Entity character)
+        {
+            userEnt = Entity.Null;
+            character = Entity.Null;
+            var plot = throne != Entity.Null ? Core.TerritoryService.GetTerritoryId(throne) : Core.TerritoryService.GetTerritoryId(heart);
+            var best = 0;
+            var pickUser = Entity.Null;
+            var pickChar = Entity.Null;
+            Core.TerritoryService.EachUser((uent, user) =>
+            {
+                if (!user.IsConnected)
+                    return;
+                var ch = user.LocalCharacter.GetEntityOnServer();
+                if (ch == Entity.Null || !Core.EntityManager.Exists(ch))
+                    return;
+                if (!Core.TerritoryService.IsSameClanAsHeartOwner(user, heart)
+                    && !Core.TerritoryService.IsSameClanAsHeart(ch, heart))
+                    return;
+                var score = 1;
+                var standing = Core.TerritoryService.GetStandingTerritoryId(ch);
+                if (plot >= 0 && standing == plot)
+                    score = 2;
+                if (InteractorIs(ch, throne))
+                    score = 3;
+                if (score <= best)
+                    return;
+                best = score;
+                pickUser = uent;
+                pickChar = ch;
+            });
+            if (best > 0)
+            {
+                userEnt = pickUser;
+                character = pickChar;
+                return true;
+            }
+            return TryFromHeart(heart, out userEnt, out character);
+        }
+
+        static unsafe bool InteractorIs(Entity character, Entity throne)
+        {
+            if (character == Entity.Null || throne == Entity.Null
+                || !Core.EntityManager.Exists(character) || !character.Has<Interactor>())
+                return false;
+            var type = new ComponentType(Il2CppType.Of<Interactor>());
+            var raw = Core.EntityManager.GetComponentDataRawRW(character, type.TypeIndex);
+            if (raw == null)
+                return false;
+            var target = Marshal.PtrToStructure<Entity>(IntPtr.Add(new IntPtr(raw), 20));
+            return target == throne;
+        }
+
+        static string SenderName(Entity userEnt)
+        {
+            if (userEnt == Entity.Null || !Core.EntityManager.Exists(userEnt) || !userEnt.Has<User>())
+                return "?";
+            var n = userEnt.Read<User>().CharacterName.ToString();
+            return string.IsNullOrWhiteSpace(n) ? "?" : n;
         }
 
         static void TellOwner(Entity heart, string text) => TellClan(heart, text);
