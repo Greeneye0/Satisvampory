@@ -5,9 +5,11 @@ using Satisvampory;
 using System.Collections.Generic;
 using System.Linq;
 using Satisvampory.Commands.Converters;
+using Il2CppInterop.Runtime;
 using ProjectM;
 using ProjectM.Network;
 using Stunlock.Core;
+using Unity.Collections;
 using Unity.Entities;
 using VampireCommandFramework;
 
@@ -288,26 +290,11 @@ namespace Satisvampory.Services
 
         static void ResolveNamedItem(string locName, string alias, Action<int> setHash, params string[] extraAliases)
         {
-            PrefabGUID prefab = default;
-            if (FoundItemConverter.TryGetExact(locName, out var exact) && exact.prefab.GuidHash != 0)
-            {
-                var loc = FoundItemConverter.Normalize(exact.prefab.PrefabName() ?? "");
-                if (loc.Equals(locName, StringComparison.OrdinalIgnoreCase))
-                    prefab = exact.prefab;
-            }
-            if (prefab.GuidHash == 0)
-            {
-                foreach (var kvp in FoundItemConverter.ExactItemNames)
-                {
-                    if (!kvp.Key.Equals(locName, StringComparison.OrdinalIgnoreCase) || kvp.Value.GuidHash == 0)
-                        continue;
-                    prefab = kvp.Value;
-                    break;
-                }
-            }
-            if (prefab.GuidHash == 0)
+            if (!TryFindItemPrefab(locName, alias, out var prefab))
             {
                 Core.Log.LogWarning(alias + " alias: " + locName + " not found in PrefabCollection by name");
+                if (string.Equals(alias, "ABE", StringComparison.OrdinalIgnoreCase))
+                    LogEssenceItemCandidates();
                 return;
             }
             setHash?.Invoke(prefab.GuidHash);
@@ -317,6 +304,180 @@ namespace Satisvampory.Services
             {
                 for (var i = 0; i < extraAliases.Length; i++)
                     BindAlias(extraAliases[i], prefab, builtIn: true);
+            }
+        }
+
+        static bool TryFindItemPrefab(string locName, string alias, out PrefabGUID prefab)
+        {
+            prefab = default;
+            if (FoundItemConverter.TryGetExact(locName, out var exact) && exact.prefab.GuidHash != 0)
+            {
+                var loc = FoundItemConverter.Normalize(exact.prefab.PrefabName() ?? "");
+                if (loc.Equals(locName, StringComparison.OrdinalIgnoreCase))
+                {
+                    prefab = exact.prefab;
+                    return true;
+                }
+            }
+            if (FoundItemConverter.ExactItemNames != null)
+            {
+                foreach (var kvp in FoundItemConverter.ExactItemNames)
+                {
+                    if (!kvp.Key.Equals(locName, StringComparison.OrdinalIgnoreCase) || kvp.Value.GuidHash == 0)
+                        continue;
+                    prefab = kvp.Value;
+                    return true;
+                }
+            }
+
+            var want = FoundItemConverter.Normalize(locName);
+            if (TryMatchSpawnable(want, alias, out prefab))
+                return true;
+            if (TryMatchItemDataPrefabs(want, alias, out prefab))
+                return true;
+            return false;
+        }
+
+        static bool AliasSpawnMatch(string want, string alias, string spawn, string loc)
+        {
+            var sn = FoundItemConverter.Normalize(spawn ?? "");
+            var ln = FoundItemConverter.Normalize(loc ?? "");
+            if (ln.Equals(want, StringComparison.OrdinalIgnoreCase)
+                || sn.Equals(want, StringComparison.OrdinalIgnoreCase))
+                return true;
+            var s = (spawn ?? "").Replace(" ", "").ToLowerInvariant();
+            var a = (alias ?? "").ToLowerInvariant();
+            if (a == "abe")
+            {
+                if (s.IndexOf("bloodessence", StringComparison.Ordinal) >= 0
+                    && s.IndexOf("ancestral", StringComparison.Ordinal) >= 0)
+                    return true;
+                if (s.IndexOf("item_bloodessence_t04", StringComparison.Ordinal) >= 0)
+                    return true;
+            }
+            return false;
+        }
+
+        static bool TryMatchSpawnable(string want, string alias, out PrefabGUID prefab)
+        {
+            prefab = default;
+            if (Core.PrefabCollectionSystem == null)
+                return false;
+            try
+            {
+                foreach (var kvp in Core.PrefabCollectionSystem._SpawnableNameToPrefabGuidDictionary)
+                {
+                    if (kvp.Value.GuidHash == 0)
+                        continue;
+                    var spawn = kvp.Key ?? "";
+                    var loc = "";
+                    try { loc = kvp.Value.PrefabName() ?? ""; } catch { loc = ""; }
+                    if (!AliasSpawnMatch(want, alias, spawn, loc))
+                        continue;
+                    if (!PrefabHasItemData(kvp.Value))
+                        continue;
+                    prefab = kvp.Value;
+                    Core.Log.LogInfo(alias + " alias matched spawn " + spawn + " guid=" + prefab.GuidHash + " loc=" + loc);
+                    return true;
+                }
+            }
+            catch (Exception e)
+            {
+                Core.Log.LogWarning(alias + " alias spawnable scan: " + e.Message);
+            }
+            return false;
+        }
+
+        static bool TryMatchItemDataPrefabs(string want, string alias, out PrefabGUID prefab)
+        {
+            prefab = default;
+            if (Core.EntityManager == default)
+                return false;
+            var builder = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<ItemData>(), ComponentType.AccessMode.ReadOnly))
+                .AddAll(new(Il2CppType.Of<PrefabGUID>(), ComponentType.AccessMode.ReadOnly))
+                .WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities);
+            var query = Core.EntityManager.CreateEntityQuery(ref builder);
+            builder.Dispose();
+            NativeArray<Entity> ents = default;
+            try
+            {
+                ents = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < ents.Length; i++)
+                {
+                    var ent = ents[i];
+                    if (ent == Entity.Null || !ent.Has<PrefabGUID>())
+                        continue;
+                    var guid = ent.Read<PrefabGUID>();
+                    if (guid.GuidHash == 0)
+                        continue;
+                    var spawn = "";
+                    try
+                    {
+                        Core.PrefabCollectionSystem._PrefabLookupMap.TryGetName(guid, out spawn);
+                    }
+                    catch { spawn = ""; }
+                    var loc = "";
+                    try { loc = guid.PrefabName() ?? ""; } catch { loc = ""; }
+                    if (!AliasSpawnMatch(want, alias, spawn, loc))
+                        continue;
+                    prefab = guid;
+                    Core.Log.LogInfo(alias + " alias matched ItemData " + spawn + " guid=" + guid.GuidHash + " loc=" + loc);
+                    return true;
+                }
+            }
+            catch (Exception e)
+            {
+                Core.Log.LogWarning(alias + " alias ItemData scan: " + e.Message);
+            }
+            finally
+            {
+                if (ents.IsCreated)
+                    ents.Dispose();
+                query.Dispose();
+            }
+            return false;
+        }
+
+        static bool PrefabHasItemData(PrefabGUID prefab)
+        {
+            try
+            {
+                return Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(prefab, out var ent)
+                    && ent != Entity.Null && ent.Has<ItemData>();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static void LogEssenceItemCandidates()
+        {
+            if (Core.PrefabCollectionSystem == null)
+                return;
+            var n = 0;
+            try
+            {
+                foreach (var kvp in Core.PrefabCollectionSystem._SpawnableNameToPrefabGuidDictionary)
+                {
+                    var spawn = kvp.Key ?? "";
+                    if (spawn.IndexOf("Essence", StringComparison.OrdinalIgnoreCase) < 0
+                        && spawn.IndexOf("Ancestral", StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+                    if (!PrefabHasItemData(kvp.Value))
+                        continue;
+                    var loc = "";
+                    try { loc = kvp.Value.PrefabName() ?? ""; } catch { }
+                    Core.Log.LogInfo("ABE candidate spawn=" + spawn + " guid=" + kvp.Value.GuidHash + " loc=" + loc);
+                    n++;
+                    if (n >= 40)
+                        break;
+                }
+            }
+            catch (Exception e)
+            {
+                Core.Log.LogWarning("ABE candidate scan: " + e.Message);
             }
         }
 
