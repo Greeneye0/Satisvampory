@@ -3,6 +3,7 @@ using Satisvampory.Commands.Converters;
 using Satisvampory.Services;
 using Steamworks;
 using VampireCommandFramework;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Stunlock.Core;
@@ -47,6 +48,7 @@ namespace Satisvampory.Commands;
             else if (cmd == PendingItemCommand.ExcludeToggle) ScoopCommands.DoExcludeToggle(ctx, item);
             else if (cmd == PendingItemCommand.BagCapShow) ScoopCommands.DoBagCapShow(ctx, item);
             else if (cmd == PendingItemCommand.BagCapSet) ScoopCommands.DoBagCapSet(ctx, item, pending.Amount);
+            else if (cmd == PendingItemCommand.AliasAdd) LogisticsGlobal.FinishAliasAdd(ctx, pending.GroupName, item);
         }
     
 
@@ -177,6 +179,87 @@ namespace Satisvampory.Commands;
 
         [Command(name: "settings", shortHand: "s", usage: ".sg s", description: "Displays current settings.", adminOnly: true)]
         public static void ShowGlobal(ChatCommandContext ctx) { var g = Core.PlayerSettings.GetGlobalSettings(); ctx.Reply("Satisvampory server flags:\nSortStash " + LogisticsCommands.OnOff(g.SortStash) + "\nPull " + LogisticsCommands.OnOff(g.Pull) + "\nCraftPull " + LogisticsCommands.OnOff(g.CraftPull) + "\nAutoStashMissions " + LogisticsCommands.OnOff(g.AutoStashMissions) + "\nRepeatHunt " + LogisticsCommands.OnOff(g.RepeatHunt) + " (default OFF; .sg rh) max " + Core.PlayerSettings.GetRepeatHuntMaxSuccess() + "% (.sg rhmax)\nConveyor " + LogisticsCommands.OnOff(g.Conveyor) + "\nConveyorLoops " + LogisticsCommands.OnOff(g.ConveyorLoops) + " (default OFF; .sg convloop)\nSalvage " + LogisticsCommands.OnOff(g.Salvage) + "\nUnitSpawner " + LogisticsCommands.OnOff(g.UnitSpawner) + "\nBrazier " + LogisticsCommands.OnOff(g.Brazier) + "\nNamed " + LogisticsCommands.OnOff(g.Named) + "\nTrash " + LogisticsCommands.OnOff(g.Trash)); }
+
+        [Command(name: "alias", usage: ".sg alias", description: "List item aliases (GBE, PBE, GSS, …).", adminOnly: true)]
+        public static void ListAliases(ChatCommandContext ctx)
+        {
+            var rows = ItemGroupService.ListExactAliases();
+            if (rows.Count == 0)
+            {
+                ctx.Reply("No item aliases. .sg alias add GSS \"Greater Stygian Shard\"");
+                return;
+            }
+            ctx.Reply("Item aliases (find / pull / dest). Built-in cannot be deleted.");
+            var n = 0;
+            var line = "";
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                var bit = "<color=white>" + row.Alias + "</color>=" + row.Name + (row.BuiltIn ? " (built-in)" : "");
+                if (line.Length == 0)
+                    line = bit;
+                else
+                    line += "  " + bit;
+                n++;
+                if (n >= 3 || i == rows.Count - 1)
+                {
+                    ctx.Reply(line);
+                    line = "";
+                    n = 0;
+                }
+            }
+            ctx.Reply(".sg alias add <alias> <item>   .sg alias del <alias>");
+        }
+
+        [Command(name: "alias", usage: ".sg alias add <alias> <item>", description: "Add an item alias for find / pull / dest names.", adminOnly: true)]
+        public static void AddAlias(ChatCommandContext ctx, string action, string alias, FoundItem item)
+        {
+            if (!action.Equals("add", StringComparison.OrdinalIgnoreCase) && !action.Equals("set", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Reply("Use .sg alias add <alias> <item> or .sg alias del <alias>.");
+                return;
+            }
+            if (LogisticsCommands.HandleAmbiguousItem(ctx, item, PendingItemCommand.AliasAdd, 0, alias))
+                return;
+            FinishAliasAdd(ctx, alias, item);
+        }
+
+        [Command(name: "alias", usage: ".sg alias del <alias>", description: "Remove an admin item alias. Built-ins stay.", adminOnly: true)]
+        public static void DelAlias(ChatCommandContext ctx, string action, string alias)
+        {
+            if (!action.Equals("del", StringComparison.OrdinalIgnoreCase)
+                && !action.Equals("rm", StringComparison.OrdinalIgnoreCase)
+                && !action.Equals("remove", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Reply("Use .sg alias add <alias> <item> or .sg alias del <alias>.");
+                return;
+            }
+            var err = ItemGroupService.UnbindAdminAlias(alias);
+            if (!string.IsNullOrEmpty(err))
+            {
+                ctx.Reply(err);
+                return;
+            }
+            ctx.Reply("Removed alias <color=white>" + FoundItemConverter.Normalize(alias) + "</color>.");
+        }
+
+        internal static void FinishAliasAdd(ChatCommandContext ctx, string alias, FoundItem item)
+        {
+            if (item.prefab.GuidHash == 0)
+            {
+                ctx.Reply("Unknown item.");
+                return;
+            }
+            var name = item.prefab.PrefabName() ?? alias;
+            var err = ItemGroupService.BindAdminAlias(alias, item.prefab, name);
+            if (!string.IsNullOrEmpty(err))
+            {
+                ctx.Reply(err);
+                return;
+            }
+            ctx.Reply("Alias <color=white>" + FoundItemConverter.Normalize(alias) + "</color> → " + name
+                + ". Works for .fi / .pull / dest names.");
+        }
     }
 
     public static class InventoryCommands

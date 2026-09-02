@@ -36,6 +36,7 @@ class FoundItemConverter : CommandArgumentConverter<FoundItem>
     public static string Normalize(string s) => ItemCatalog.Normalize(s);
     public static IReadOnlyDictionary<string, PrefabGUID> ExactItemNames => ItemCatalog.ExactNames;
     public static void RegisterExactAlias(string alias, PrefabGUID prefab) => ItemCatalog.RegisterExactAlias(alias, prefab);
+    public static void UnregisterExactAlias(string alias) => ItemCatalog.UnregisterExactAlias(alias);
 
     static Exception MultipleResultsError(ICommandContext ctx, List<PrefabGUID> searchResults, int lengthOfFail)
         => ItemCatalog.MultipleResultsError(ctx, searchResults, lengthOfFail);

@@ -112,13 +112,15 @@ namespace Satisvampory.Services
 
         // Dest groups rebuilt at startup from PrefabCollection ItemData.
         // Flags first, then name/prefab overlay rules. No frozen GUID table. CSV is debug-only.
-        // GBE/PBE/ABE = Greater/Primal/Ancestral Blood Essence (exact dest / find / pull).
-        // Not regular Blood Essence and not potions. `blood` dest stays BE only.
+        // Exact dest / find / pull aliases (GBE, PBE, GSS, …). `blood` dest stays regular Blood Essence.
         // FakeItem_ / Any * recipe placeholders are not stash dests and are omitted from unresolved chat.
         static readonly Dictionary<string, List<GroupMember>> builtInMembers = new(StringComparer.OrdinalIgnoreCase);
         static readonly List<string> missingRequested = new();
         static readonly Dictionary<int, string> destGroupByHash = new();
         static readonly List<string> catalogRows = new();
+        static readonly Dictionary<string, int> exactAliasToHash = new(StringComparer.OrdinalIgnoreCase);
+        static readonly HashSet<string> builtInAliasKeys = new(StringComparer.OrdinalIgnoreCase);
+        static readonly Dictionary<int, string> catalogAliasByHash = new();
 
         public static int GreaterBloodEssenceHash { get; private set; }
         public static int PrimalBloodEssenceHash { get; private set; }
@@ -138,34 +140,71 @@ namespace Satisvampory.Services
             return item.GuidHash != 0 && GreaterBloodEssenceHash != 0 && item.GuidHash == GreaterBloodEssenceHash;
         }
 
-        public static bool TryExactEssenceAlias(string s, out int hash)
+        public static bool TryExactEssenceAlias(string s, out int hash) => TryExactItemAlias(s, out hash);
+
+        public static bool TryExactItemAlias(string s, out int hash)
         {
             hash = 0;
             if (string.IsNullOrWhiteSpace(s))
                 return false;
-            var t = FoundItemConverter.Normalize(s);
-            if (t.Equals("gbe", StringComparison.OrdinalIgnoreCase)
-                || t.Equals("greater blood essence", StringComparison.OrdinalIgnoreCase)
-                || t.Equals("greater blood", StringComparison.OrdinalIgnoreCase))
-            {
-                hash = GreaterBloodEssenceHash;
-                return hash != 0;
-            }
-            if (t.Equals("pbe", StringComparison.OrdinalIgnoreCase)
-                || t.Equals("primal blood essence", StringComparison.OrdinalIgnoreCase)
-                || t.Equals("primal blood", StringComparison.OrdinalIgnoreCase))
-            {
-                hash = PrimalBloodEssenceHash;
-                return hash != 0;
-            }
-            if (t.Equals("abe", StringComparison.OrdinalIgnoreCase)
-                || t.Equals("ancestral blood essence", StringComparison.OrdinalIgnoreCase)
-                || t.Equals("ancestral blood", StringComparison.OrdinalIgnoreCase))
-            {
-                hash = AncestralBloodEssenceHash;
-                return hash != 0;
-            }
+            return exactAliasToHash.TryGetValue(FoundItemConverter.Normalize(s), out hash) && hash != 0;
+        }
+
+        public static bool IsBuiltInAlias(string alias)
+        {
+            return !string.IsNullOrWhiteSpace(alias) && builtInAliasKeys.Contains(FoundItemConverter.Normalize(alias));
+        }
+
+        public static bool IsReservedAlias(string alias)
+        {
+            if (string.IsNullOrWhiteSpace(alias))
+                return true;
+            var t = FoundItemConverter.Normalize(alias);
+            if (t.Length < 2 || t.Length > 16)
+                return true;
+            if (t.IndexOf(' ') >= 0)
+                return true;
+            if (TryGetBuiltInCanonical(t, out _))
+                return true;
+            if (t is "overflow" or "spoils" or "spoil" or "salvage" or "trash" or "storage" or "ns")
+                return true;
+            if (t.Length >= 2 && (t[0] == 's' || t[0] == 'r') && t.Skip(1).All(char.IsDigit))
+                return true;
             return false;
+        }
+
+        public static IReadOnlyList<(string Alias, string Name, bool BuiltIn)> ListExactAliases()
+        {
+            var rows = new List<(string, string, bool)>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            void Add(string alias, int hash, bool builtIn)
+            {
+                if (string.IsNullOrWhiteSpace(alias) || hash == 0 || !seen.Add(alias))
+                    return;
+                var name = catalogAliasByHash.TryGetValue(hash, out var n) ? n : alias;
+                if (FoundItemConverter.TryGetExact(alias, out var found) && found.prefab.GuidHash == hash)
+                    name = found.prefab.PrefabName() ?? name;
+                rows.Add((alias, name, builtIn));
+            }
+
+            foreach (var key in builtInAliasKeys)
+            {
+                if (exactAliasToHash.TryGetValue(key, out var hash))
+                    Add(key, hash, true);
+            }
+
+            if (Core.PlayerSettings.TryItemAliases(out var admin, out var names) && admin != null)
+            {
+                foreach (var kv in admin)
+                {
+                    var label = names != null && names.TryGetValue(kv.Key, out var n) ? n : kv.Key;
+                    if (!seen.Contains(kv.Key))
+                        rows.Add((kv.Key, label, false));
+                }
+            }
+
+            rows.Sort((a, b) => string.Compare(a.Item1, b.Item1, StringComparison.OrdinalIgnoreCase));
+            return rows;
         }
 
         public static bool TryGetDestGroup(int guidHash, out string group)
@@ -200,12 +239,8 @@ namespace Satisvampory.Services
         {
             if (guidHash == 0)
                 return "";
-            if (guidHash == GreaterBloodEssenceHash)
-                return "GBE";
-            if (guidHash == PrimalBloodEssenceHash)
-                return "PBE";
-            if (guidHash == AncestralBloodEssenceHash)
-                return "ABE";
+            if (catalogAliasByHash.TryGetValue(guidHash, out var shortName))
+                return shortName;
             return "";
         }
 
@@ -218,14 +253,23 @@ namespace Satisvampory.Services
             GreaterBloodEssenceHash = 0;
             PrimalBloodEssenceHash = 0;
             AncestralBloodEssenceHash = 0;
+            exactAliasToHash.Clear();
+            builtInAliasKeys.Clear();
+            catalogAliasByHash.Clear();
 
             foreach (var n in BuiltInNames)
                 builtInMembers[n] = new List<GroupMember>();
 
             ScanPrefabCollection();
-            ResolveNamedEssence("Greater Blood Essence", "GBE", v => GreaterBloodEssenceHash = v);
-            ResolveNamedEssence("Primal Blood Essence", "PBE", v => PrimalBloodEssenceHash = v);
-            ResolveNamedEssence("Ancestral Blood Essence", "ABE", v => AncestralBloodEssenceHash = v);
+            ResolveNamedItem("Greater Blood Essence", "GBE", v => GreaterBloodEssenceHash = v, "greater blood");
+            ResolveNamedItem("Primal Blood Essence", "PBE", v => PrimalBloodEssenceHash = v, "primal blood");
+            ResolveNamedItem("Ancestral Blood Essence", "ABE", v => AncestralBloodEssenceHash = v, "ancestral blood");
+            ResolveNamedItem("Greater Stygian Shard", "GSS", null, "greater stygian");
+            ResolveNamedItem("Greater Stygian Shards", "GSS", null, "greater stygian");
+            ResolveNamedItem("Siege Golem Stone", "SGS", null);
+            ResolveNamedItem("Dark Silver Ingot", "DSI", null, "dark silver");
+            ResolveNamedItem("Onyx Tear", "OT", null);
+            ApplyAdminAliases();
 
             foreach (var kv in builtInMembers)
             {
@@ -236,37 +280,104 @@ namespace Satisvampory.Services
             DumpItemCatalog();
             if (missingRequested.Count > 0)
                 Core.Log.LogWarning("Item groups unresolved " + missingRequested.Count + " ItemData names: " + string.Join(", ", missingRequested));
-            Core.Log.LogInfo("Essence aliases GBE=" + GreaterBloodEssenceHash
+            Core.Log.LogInfo("Item aliases GBE=" + GreaterBloodEssenceHash
                 + " PBE=" + PrimalBloodEssenceHash
                 + " ABE=" + AncestralBloodEssenceHash
                 + " (dest works without item-catalog.csv)");
         }
 
-        static void ResolveNamedEssence(string locName, string alias, Action<int> setHash)
+        static void ResolveNamedItem(string locName, string alias, Action<int> setHash, params string[] extraAliases)
         {
+            PrefabGUID prefab = default;
             if (FoundItemConverter.TryGetExact(locName, out var exact) && exact.prefab.GuidHash != 0)
             {
                 var loc = FoundItemConverter.Normalize(exact.prefab.PrefabName() ?? "");
                 if (loc.Equals(locName, StringComparison.OrdinalIgnoreCase))
+                    prefab = exact.prefab;
+            }
+            if (prefab.GuidHash == 0)
+            {
+                foreach (var kvp in FoundItemConverter.ExactItemNames)
                 {
-                    setHash(exact.prefab.GuidHash);
-                    FoundItemConverter.RegisterExactAlias(alias, exact.prefab);
-                    return;
+                    if (!kvp.Key.Equals(locName, StringComparison.OrdinalIgnoreCase) || kvp.Value.GuidHash == 0)
+                        continue;
+                    prefab = kvp.Value;
+                    break;
                 }
             }
-
-            foreach (var kvp in FoundItemConverter.ExactItemNames)
+            if (prefab.GuidHash == 0)
             {
-                if (!kvp.Key.Equals(locName, StringComparison.OrdinalIgnoreCase))
-                    continue;
-                if (kvp.Value.GuidHash == 0)
-                    continue;
-                setHash(kvp.Value.GuidHash);
-                FoundItemConverter.RegisterExactAlias(alias, kvp.Value);
+                Core.Log.LogWarning(alias + " alias: " + locName + " not found in PrefabCollection by name");
                 return;
             }
+            setHash?.Invoke(prefab.GuidHash);
+            BindAlias(alias, prefab, builtIn: true);
+            BindAlias(locName, prefab, builtIn: true);
+            if (extraAliases != null)
+            {
+                for (var i = 0; i < extraAliases.Length; i++)
+                    BindAlias(extraAliases[i], prefab, builtIn: true);
+            }
+        }
 
-            Core.Log.LogWarning(alias + " alias: " + locName + " not found in PrefabCollection by name");
+        static void BindAlias(string alias, PrefabGUID prefab, bool builtIn)
+        {
+            if (string.IsNullOrWhiteSpace(alias) || prefab.GuidHash == 0)
+                return;
+            var key = FoundItemConverter.Normalize(alias);
+            if (string.IsNullOrEmpty(key))
+                return;
+            FoundItemConverter.RegisterExactAlias(alias, prefab);
+            exactAliasToHash[key] = prefab.GuidHash;
+            if (builtIn)
+                builtInAliasKeys.Add(key);
+            if (key.Length <= 4 && key.IndexOf(' ') < 0)
+                catalogAliasByHash[prefab.GuidHash] = alias.ToUpperInvariant();
+        }
+
+        public static void ApplyAdminAliases()
+        {
+            if (!Core.PlayerSettings.TryItemAliases(out var map, out _) || map == null)
+                return;
+            foreach (var kv in map)
+            {
+                if (string.IsNullOrWhiteSpace(kv.Key) || kv.Value == 0)
+                    continue;
+                if (builtInAliasKeys.Contains(FoundItemConverter.Normalize(kv.Key)))
+                    continue;
+                var prefab = new PrefabGUID(kv.Value);
+                FoundItemConverter.RegisterExactAlias(kv.Key, prefab);
+                exactAliasToHash[FoundItemConverter.Normalize(kv.Key)] = kv.Value;
+            }
+        }
+
+        public static string BindAdminAlias(string alias, PrefabGUID prefab, string displayName)
+        {
+            var key = FoundItemConverter.Normalize(alias);
+            if (IsReservedAlias(key))
+                return "Alias must be 2–16 letters/digits with no spaces, and cannot be a dest word (blood, stone, salvage, s1, …).";
+            if (builtInAliasKeys.Contains(key))
+                return "Cannot overwrite built-in alias <color=white>" + key + "</color>.";
+            if (prefab.GuidHash == 0)
+                return "Unknown item.";
+            var err = Core.PlayerSettings.SetItemAlias(key, prefab.GuidHash, displayName);
+            if (!string.IsNullOrEmpty(err))
+                return err;
+            FoundItemConverter.RegisterExactAlias(key, prefab);
+            exactAliasToHash[key] = prefab.GuidHash;
+            return null;
+        }
+
+        public static string UnbindAdminAlias(string alias)
+        {
+            var key = FoundItemConverter.Normalize(alias);
+            if (builtInAliasKeys.Contains(key))
+                return "Cannot delete built-in alias <color=white>" + key + "</color>.";
+            if (!Core.PlayerSettings.RemoveItemAlias(key))
+                return "No admin alias <color=white>" + key + "</color>.";
+            FoundItemConverter.UnregisterExactAlias(key);
+            exactAliasToHash.Remove(key);
+            return null;
         }
 
         static void ScanPrefabCollection()

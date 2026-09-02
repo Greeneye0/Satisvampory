@@ -105,6 +105,44 @@ namespace Satisvampory.Services;
             RepeatHunts.PublishClientState();
         }
 
+        public bool TryItemAliases(out Dictionary<string, int> map, out Dictionary<string, string> names)
+        {
+            map = null;
+            names = null;
+            if (!TryRow(WorldId, out var world))
+                return false;
+            map = world.ItemAliases;
+            names = world.ItemAliasNames;
+            return true;
+        }
+
+        public string SetItemAlias(string alias, int guidHash, string displayName)
+        {
+            if (string.IsNullOrWhiteSpace(alias) || guidHash == 0)
+                return "Need an alias and an item.";
+            var row = Snapshot(WorldId, true);
+            row.ItemAliases ??= new Dictionary<string, int>();
+            row.ItemAliasNames ??= new Dictionary<string, string>();
+            row.ItemAliases[alias] = guidHash;
+            row.ItemAliasNames[alias] = string.IsNullOrWhiteSpace(displayName) ? alias : displayName;
+            playerSettings[WorldId] = row;
+            MarkDirty();
+            return null;
+        }
+
+        public bool RemoveItemAlias(string alias)
+        {
+            var row = Snapshot(WorldId, true);
+            row.ItemAliases ??= new Dictionary<string, int>();
+            row.ItemAliasNames ??= new Dictionary<string, string>();
+            var removed = row.ItemAliases.Remove(alias);
+            row.ItemAliasNames.Remove(alias);
+            playerSettings[WorldId] = row;
+            if (removed)
+                MarkDirty();
+            return removed;
+        }
+
         public bool IsConveyorEnabled(ulong playerId) => ReadFlag(playerId, static s => s.Conveyor, requireGlobal: true);
 
         public bool IsSalvageEnabled(ulong playerId) => ReadFlag(playerId, static s => s.Salvage, requireGlobal: true);
@@ -189,6 +227,8 @@ namespace Satisvampory.Services;
             if (string.IsNullOrEmpty(settings.AutoFilter)) settings.AutoFilter = "all";
             if (string.IsNullOrEmpty(settings.NotifyMode)) settings.NotifyMode = "manual";
             if (settings.Radius < 1f) settings.Radius = 10f;
+            settings.ItemAliases ??= new Dictionary<string, int>();
+            settings.ItemAliasNames ??= new Dictionary<string, string>();
             return settings;
         }
 
@@ -212,6 +252,8 @@ namespace Satisvampory.Services;
             settings.StarterKitChestOptOut ??= new List<string>();
             settings.HeartFuelSeeded ??= new List<string>();
             settings.HeartFuelOptOut ??= new List<string>();
+            settings.ItemAliases ??= new Dictionary<string, int>();
+            settings.ItemAliasNames ??= new Dictionary<string, string>();
             return settings;
         }
 

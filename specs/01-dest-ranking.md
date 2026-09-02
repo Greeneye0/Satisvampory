@@ -68,7 +68,7 @@ After stripping conveyor tokens and overflow/generic filler:
   - **Blood Jewel** → jewels, not blood.
   - **Miststone** → not stone.
 - `blood` as a dest word is **Blood Essence**, not Greater/Primal/Ancestral. Ranks above Alchemy category.
-- Greater / Primal / Ancestral Blood Essence aliases (`gbe` / `pbe` / `abe`, `greater blood`, `primal blood`, `ancestral blood`) match that item only.
+- Exact item aliases match **that item only** (find / pull / dest names): `gbe` / `pbe` / `abe` (Greater / Primal / Ancestral Blood Essence), `gss` (Greater Stygian Shard), `sgs` (Siege Golem Stone), `dsi` (Dark Silver Ingot), `ot` (Onyx Tear). Admin can add more with `.sg alias add <alias> <item>`. Cannot overwrite dest-group words (`blood`, `stone`, …) or built-ins.
 - Spelling fold: fiber/fibre, sulfur/sulphur, armor/armour, gray/grey, jewelry/jewellery, etc.
 
 ## Source pass (lend / `.pull` sources)

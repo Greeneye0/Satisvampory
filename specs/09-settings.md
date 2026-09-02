@@ -73,6 +73,6 @@ Chest dest words resolve through these groups (see [01-dest-ranking.md](01-dest-
 
 Defaults ON after first boot (`AppliedSgAllOn`), except **convloop OFF**.
 
-`.sg ss`, `.sg p`, `.sg cr`, `.sg asm`, `.sg rh` (repeat hunts, default OFF), `.sg rhmax` (repeat success cap, default 99), `.sg co`, `.sg convloop`, `.sg sal`, `.sg us`, `.sg bz`, `.sg nam`, `.sg trash`, `.sg rrg`, `.sg s` (show).
+`.sg ss`, `.sg p`, `.sg cr`, `.sg asm`, `.sg rh` (repeat hunts, default OFF), `.sg rhmax` (repeat success cap, default 99), `.sg co`, `.sg convloop`, `.sg sal`, `.sg us`, `.sg bz`, `.sg nam`, `.sg trash`, `.sg rrg`, `.sg alias` (list / add / del item aliases), `.sg s` (show).
 
 Admin also: `.s vq` work-queue depth, `.s catalog` item CSV, `.s peek [plot]` debug dump, `.s diag` snapshot mark.

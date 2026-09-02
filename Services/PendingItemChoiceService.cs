@@ -23,7 +23,8 @@ namespace Satisvampory.Services
         Conv,
         ExcludeToggle,
         BagCapShow,
-        BagCapSet
+        BagCapSet,
+        AliasAdd
     }
 
     internal sealed class PendingItemChoice

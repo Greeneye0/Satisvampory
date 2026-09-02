@@ -24,6 +24,8 @@ namespace Satisvampory.Services
             ClanShareExcludedTerritories = new List<string>();
             RepeatHuntOffPlots = new List<string>();
             RepeatHuntMaxSuccess = 99;
+            ItemAliases = new Dictionary<string, int>();
+            ItemAliasNames = new Dictionary<string, string>();
             StarterKitSeeded = new List<string>();
             StarterKitChestSeeded = new List<string>();
             StarterKitChestOptOut = new List<string>();
@@ -98,6 +100,9 @@ namespace Satisvampory.Services
         public List<string> RepeatHuntOffPlots { get; set; }
         // 1-100. 0 in old json = 99. Repeat sends only.
         public int RepeatHuntMaxSuccess { get; set; }
+        // Admin extra item aliases (normalized alias -> prefab guid). Built-ins stay in code.
+        public Dictionary<string, int> ItemAliases { get; set; }
+        public Dictionary<string, string> ItemAliasNames { get; set; }
     }
 
 }

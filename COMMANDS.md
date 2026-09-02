@@ -126,6 +126,9 @@ Needs `save-data\Settings\adminlist.txt` SteamID64 **and** console `adminauth`.
 | `.sg asm` | Allow servant auto-stash |
 | `.sg rh` / `.sg repeathunt` | Repeat hunts: servants go back out on the same hunt when they return. Default **OFF**. Chat the owner loot or death. Turning ON captures hunts already out |
 | `.sg rhmax [n]` | Intended max success **%** when repeat is ON (default **99**). The live roll is **vanilla** until a safe cap hook exists; do not patch `GetMissionSuccessChanceForServant_*` |
+| `.sg alias` | List item aliases. Built-in: **GBE** Greater Blood Essence, **PBE** Primal, **ABE** Ancestral, **GSS** Greater Stygian Shard, **SGS** Siege Golem Stone, **DSI** Dark Silver Ingot, **OT** Onyx Tear |
+| `.sg alias add <alias> <item>` | Admin extra alias for find / pull / dest. Persists. Cannot steal dest words (`blood`) or built-ins |
+| `.sg alias del <alias>` | Remove an admin alias. Built-ins stay |
 | `.sg co` | Allow conveyors |
 | `.sg convloop` / `.sg cloop` | Allow s# chest → r# chest **loops** (dest is also s# on the same group). Default **OFF**. Chest→chest without a cycle works even when this is off |
 | `.sg sal` | Allow devourer salvage |

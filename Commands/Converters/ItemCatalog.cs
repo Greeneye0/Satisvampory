@@ -143,7 +143,7 @@ internal static class ItemCatalog
                 continue;
             itemNamesToPrefabs[NormalizeName(label)] = pair.Value;
         }
-        RegisterBloodEssenceAliases();
+        RegisterBuiltInItemAliases();
     }
 
     static bool IsLiveItemPrefab(string spawnName, PrefabGUID prefab)
@@ -164,14 +164,32 @@ internal static class ItemCatalog
         itemNamesToPrefabs[NormalizeName(alias)] = prefab;
     }
 
-    static void RegisterBloodEssenceAliases()
+    public static void UnregisterExactAlias(string alias)
     {
-        RegisterEssenceAlias("Greater Blood Essence", "GBE", "greater blood");
-        RegisterEssenceAlias("Primal Blood Essence", "PBE", "primal blood");
-        RegisterEssenceAlias("Ancestral Blood Essence", "ABE", "ancestral blood");
+        if (string.IsNullOrWhiteSpace(alias))
+            return;
+        var key = NormalizeName(alias);
+        if (!itemNamesToPrefabs.TryGetValue(key, out var prefab))
+            return;
+        var loc = NormalizeName(prefab.PrefabName() ?? "");
+        if (loc.Equals(key, StringComparison.OrdinalIgnoreCase))
+            return;
+        itemNamesToPrefabs.Remove(key);
     }
 
-    static void RegisterEssenceAlias(string locName, string shortAlias, string midAlias)
+    static void RegisterBuiltInItemAliases()
+    {
+        RegisterItemAlias("Greater Blood Essence", "GBE", "greater blood");
+        RegisterItemAlias("Primal Blood Essence", "PBE", "primal blood");
+        RegisterItemAlias("Ancestral Blood Essence", "ABE", "ancestral blood");
+        RegisterItemAlias("Greater Stygian Shard", "GSS", "greater stygian");
+        RegisterItemAlias("Greater Stygian Shards", "GSS", "greater stygian");
+        RegisterItemAlias("Siege Golem Stone", "SGS");
+        RegisterItemAlias("Dark Silver Ingot", "DSI", "dark silver");
+        RegisterItemAlias("Onyx Tear", "OT");
+    }
+
+    static void RegisterItemAlias(string locName, string shortAlias, string midAlias = null)
     {
         if (!itemNamesToPrefabs.TryGetValue(NormalizeName(locName), out var prefab))
             return;
