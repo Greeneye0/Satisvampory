@@ -56,6 +56,7 @@ namespace Satisvampory.Patches
         static void Postfix()
         {
             RepeatHunts.AfterSends();
+            RepeatHunts.TickAutoSend();
         }
     }
 
@@ -68,7 +69,8 @@ namespace Satisvampory.Patches
                 return;
             try
             {
-                if (ClanThroneServants.MayManageFrom(fromCharacter, throneEntity))
+                if (RepeatHunts.IsAutoSend(throneEntity, fromCharacter)
+                    || ClanThroneServants.MayManageFrom(fromCharacter, throneEntity))
                     __result = true;
             }
             catch (Exception e)

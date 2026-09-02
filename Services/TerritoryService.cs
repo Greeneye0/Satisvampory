@@ -96,7 +96,7 @@ internal class TerritoryService {
 
         public bool ClanMemberStandingOnPlot(int plot) { EnsureClanStanding(); return plot >= 0 && clanStanding.ContainsKey(plot); }
 
-        void EachUser(Action<Entity, User> visit)
+        internal void EachUser(Action<Entity, User> visit)
         {
             if (!connectedUsersReady)
             {

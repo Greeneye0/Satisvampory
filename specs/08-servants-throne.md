@@ -18,7 +18,7 @@ Admin **`.sg rh` / `.sg repeathunt`**. Default **OFF**. Server-wide allow. Not t
 
 Per castle (needs server ON): **`.s rh`** lists every ClanShare / standing castle and ON/OFF. Missing plot = **ON**. **`.s rh all`** enables all listed. **`.s rh off`** / **`.s rh on`** this standing castle. **`.s rh 2`** toggles that row (list TTL 2 minutes).
 
-When a plot is ON: each time a hunt **returns**, surviving (not dead, not injured) servants are sent again on the **same** zone / mission / throne after a short delay. Dead or injured servants are skipped. If none can go, no resend. Raided hearts do not resend.
+When a plot is ON: each time a hunt **returns**, surviving (not dead, not injured) servants are sent again on the **same** zone / mission / throne after they are idle. Dead or injured servants are skipped. If vanilla does not accept the send, chat **could not send** — do not claim they left. Raided hearts do not resend. Auto-send bypasses “must be sitting the throne”.
 
 Turning **`.sg rh` ON**, **`.s rh on`**, or **`.s rh all`** captures hunts **already in the field** so they loop when they get back.
 
@@ -26,7 +26,7 @@ Turning **`.sg rh` ON**, **`.s rh on`**, or **`.s rh all`** captures hunts **alr
 
 On every **send**, the sender (else heart owner) gets: who went, destination, survival % (after cap), and Repeat ON/OFF with the max. Example: `Hunt sent (plot 45 L2) — Haunted Iron Mine (99%): Stephen. Repeat ON (max 99%).`
 
-On every **return** (repeat on or off), the castle **heart owner** (if connected) gets destination, survival %, who came back, loot stacks, or who **died** / injured. Then auto-stash runs as today. Example: `Hunt returned (plot 86 L4) — Bandit Logging Camp (99%): Corey — 120 Plank. Repeat: sent again.`
+On every **return** (repeat on or off), connected **clan members** (and the heart owner) get destination, who came back, loot stacks, or who **died** / injured. Example: `Hunt returned (plot 86 L4) — Pools of Rebirth: Raven — 10 Oil. Repeat ON — sending again.` After vanilla accepts: `Repeat: sent Raven to Pools of Rebirth.`
 
 Do not cap the throne UI via HuntClock on `GetMissionSuccessChanceForServant_Client` (same trampoline crash).
 

@@ -61,10 +61,28 @@ namespace Satisvampory.Services
         static readonly TimeSpan ListTtl = TimeSpan.FromMinutes(2);
         static readonly Dictionary<ulong, DateTime> pendingListAt = new();
         static int capSuccessFrames;
+        static Entity autoThrone;
+        static Entity autoCharacter;
+        static Entity autoUser;
+        static int autoFrames;
+        static bool skipSendChat;
 
         public static bool IsOn(int plot) => Core.PlayerSettings.IsRepeatHuntPlotOn(plot);
 
         public static bool ShouldCapSuccess => capThisTick || capSuccessFrames > 0;
+
+        public static bool IsAutoSend(Entity throne, Entity character)
+        {
+            if (autoFrames <= 0 || throne == Entity.Null || character == Entity.Null)
+                return false;
+            return throne == autoThrone && (character == autoCharacter || character == autoUser);
+        }
+
+        public static void TickAutoSend()
+        {
+            if (autoFrames > 0)
+                autoFrames--;
+        }
 
         public static void TickCapFrames()
         {
@@ -148,6 +166,13 @@ namespace Satisvampory.Services
                 var from = eventEntity.Read<FromCharacter>();
                 userEnt = from.User;
             }
+            if (byPlot.TryGetValue(plot, out var old))
+            {
+                if (string.IsNullOrWhiteSpace(recipe.DestName))
+                    recipe.DestName = old.DestName;
+                if (recipe.MissionDataId == 0)
+                    recipe.MissionDataId = old.MissionDataId;
+            }
             pendingStarts.Add((recipe, userEnt));
             if (IsOn(plot))
                 capThisTick = true;
@@ -165,9 +190,12 @@ namespace Satisvampory.Services
                     if (lastSuccess >= 0f)
                         hunt.SuccessPct = lastSuccess;
                     byPlot[hunt.Plot] = hunt;
-                    ChatSent(hunt, userEnt);
+                    if (!skipSendChat)
+                        ChatSent(hunt, userEnt);
                     DestDebugLog.Note("throne", hunt.Plot, 0, "sent " + hunt.DestName + " "
-                        + (int)(hunt.SuccessPct * 100f + 0.5f) + "% rh=" + (IsOn(hunt.Plot) ? "on" : "off"));
+                        + (hunt.SuccessPct >= 0f ? (int)(hunt.SuccessPct * 100f + 0.5f) + "%" : "?")
+                        + " rh=" + (IsOn(hunt.Plot) ? "on" : "off")
+                        + (skipSendChat ? " auto" : ""));
                 }
             }
             finally
@@ -175,6 +203,7 @@ namespace Satisvampory.Services
                 pendingStarts.Clear();
                 lastSuccess = -1f;
                 capThisTick = false;
+                skipSendChat = false;
             }
         }
 
@@ -202,17 +231,8 @@ namespace Satisvampory.Services
             if (rh)
                 sb.Append(" (max ").Append(Core.PlayerSettings.GetRepeatHuntMaxSuccess()).Append("%)");
             var text = Trim(sb.ToString());
-            if (userEnt != Entity.Null && Core.EntityManager.Exists(userEnt) && userEnt.Has<User>())
-            {
-                var user = userEnt.Read<User>();
-                if (user.IsConnected)
-                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, text);
-            }
-            else
-            {
-                var heart = hunt.Plot >= 0 ? Core.TerritoryService.GetCastleHeart(hunt.Plot) : Entity.Null;
-                TellOwner(heart, text);
-            }
+            var heart = hunt.Plot >= 0 ? Core.TerritoryService.GetCastleHeart(hunt.Plot) : Entity.Null;
+            TellClan(heart, text);
         }
 
         static void AddServantName(List<string> names, NetworkId nid)
@@ -377,8 +397,8 @@ namespace Satisvampory.Services
             var repeatOn = IsOn(row.Hunt.Plot) && alive.Count > 0
                 && Core.TryGetEntityFromNetworkId(row.Hunt.Throne, out _);
             if (repeatOn)
-                sb.Append(". Repeat: sent again.");
-            TellOwner(row.Heart, Trim(sb.ToString()));
+                sb.Append(". Repeat ON — sending again.");
+            TellClan(row.Heart, Trim(sb.ToString()));
             DestDebugLog.Note("throne", row.Hunt.Plot, 0, "return " + sb);
 
             if (repeatOn)
@@ -393,25 +413,60 @@ namespace Satisvampory.Services
 
         static IEnumerator SendSoon(Entity heart, Recipe hunt)
         {
-            yield return new WaitForSeconds(2f);
-            TrySend(heart, hunt);
+            var names = new List<string>(3);
+            AddServantName(names, hunt.S1);
+            AddServantName(names, hunt.S2);
+            AddServantName(names, hunt.S3);
+            var who = names.Count > 0 ? string.Join(", ", names) : "servants";
+            var dest = string.IsNullOrWhiteSpace(hunt.DestName) ? "hunt" : hunt.DestName;
+            for (var attempt = 0; attempt < 8; attempt++)
+            {
+                yield return new WaitForSeconds(attempt == 0 ? 3f : 1f);
+                if (!IsOn(hunt.Plot))
+                    yield break;
+                if (!ServantsReady(ref hunt))
+                {
+                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat wait servants not ready try=" + (attempt + 1));
+                    continue;
+                }
+                if (!TrySend(heart, hunt))
+                {
+                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat TrySend false try=" + (attempt + 1));
+                    continue;
+                }
+                yield return new WaitForSeconds(1f);
+                if (AnyOnMission(hunt))
+                {
+                    TellClan(heart, Trim("Repeat: sent " + who + " to " + dest + "."));
+                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat accepted " + dest);
+                    yield break;
+                }
+                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat not accepted try=" + (attempt + 1));
+            }
+            TellClan(heart, Trim("Repeat: could not send " + who + " — throne or servants not ready."));
+            DestDebugLog.Note("throne", hunt.Plot, 0, "repeat gave up " + dest);
         }
 
-        static void TrySend(Entity heart, Recipe hunt)
+        static bool TrySend(Entity heart, Recipe hunt)
         {
             try
             {
                 if (!IsOn(hunt.Plot))
-                    return;
+                    return false;
                 if (heart == Entity.Null || !Core.EntityManager.Exists(heart))
-                    return;
+                    return false;
                 if (TerritoryService.IsHeartRaided(heart))
-                    return;
+                    return false;
                 if (!Core.TryGetEntityFromNetworkId(hunt.Throne, out var throne)
                     || throne == Entity.Null || !Core.EntityManager.Exists(throne))
-                    return;
+                    return false;
                 if (!TryFromHeart(heart, out var userEnt, out var character) || character == Entity.Null)
-                    return;
+                    return false;
+                skipSendChat = true;
+                autoThrone = throne;
+                autoCharacter = character;
+                autoUser = userEnt;
+                autoFrames = 20;
                 var entity = Core.EntityManager.CreateEntity();
                 entity.Add<FromCharacter>();
                 entity.Add<SendOnMissionEvent>();
@@ -426,12 +481,90 @@ namespace Satisvampory.Services
                     MapZoneId = hunt.Zone
                 });
                 capSuccessFrames = 5;
-                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send cap=" + Core.PlayerSettings.GetRepeatHuntMaxSuccess());
+                DestDebugLog.Note("throne", hunt.Plot, 0, "repeat send " + hunt.DestName);
+                return true;
             }
             catch (Exception e)
             {
                 Core.LogException(e);
+                return false;
             }
+        }
+
+        static bool ServantsReady(ref Recipe hunt)
+        {
+            var ready = new List<NetworkId>(3);
+            TryReady(hunt.S1, ready);
+            TryReady(hunt.S2, ready);
+            TryReady(hunt.S3, ready);
+            if (ready.Count == 0)
+                return false;
+            hunt.S1 = ready.Count > 0 ? ready[0] : default;
+            hunt.S2 = ready.Count > 1 ? ready[1] : default;
+            hunt.S3 = ready.Count > 2 ? ready[2] : default;
+            return true;
+        }
+
+        static void TryReady(NetworkId nid, List<NetworkId> ready)
+        {
+            if (!Core.TryGetEntityFromNetworkId(nid, out var servant) || servant == Entity.Null)
+                return;
+            if (!Core.EntityManager.Exists(servant) || IsDead(servant) || IsInjured(servant))
+                return;
+            if (OnMission(servant))
+                return;
+            ready.Add(nid);
+        }
+
+        static bool AnyOnMission(Recipe hunt)
+        {
+            return OnMissionNid(hunt.S1) || OnMissionNid(hunt.S2) || OnMissionNid(hunt.S3);
+        }
+
+        static bool OnMissionNid(NetworkId nid)
+        {
+            if (!Core.TryGetEntityFromNetworkId(nid, out var servant) || servant == Entity.Null)
+                return false;
+            return OnMission(servant);
+        }
+
+        static bool OnMission(Entity servant)
+        {
+            if (servant == Entity.Null || !Core.EntityManager.Exists(servant))
+                return false;
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<ActiveServantMission>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> hearts = default;
+            try
+            {
+                hearts = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < hearts.Length; i++)
+                {
+                    var heart = hearts[i];
+                    if (heart == Entity.Null || !Core.EntityManager.Exists(heart))
+                        continue;
+                    DynamicBuffer<ActiveServantMission> buf;
+                    try { buf = heart.ReadBuffer<ActiveServantMission>(); }
+                    catch { continue; }
+                    for (var m = 0; m < buf.Length; m++)
+                    {
+                        var mission = buf[m];
+                        if (mission.Servant1.GetEntityOnServer() == servant
+                            || mission.Servant2.GetEntityOnServer() == servant
+                            || mission.Servant3.GetEntityOnServer() == servant)
+                            return true;
+                    }
+                }
+            }
+            finally
+            {
+                if (hearts.IsCreated)
+                    hearts.Dispose();
+                query.Dispose();
+            }
+            return false;
         }
 
         static Recipe RecipeFromMission(int plot, Entity heart, ActiveServantMission mission)
@@ -637,14 +770,26 @@ namespace Satisvampory.Services
             return character != Entity.Null && Core.EntityManager.Exists(character);
         }
 
-        static void TellOwner(Entity heart, string text)
+        static void TellOwner(Entity heart, string text) => TellClan(heart, text);
+
+        static void TellClan(Entity heart, string text)
         {
-            if (!TryFromHeart(heart, out var userEnt, out _) || !userEnt.Has<User>())
+            if (string.IsNullOrEmpty(text) || heart == Entity.Null)
                 return;
-            var user = userEnt.Read<User>();
-            if (!user.IsConnected)
-                return;
-            Utilities.SendSystemMessageToClient(Core.EntityManager, user, text);
+            var sent = new HashSet<ulong>();
+            void Send(User user)
+            {
+                if (!user.IsConnected || !sent.Add(user.PlatformId))
+                    return;
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user, text);
+            }
+            if (TryFromHeart(heart, out var ownerEnt, out _) && ownerEnt.Has<User>())
+                Send(ownerEnt.Read<User>());
+            Core.TerritoryService.EachUser((_, user) =>
+            {
+                if (Core.TerritoryService.IsSameClanAsHeartOwner(user, heart))
+                    Send(user);
+            });
         }
 
         static string Trim(string s)
