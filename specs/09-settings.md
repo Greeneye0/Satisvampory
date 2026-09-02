@@ -64,6 +64,7 @@ Chest dest words resolve through these groups (see [01-dest-ranking.md](01-dest-
 | `.s rrglobal` | OFF | Off-plot stash/RR |
 | `.s cs` / `.s gs` | OFF (clan) | ClanShare island |
 | `.s cse` | not excluded | Owner: exclude this plot |
+| `.s rh` | per castle ON (if `.sg rh`) | Repeat hunts on that castle |
 | `.s sal` | OFF (plot) | Salvage on this plot |
 | `.s hf` | ON (plot) | Heart Blood Essence auto-feed |
 | `.s settings` | — | Show your toggles + this castle reserve |

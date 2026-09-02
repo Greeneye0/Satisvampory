@@ -22,6 +22,7 @@ namespace Satisvampory.Services
             HeartFuelOptOut = new List<string>();
             ClanShareByClan = new Dictionary<string, bool>();
             ClanShareExcludedTerritories = new List<string>();
+            RepeatHuntOffPlots = new List<string>();
             StarterKitSeeded = new List<string>();
             StarterKitChestSeeded = new List<string>();
             StarterKitChestOptOut = new List<string>();
@@ -92,6 +93,8 @@ namespace Satisvampory.Services
         public bool AppliedSgAllOn { get; set; }
         // Admin .sg rh. Default OFF. Not flipped on by SgAllOn.
         public bool RepeatHunt { get; set; }
+        // Plots with repeat hunts OFF ("t{id}"). Missing = ON when .sg rh is on.
+        public List<string> RepeatHuntOffPlots { get; set; }
     }
 
 }

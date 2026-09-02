@@ -40,6 +40,29 @@ namespace Satisvampory.Services;
 
         public bool ToggleRepeatHunt() => FlipFlag(WorldId, static s => s.RepeatHunt, static (s, v) => { s.RepeatHunt = v; return s; });
 
+        public bool IsRepeatHuntPlotOn(int plot)
+        {
+            if (!IsRepeatHuntEnabled())
+                return false;
+            if (!TryRow(WorldId, out var world) || world.RepeatHuntOffPlots == null)
+                return true;
+            return !world.RepeatHuntOffPlots.Contains("t" + plot);
+        }
+
+        public void SetRepeatHuntPlot(int plot, bool on)
+        {
+            var row = Snapshot(WorldId, true);
+            var list = row.RepeatHuntOffPlots != null ? new List<string>(row.RepeatHuntOffPlots) : new List<string>();
+            var key = "t" + plot;
+            if (on)
+                list.Remove(key);
+            else if (!list.Contains(key))
+                list.Add(key);
+            row.RepeatHuntOffPlots = list;
+            playerSettings[WorldId] = row;
+            MarkDirty();
+        }
+
         public bool IsConveyorEnabled(ulong playerId) => ReadFlag(playerId, static s => s.Conveyor, requireGlobal: true);
 
         public bool IsSalvageEnabled(ulong playerId) => ReadFlag(playerId, static s => s.Salvage, requireGlobal: true);

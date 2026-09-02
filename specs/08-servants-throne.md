@@ -13,9 +13,11 @@ Do not give servant loot a different dest order than stash.
 
 ## Repeat hunts (`.sg rh`)
 
-Admin **`.sg rh` / `.sg repeathunt`**. Default **OFF**. Server-wide. Not turned on by `SgAllOn`.
+Admin **`.sg rh` / `.sg repeathunt`**. Default **OFF**. Server-wide allow. Not turned on by `SgAllOn`.
 
-When ON: each time a hunt **returns**, surviving (not dead, not injured) servants are sent again on the **same** zone / mission / throne after a short delay. Dead or injured servants are skipped. If none can go, no resend. Raided hearts do not resend.
+Per castle (needs server ON): **`.s rh`** lists every ClanShare / standing castle and ON/OFF. Missing plot = **ON**. **`.s rh all`** enables all listed. **`.s rh off`** / **`.s rh on`** this standing castle. **`.s rh 2`** toggles that row (list TTL 2 minutes).
+
+When a plot is ON: each time a hunt **returns**, surviving (not dead, not injured) servants are sent again on the **same** zone / mission / throne after a short delay. Dead or injured servants are skipped. If none can go, no resend. Raided hearts do not resend.
 
 On every return (repeat on or off), the castle **heart owner** (if connected) gets a system chat line: who came back, loot stacks, or who **died** / injured. Then auto-stash runs as today.
 

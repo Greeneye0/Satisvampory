@@ -99,6 +99,7 @@ Quote names with spaces. If a name is ambiguous, pick with **`.s 2`** or **`.s p
 | `.s cs` / `.s gs` | **Clan** | ClanShare on/off for **all members, all plots**. Default **OFF** (this clan may already be ON). Items move between clan castles |
 | `.s throne` then `.s 2` | **You** | ClanShare ON: pick which clan plot to hunt from **this** throne. Stay seated. `.s throne here` is this castle again |
 | `.s hunt` then `.s hunt 1 2` | **You** | Pick up to 3 servants on the managed plot, then **click a discovered zone on this vanilla hunt map** (fog and undiscovered stay vanilla). Server sends that plot’s servants |
+| `.s rh` | **Clan** / **plot** | List each castle’s repeat-hunt status. `.s rh all` ON for all listed. `.s rh off` this castle. `.s rh 2` toggle that row. Needs **`.sg rh`** |
 | `.s cse` | **Plot**, heart **owner only** | Exclude or include **this** plot from ClanShare. Standing on an excluded plot is local-only |
 | `.s sal` | **Plot** (clanmate of heart owner) | Feed chests named `salvage` into the devourer. Default **OFF** per plot. Needs **`.sg sal`** allow |
 | `.s hf` | **Plot** | Heart Blood Essence auto-feed. Default **ON** until you turn it off |

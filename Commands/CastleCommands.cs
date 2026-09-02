@@ -36,7 +36,7 @@ namespace Satisvampory.Commands
             ctx.Reply("<color=white>YOU</color> stash/pull (dest is plot, or clan if .s cs on): <color=white>.stash</color>  <color=white>.pull plank 50</color>  <color=white>.fi</color>  <color=white>.fc</color>  <color=white>.s tidy</color>  <color=white>.s ss</color>  <color=white>.s cr</color>  <color=white>.s co</color>  <color=white>.s rrglobal</color>");
             ctx.Reply("<color=white>CASTLE</color> (stand on the plot, stored on heart owner): <color=white>.s reserve</color>  <color=white>.s reserve plank 50</color>  <color=white>.s cap</color>  <color=white>.s group</color>. Not leftover. .pull ignores reserve; craft-pull/conveyors honor it.");
             ctx.Reply("<color=white>PLOT</color> (feet): <color=white>.s sal</color> salvage  <color=white>.s hf</color> heart feed  <color=white>.s cse</color> exclude this plot (owner only)");
-            ctx.Reply("<color=white>CLAN</color>: <color=white>.s cs</color> all clan plots as one. <color=white>.s throne</color> pick which castle to hunt from this chair. <color=white>.s hunt 1 2</color> then click a discovered zone. <color=white>SERVER</color> admin: <color=white>.sg s</color>  <color=white>.sg sal</color>  (need adminauth). Player toggles still start off except scoop auto and .s dpl.");
+            ctx.Reply("<color=white>CLAN</color>: <color=white>.s cs</color> all clan plots as one. <color=white>.s rh</color> repeat hunts per castle. <color=white>SERVER</color> admin: <color=white>.sg s</color>  <color=white>.sg rh</color>  <color=white>.sg sal</color>  (need adminauth). Player toggles still start off except scoop auto and .s dpl.");
             ctx.Reply("Example: <color=white>.s bagcap cotton 200</color> then <color=white>.s</color> — your bags. <color=white>.s cap cotton 200</color> — castle conveyors.");
             ctx.Reply("Example: <color=white>.s reserve plank 50</color> then <color=white>.pull plank 200</color> — pull ignores reserve. Name chests <color=white>s1</color>/<color=white>r1</color> then <color=white>.s co</color>.");
             ctx.Reply("Ambiguous names: numbered list, then <color=white>.s 2</color> or <color=white>.s pick 2</color>. <color=white>.s settings</color>  <color=white>.s conv plank</color>  <color=white>.s need</color>");
@@ -90,6 +90,17 @@ namespace Satisvampory.Commands
                 ctx.Reply("This plot is now <color=red>EXCLUDED</color> from ClanShare. Other clan plots will not pull/stash/lend from it. Standing here is local-only (this castle alone).");
             else
                 ctx.Reply("This plot is now <color=green>INCLUDED</color> in ClanShare (clan-wide CS still has to be ON).");
+        }
+
+        [Command(name: "rh", usage: ".s rh [all|on|off|n]", description: "List castle repeat-hunt status. .s rh all enables all. .s rh off this castle. .s rh 2 toggles that row.")]
+        public static void RepeatHuntCastleCmd(ChatCommandContext ctx, string arg = null)
+        {
+            if (!Core.HasInitialized)
+            {
+                ctx.Reply("Satisvampory is not initialized yet.");
+                return;
+            }
+            ctx.Reply(RepeatHunts.ChatRh(ctx.Event.SenderCharacterEntity, ctx.Event.User, arg));
         }
 
         [Command(name: "throne", usage: ".s throne [n|here]", description: "ClanShare: pick which clan plot the next hunt map click sends from. Stay on this throne.")]

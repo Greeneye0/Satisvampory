@@ -40,8 +40,11 @@ namespace Satisvampory.Services
 
         static readonly Dictionary<int, Recipe> byPlot = new();
         static readonly List<PendingReturn> pending = new();
+        static readonly Dictionary<ulong, List<int>> pendingList = new();
+        static readonly TimeSpan ListTtl = TimeSpan.FromMinutes(2);
+        static readonly Dictionary<ulong, DateTime> pendingListAt = new();
 
-        public static bool IsOn() => Core.PlayerSettings.IsRepeatHuntEnabled();
+        public static bool IsOn(int plot) => Core.PlayerSettings.IsRepeatHuntPlotOn(plot);
 
         public static void Remember(Entity eventEntity)
         {
@@ -180,7 +183,7 @@ namespace Satisvampory.Services
             else if (aliveNames.Count > 0 && deadNames.Count == 0)
                 sb.Append(" — no loot");
 
-            var repeatOn = IsOn() && alive.Count > 0
+            var repeatOn = IsOn(row.Hunt.Plot) && alive.Count > 0
                 && Core.TryGetEntityFromNetworkId(row.Hunt.Throne, out _);
             if (repeatOn)
                 sb.Append(". Repeat: sent again.");
@@ -207,7 +210,7 @@ namespace Satisvampory.Services
         {
             try
             {
-                if (!IsOn())
+                if (!IsOn(hunt.Plot))
                     return;
                 if (heart == Entity.Null || !Core.EntityManager.Exists(heart))
                     return;
@@ -375,6 +378,87 @@ namespace Satisvampory.Services
             if (string.IsNullOrEmpty(s))
                 return s;
             return s.Length <= Core.MaxChatReply ? s : s.Substring(0, Core.MaxChatReply);
+        }
+
+        public static string ChatRh(Entity character, User user, string arg)
+        {
+            if (!Core.PlayerSettings.IsRepeatHuntEnabled())
+                return "Repeat hunts are <color=red>OFF</color> for the server. An admin must .sg rh first.";
+            var ids = ListPlots(character, user);
+            if (ids.Count == 0)
+                return "Stand on a clan castle (or have ClanShare on) to see plots.";
+            var steam = user.PlatformId;
+            if (string.IsNullOrWhiteSpace(arg) || arg.Equals("list", StringComparison.OrdinalIgnoreCase))
+                return FormatList(character, steam, ids);
+            if (arg.Equals("all", StringComparison.OrdinalIgnoreCase))
+            {
+                for (var i = 0; i < ids.Count; i++)
+                    Core.PlayerSettings.SetRepeatHuntPlot(ids[i], true);
+                return "Repeat hunts <color=green>ON</color> for all listed castles.\n" + FormatList(character, steam, ids);
+            }
+            if (arg.Equals("off", StringComparison.OrdinalIgnoreCase) || arg.Equals("on", StringComparison.OrdinalIgnoreCase))
+            {
+                var standing = character != Entity.Null ? Core.TerritoryService.GetStandingTerritoryId(character) : -1;
+                if (standing < 0)
+                    return "Stand on a castle to turn it " + arg + ".";
+                var wantOn = arg.Equals("on", StringComparison.OrdinalIgnoreCase);
+                Core.PlayerSettings.SetRepeatHuntPlot(standing, wantOn);
+                return Core.TerritoryService.FormatPlotLabel(standing) + " repeat hunts "
+                    + (wantOn ? "<color=green>ON</color>" : "<color=red>OFF</color>") + ".\n"
+                    + FormatList(character, steam, ids);
+            }
+            if (int.TryParse(arg, out var n))
+            {
+                List<int> listed = null;
+                if (pendingList.TryGetValue(steam, out var prev) && pendingListAt.TryGetValue(steam, out var at)
+                    && DateTime.UtcNow <= at && prev != null && n >= 1 && n <= prev.Count)
+                    listed = prev;
+                else if (n >= 1 && n <= ids.Count)
+                    listed = ids;
+                if (listed == null)
+                    return "Use .s rh then .s rh 2, or .s rh off / .s rh all.";
+                var plot = listed[n - 1];
+                var next = !Core.PlayerSettings.IsRepeatHuntPlotOn(plot);
+                Core.PlayerSettings.SetRepeatHuntPlot(plot, next);
+                return Core.TerritoryService.FormatPlotLabel(plot) + " repeat hunts "
+                    + (next ? "<color=green>ON</color>" : "<color=red>OFF</color>") + ".\n"
+                    + FormatList(character, steam, ids);
+            }
+            return "Use .s rh  |  .s rh all  |  .s rh off  |  .s rh 2";
+        }
+
+        static List<int> ListPlots(Entity character, User user)
+        {
+            var ids = Core.TerritoryService.GetLogisticsTerritoryIdsForCharacter(character);
+            if (ids != null && ids.Count > 0)
+                return new List<int>(ids);
+            var standing = character != Entity.Null ? Core.TerritoryService.GetStandingTerritoryId(character) : -1;
+            if (standing >= 0)
+                return new List<int> { standing };
+            return new List<int>();
+        }
+
+        static string FormatList(Entity character, ulong steam, List<int> ids)
+        {
+            pendingList[steam] = new List<int>(ids);
+            pendingListAt[steam] = DateTime.UtcNow + ListTtl;
+            var standing = character != Entity.Null ? Core.TerritoryService.GetStandingTerritoryId(character) : -1;
+            var sb = new StringBuilder();
+            sb.Append("Repeat hunts (server <color=green>ON</color>)\n");
+            for (var i = 0; i < ids.Count; i++)
+            {
+                var plot = ids[i];
+                var on = Core.PlayerSettings.IsRepeatHuntPlotOn(plot);
+                sb.Append(i + 1).Append(") ")
+                    .Append(Core.TerritoryService.FormatPlotLabel(plot));
+                if (plot == standing)
+                    sb.Append(" <color=yellow>(here)</color>");
+                sb.Append(on ? "  <color=green>ON</color>" : "  <color=red>OFF</color>")
+                    .Append('\n');
+            }
+            sb.Append(".s rh 2  toggle   .s rh all  enable all   .s rh off  this castle");
+            var text = sb.ToString();
+            return text.Length <= Core.MaxChatReply ? text : text.Substring(0, Core.MaxChatReply);
         }
     }
 }
