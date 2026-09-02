@@ -63,6 +63,7 @@ namespace Satisvampory.Services
             Core.WorkQueue = new();
             Core.MarkBooted();
             Core.WorkQueue.EnqueueAll();
+            RepeatHunts.PublishClientState();
 
             Start(ClanTreasuryLend.Loop());
             Start(DebugPeekService.Loop());

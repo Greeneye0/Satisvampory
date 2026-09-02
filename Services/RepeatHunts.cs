@@ -8,6 +8,8 @@ using Stunlock.Core;
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
 using System.Text;
 using Unity.Collections;
 using Unity.Entities;
@@ -34,6 +36,9 @@ namespace Satisvampory.Services
         }
 
         static float lastSuccess = -1f;
+        static bool capThisTick;
+        static readonly List<(Recipe Hunt, Entity User)> pendingStarts = new();
+        internal const string ClientJsonPath = @"C:\VRisingServer\BepInEx\config\Satisvampory\debug\repeathunt-client.json";
 
         public static void NoteSuccess(float chance)
         {
@@ -59,7 +64,7 @@ namespace Satisvampory.Services
 
         public static bool IsOn(int plot) => Core.PlayerSettings.IsRepeatHuntPlotOn(plot);
 
-        public static bool ShouldCapSuccess => capSuccessFrames > 0;
+        public static bool ShouldCapSuccess => capThisTick || capSuccessFrames > 0;
 
         public static void TickCapFrames()
         {
@@ -124,7 +129,7 @@ namespace Satisvampory.Services
             var plot = Core.TerritoryService.GetTerritoryId(throne);
             if (plot < 0)
                 return;
-            byPlot[plot] = new Recipe
+            var recipe = new Recipe
             {
                 Plot = plot,
                 Throne = ev.Throne,
@@ -134,10 +139,128 @@ namespace Satisvampory.Services
                 MissionDataId = ev.MissionDataID,
                 Zone = ev.MapZoneId,
                 DestName = DestLabel(ev.MapZoneId, default),
-                SuccessPct = lastSuccess
+                SuccessPct = -1f
             };
-            lastSuccess = -1f;
-            DestDebugLog.Note("throne", plot, 0, "remember hunt " + byPlot[plot].DestName + " " + (int)(byPlot[plot].SuccessPct * 100f + 0.5f) + "%");
+            byPlot[plot] = recipe;
+            var userEnt = Entity.Null;
+            if (eventEntity.Has<FromCharacter>())
+            {
+                var from = eventEntity.Read<FromCharacter>();
+                userEnt = from.User;
+            }
+            pendingStarts.Add((recipe, userEnt));
+            if (IsOn(plot))
+                capThisTick = true;
+            DestDebugLog.Note("throne", plot, 0, "remember hunt " + recipe.DestName);
+        }
+
+        public static void AfterSends()
+        {
+            try
+            {
+                for (var i = 0; i < pendingStarts.Count; i++)
+                {
+                    var hunt = pendingStarts[i].Hunt;
+                    var userEnt = pendingStarts[i].User;
+                    if (lastSuccess >= 0f)
+                        hunt.SuccessPct = lastSuccess;
+                    if (IsOn(hunt.Plot))
+                    {
+                        var cap = Core.PlayerSettings.GetRepeatHuntMaxSuccess() / 100f;
+                        if (hunt.SuccessPct < 0f || hunt.SuccessPct > cap)
+                            hunt.SuccessPct = cap;
+                    }
+                    byPlot[hunt.Plot] = hunt;
+                    ChatSent(hunt, userEnt);
+                    DestDebugLog.Note("throne", hunt.Plot, 0, "sent " + hunt.DestName + " "
+                        + (int)(hunt.SuccessPct * 100f + 0.5f) + "% rh=" + (IsOn(hunt.Plot) ? "on" : "off"));
+                }
+            }
+            finally
+            {
+                pendingStarts.Clear();
+                lastSuccess = -1f;
+                capThisTick = false;
+            }
+        }
+
+        static void ChatSent(Recipe hunt, Entity userEnt)
+        {
+            var names = new List<string>(3);
+            AddServantName(names, hunt.S1);
+            AddServantName(names, hunt.S2);
+            AddServantName(names, hunt.S3);
+            var rh = IsOn(hunt.Plot);
+            var sb = new StringBuilder();
+            sb.Append("Hunt sent");
+            if (hunt.Plot >= 0)
+                sb.Append(" (").Append(Core.TerritoryService.FormatPlotLabel(hunt.Plot)).Append(')');
+            if (!string.IsNullOrWhiteSpace(hunt.DestName))
+                sb.Append(" — ").Append(hunt.DestName);
+            if (hunt.SuccessPct >= 0f)
+                sb.Append(" (").Append((int)(hunt.SuccessPct * 100f + 0.5f)).Append("%)");
+            sb.Append(": ");
+            if (names.Count > 0)
+                sb.Append(string.Join(", ", names));
+            else
+                sb.Append("servants");
+            sb.Append(". Repeat ").Append(rh ? "ON" : "OFF");
+            if (rh)
+                sb.Append(" (max ").Append(Core.PlayerSettings.GetRepeatHuntMaxSuccess()).Append("%)");
+            var text = Trim(sb.ToString());
+            if (userEnt != Entity.Null && Core.EntityManager.Exists(userEnt) && userEnt.Has<User>())
+            {
+                var user = userEnt.Read<User>();
+                if (user.IsConnected)
+                    Utilities.SendSystemMessageToClient(Core.EntityManager, user, text);
+            }
+            else
+            {
+                var heart = hunt.Plot >= 0 ? Core.TerritoryService.GetCastleHeart(hunt.Plot) : Entity.Null;
+                TellOwner(heart, text);
+            }
+        }
+
+        static void AddServantName(List<string> names, NetworkId nid)
+        {
+            if (!Core.TryGetEntityFromNetworkId(nid, out var servant) || servant == Entity.Null)
+                return;
+            names.Add(ServantName(servant));
+        }
+
+        public static void PublishClientState()
+        {
+            try
+            {
+                var on = Core.PlayerSettings.IsRepeatHuntEnabled();
+                var max = Core.PlayerSettings.GetRepeatHuntMaxSuccess();
+                var off = "";
+                if (Core.PlayerSettings.TryWorldOffPlots(out var list) && list != null)
+                {
+                    for (var i = 0; i < list.Count; i++)
+                    {
+                        if (i > 0)
+                            off += ",";
+                        off += "\"" + list[i] + "\"";
+                    }
+                }
+                var json = "{\"on\":" + (on ? "true" : "false")
+                    + ",\"max\":" + max.ToString(CultureInfo.InvariantCulture)
+                    + ",\"off\":[" + off + "]}";
+                var dir = Path.GetDirectoryName(ClientJsonPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
+                var tmp = ClientJsonPath + ".tmp";
+                File.WriteAllText(tmp, json, new UTF8Encoding(false));
+                if (File.Exists(ClientJsonPath))
+                    File.Replace(tmp, ClientJsonPath, null);
+                else
+                    File.Move(tmp, ClientJsonPath);
+            }
+            catch (Exception e)
+            {
+                Core.Log.LogDebug("RepeatHunt client json: " + e.Message);
+            }
         }
 
         public static void ForgetAbort(Entity eventEntity)

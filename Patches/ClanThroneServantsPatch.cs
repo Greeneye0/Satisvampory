@@ -55,6 +55,7 @@ namespace Satisvampory.Patches
 
         static void Postfix()
         {
+            RepeatHunts.AfterSends();
             RepeatHunts.TickCapFrames();
         }
     }

@@ -43,6 +43,7 @@ namespace Satisvampory.Services;
             var on = FlipFlag(WorldId, static s => s.RepeatHunt, static (s, v) => { s.RepeatHunt = v; return s; });
             if (on)
                 RepeatHunts.CaptureActiveMissions();
+            RepeatHunts.PublishClientState();
             return on;
         }
 
@@ -65,7 +66,17 @@ namespace Satisvampory.Services;
             row.RepeatHuntMaxSuccess = percent;
             playerSettings[WorldId] = row;
             MarkDirty();
+            RepeatHunts.PublishClientState();
             return percent;
+        }
+
+        public bool TryWorldOffPlots(out List<string> off)
+        {
+            off = null;
+            if (!TryRow(WorldId, out var world))
+                return false;
+            off = world.RepeatHuntOffPlots;
+            return true;
         }
 
         public bool IsRepeatHuntPlotOn(int plot)
@@ -91,6 +102,7 @@ namespace Satisvampory.Services;
             MarkDirty();
             if (on)
                 RepeatHunts.CaptureActiveMissions(plot);
+            RepeatHunts.PublishClientState();
         }
 
         public bool IsConveyorEnabled(ulong playerId) => ReadFlag(playerId, static s => s.Conveyor, requireGlobal: true);
