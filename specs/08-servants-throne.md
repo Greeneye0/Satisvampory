@@ -30,7 +30,17 @@ On every **send**, the sender (else heart owner) gets: who went, destination, su
 
 On every **return** (repeat on or off), connected **clan members** (and the heart owner) get destination, who came back, loot stacks, or who **died** / injured. Example: `Hunt returned (plot 86 L4) — Pools of Rebirth: Raven — 10 Oil. Repeat ON — sending again.` After the resend: `Repeat: sent Raven to Pools of Rebirth (95% repeat hunt).` The % is **`.sg rhmax`**, labeled repeat hunt so it is not the vanilla throne 100%. Return dest/zone/prefab come from the **finishing mission**, not the plot’s last send (two hunts from the same castle can be different lakes).
 
-On **login**, the player gets a servant roll-call for owned plots (ClanShare ON: clan island except `.s cse`): name and status (`home`, `hunt {dest} {remaining}`, `injured`, `dead`, `reviving`). Then a **haul** line: hunt loot returned since last logout, or the last **72 hours** if they have been away longer (or never recorded). Example: `Servants (plot 86 L4): Corey hunt Ancient Village 1h 38m, Raven home` then `Haul since logout (14h): 1,200 Ghost Crystal, 80 Oil`. No haul in that window: `Haul …: none`. Do not fire this on plugin boot for people already connected.
+On **login**, **haul first** (find-style: plot header, then `Nx Item` lines), then servants. Window is last logout, or **72 hours** if they have been away longer (or never recorded). ClanShare ON: clan island except `.s cse`. One item per chat line so vanilla does not treat a number dump as personal info. Example:
+
+`Hunt haul since logout (2.2h)`  
+`<color=yellow>plot 86 L4</color>`  
+`  <color=white>689</color>x <color=green>Pristine Hide</color>`  
+`Servants`  
+`<color=yellow>plot 86 L4</color>`  
+`  Corey — hunt Ancient Village 1h 38m`  
+`  Raven — home`
+
+No haul: `Hunt haul …` then `  none`. Do not fire this on plugin boot for people already connected.
 
 Do not cap the throne UI via HuntClock on `GetMissionSuccessChanceForServant_Client` (same trampoline crash).
 

@@ -315,7 +315,7 @@ Example output line: `Iron Ore: demand 120, total 40, reserve 10`.
 - On **send**, the sender (or heart owner) sees who went, where, survival percent, and whether repeat is on. Example: `Hunt sent (plot 45 L2) — Haunted Iron Mine (99%): Stephen. Repeat ON (max 99%).`
 - On **return**, connected clan members and the heart owner see the destination, who came back, loot stacks, and anyone who died or was injured. Example: `Hunt returned (plot 86 L4) — Pools of Rebirth: Raven — 10 Oil. Repeat ON — sending again.`
 - If a repeat send fails, chat says `could not send` with the real reason instead of pretending they left.
-- On **login** you get a servant roll-call per castle (home / hunt dest and time left / injured / dead) and the **haul** stashed since you last logged out, or the last 72 hours if you were gone longer. Example: `Servants (plot 86 L4): Corey hunt Ancient Village 1h 38m, Raven home` then `Haul since logout (14h): 1,200 Ghost Crystal, 80 Oil`.
+- On **login**, haul is listed first (per castle, `689x Pristine Hide` like `.fi`), then servants (home / hunt dest and time left / injured / dead). Window is last logout, or 72 hours if you were gone longer.
 
 ---
 

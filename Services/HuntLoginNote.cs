@@ -184,30 +184,23 @@ namespace Satisvampory.Services
                 return;
 
             var plots = PlotsFor(user);
-            var lines = new List<string>();
-            for (var p = 0; p < plots.Count; p++)
-            {
-                var line = PlotLine(plots[p]);
-                if (!string.IsNullOrEmpty(line))
-                    lines.Add(line);
-            }
-
             var since = Since(steamId, out var hours, out var fromLogout);
-            var haulLine = HaulLine(plots, since, hours, fromLogout);
-            if (lines.Count == 0 && string.IsNullOrEmpty(haulLine))
+            var haulLines = HaulLines(plots, since, hours, fromLogout);
+            var servantLines = new List<string>();
+            for (var p = 0; p < plots.Count; p++)
+                ServantLines(plots[p], servantLines);
+            if (servantLines.Count > 0)
+                servantLines.Insert(0, "Servants");
+            if (haulLines.Count == 0 && servantLines.Count == 0)
                 return;
 
-            if (lines.Count == 0)
-                Tell(user, haulLine);
-            else
-            {
-                for (var i = 0; i < lines.Count; i++)
-                    Tell(user, lines[i]);
-                if (!string.IsNullOrEmpty(haulLine))
-                    Tell(user, haulLine);
-            }
+            for (var i = 0; i < haulLines.Count; i++)
+                Tell(user, haulLines[i]);
+            for (var i = 0; i < servantLines.Count; i++)
+                Tell(user, servantLines[i]);
             DestDebugLog.Note("throne", plots.Count > 0 ? plots[0] : -1, steamId,
-                "login servants=" + lines.Count + " haulHours=" + hours.ToString("0.0", CultureInfo.InvariantCulture));
+                "login servants=" + servantLines.Count + " haul=" + haulLines.Count
+                + " hours=" + hours.ToString("0.0", CultureInfo.InvariantCulture));
         }
 
         static List<int> PlotsFor(User user)
@@ -232,7 +225,7 @@ namespace Satisvampory.Services
             return plots;
         }
 
-        static string PlotLine(int plot)
+        static void ServantLines(int plot, List<string> lines)
         {
             var people = new List<string>();
             var qb = new EntityQueryBuilder(Allocator.Temp)
@@ -256,7 +249,7 @@ namespace Satisvampory.Services
                         continue;
                     if (st.State == ServantCoffinState.Empty)
                         continue;
-                    people.Add(name + " " + StatusOf(coffin, st, plot));
+                    people.Add("  " + name + " — " + StatusOf(coffin, st, plot));
                 }
             }
             finally
@@ -266,8 +259,10 @@ namespace Satisvampory.Services
                 query.Dispose();
             }
             if (people.Count == 0)
-                return "";
-            return "Servants (" + Core.TerritoryService.FormatPlotLabel(plot) + "): " + string.Join(", ", people);
+                return;
+            lines.Add("<color=yellow>" + Core.TerritoryService.FormatPlotLabel(plot) + "</color>");
+            for (var i = 0; i < people.Count; i++)
+                lines.Add(people[i]);
         }
 
         static string StatusOf(Entity coffin, ServantCoffinstation st, int plot)
@@ -352,10 +347,14 @@ namespace Satisvampory.Services
             return since;
         }
 
-        static string HaulLine(List<int> plots, DateTime since, double hours, bool fromLogout)
+        static List<string> HaulLines(List<int> plots, DateTime since, double hours, bool fromLogout)
         {
+            var lines = new List<string>();
+            var window = fromLogout
+                ? "since logout (" + FormatHours(hours) + ")"
+                : "last " + FormatHours(hours);
             var plotSet = new HashSet<int>(plots);
-            var totals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var byPlot = new Dictionary<int, Dictionary<string, int>>();
             for (var i = 0; i < haul.Count; i++)
             {
                 var row = haul[i];
@@ -365,6 +364,11 @@ namespace Satisvampory.Services
                     continue;
                 if (row.Items == null)
                     continue;
+                if (!byPlot.TryGetValue(row.Plot, out var totals))
+                {
+                    totals = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+                    byPlot[row.Plot] = totals;
+                }
                 for (var k = 0; k < row.Items.Count; k++)
                 {
                     var it = row.Items[k];
@@ -374,30 +378,26 @@ namespace Satisvampory.Services
                     totals[it.name] = n + it.amount;
                 }
             }
-            var window = fromLogout
-                ? "since logout (" + FormatHours(hours) + ")"
-                : "last " + FormatHours(hours);
-            if (totals.Count == 0)
-                return "Haul " + window + ": none";
-            var parts = new List<KeyValuePair<string, int>>(totals);
-            parts.Sort((a, b) => b.Value.CompareTo(a.Value));
-            var sb = new StringBuilder();
-            sb.Append("Haul ").Append(window).Append(':');
-            var used = 0;
-            for (var i = 0; i < parts.Count; i++)
+            lines.Add("Hunt haul " + window);
+            if (byPlot.Count == 0)
             {
-                var next = " " + parts[i].Value.ToString("N0", CultureInfo.InvariantCulture) + " " + parts[i].Key;
-                if (i + 1 < parts.Count)
-                    next += ",";
-                if (sb.Length + next.Length > MaxChat)
-                {
-                    sb.Append(" …");
-                    break;
-                }
-                sb.Append(next);
-                used++;
+                lines.Add("  none");
+                return lines;
             }
-            return sb.ToString();
+            var plotOrder = new List<int>(byPlot.Keys);
+            plotOrder.Sort();
+            for (var p = 0; p < plotOrder.Count; p++)
+            {
+                var plot = plotOrder[p];
+                lines.Add("<color=yellow>" + Core.TerritoryService.FormatPlotLabel(plot) + "</color>");
+                var parts = new List<KeyValuePair<string, int>>(byPlot[plot]);
+                parts.Sort((a, b) => b.Value.CompareTo(a.Value));
+                for (var i = 0; i < parts.Count; i++)
+                {
+                    lines.Add("  <color=white>" + parts[i].Value + "</color>x <color=green>" + parts[i].Key + "</color>");
+                }
+            }
+            return lines;
         }
 
         static string FormatHours(double hours)
