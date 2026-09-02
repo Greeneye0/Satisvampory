@@ -32,5 +32,5 @@ public class Plugin : BasePlugin
         hookDOTS.RegisterAnnotatedHooks();
     }
 
-    bool TearDown() { Core.PlayerSettings?.FlushSettings(force: true); Services.DestDebugLog.Close(); CommandRegistry.UnregisterAssembly(); Harmony?.UnpatchSelf(); return true; }
+    bool TearDown() { Services.HuntLoginNote.FlushLogouts(); Core.PlayerSettings?.FlushSettings(force: true); Services.DestDebugLog.Close(); CommandRegistry.UnregisterAssembly(); Harmony?.UnpatchSelf(); return true; }
 }

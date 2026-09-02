@@ -415,6 +415,7 @@ namespace Satisvampory.Services
                 sb.Append(". Repeat ON — sending again.");
             TellClan(row.Heart, Trim(sb.ToString()));
             DestDebugLog.Note("throne", row.Hunt.Plot, 0, "return " + sb);
+            HuntLoginNote.RecordHaul(row.Hunt.Plot, loot);
 
             if (repeatOn)
             {
@@ -1211,6 +1212,15 @@ namespace Satisvampory.Services
         static string ZoneTag(MapZoneId zone)
         {
             return zone.ChunkCoordinate + ":" + zone.ZoneId;
+        }
+
+        internal static string DestForMission(PrefabGUID mission)
+        {
+            if (mission.GuidHash == 0)
+                return "";
+            if (TryZoneForMission(mission, default, out _, out var name) && !string.IsNullOrWhiteSpace(name))
+                return name;
+            return PrettyMission(mission);
         }
 
         static bool TryZoneForMission(PrefabGUID mission, MapZoneId want, out MapZoneId zone, out string destName)

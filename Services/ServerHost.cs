@@ -72,6 +72,7 @@ namespace Satisvampory.Services
             DropTracker.SeedExisting();
             Start(DropTracker.DiscoverLoop());
             Start(ScoopService.AutoScoopLoop());
+            Start(HuntLoginNote.Loop());
             Start(SettingsFlushLoop());
 
             FoundItemConverter.LoadItemNames();

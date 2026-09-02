@@ -46,7 +46,7 @@ Plot salvage (`.s sal`) default **OFF**.
 - **Treasury lend**: starter kit, covering buffer, next-level heart-upgrade costs, heart fuel ([03-covering-lend.md](03-covering-lend.md)).
 - Named **`s#` / `r#` conveyors**, salvage / spawner / brazier / trash chests ([06-conveyors-stations.md](06-conveyors-stations.md)).
 - **Ground scoop** into bags ([07-scoop.md](07-scoop.md)).
-- Servant auto-stash, return chat (loot or death), and optional **repeat hunts** (`.sg rh`) ([08-servants-throne.md](08-servants-throne.md)).
+- Servant auto-stash, return chat (loot or death), optional **repeat hunts** (`.sg rh`), and a **login** servant/haul note ([08-servants-throne.md](08-servants-throne.md)).
 - Per-castle **reserve**, **production cap**, and **item groups** ([09-settings.md](09-settings.md)).
 
 ## Non-goals
