@@ -114,7 +114,7 @@ namespace Satisvampory.Services
 
         // Dest groups rebuilt at startup from PrefabCollection ItemData.
         // Flags first, then name/prefab overlay rules. No frozen GUID table. CSV is debug-only.
-        // Exact dest / find / pull aliases (GBE, PBE, GSS, …). `blood` dest stays regular Blood Essence.
+        // Exact dest / find / pull aliases (BE, GBE, PBE, GSS, …). `blood` dest stays regular Blood Essence.
         // FakeItem_ / Any * recipe placeholders are not stash dests and are omitted from unresolved chat.
         static readonly Dictionary<string, List<GroupMember>> builtInMembers = new(StringComparer.OrdinalIgnoreCase);
         static readonly List<string> missingRequested = new();
@@ -124,6 +124,7 @@ namespace Satisvampory.Services
         static readonly HashSet<string> builtInAliasKeys = new(StringComparer.OrdinalIgnoreCase);
         static readonly Dictionary<int, string> catalogAliasByHash = new();
 
+        public static int BloodEssenceHash { get; private set; }
         public static int GreaterBloodEssenceHash { get; private set; }
         public static int PrimalBloodEssenceHash { get; private set; }
         public static int AncestralBloodEssenceHash { get; private set; }
@@ -252,6 +253,7 @@ namespace Satisvampory.Services
             missingRequested.Clear();
             destGroupByHash.Clear();
             catalogRows.Clear();
+            BloodEssenceHash = 0;
             GreaterBloodEssenceHash = 0;
             PrimalBloodEssenceHash = 0;
             AncestralBloodEssenceHash = 0;
@@ -263,6 +265,7 @@ namespace Satisvampory.Services
                 builtInMembers[n] = new List<GroupMember>();
 
             ScanPrefabCollection();
+            ResolveNamedItem("Blood Essence", "BE", v => BloodEssenceHash = v);
             ResolveNamedItem("Greater Blood Essence", "GBE", v => GreaterBloodEssenceHash = v, "greater blood");
             ResolveNamedItem("Primal Blood Essence", "PBE", v => PrimalBloodEssenceHash = v, "primal blood");
             ResolveNamedItem("Ancestral Blood Essence", "ABE", v => AncestralBloodEssenceHash = v, "ancestral blood");
@@ -282,7 +285,8 @@ namespace Satisvampory.Services
             DumpItemCatalog();
             if (missingRequested.Count > 0)
                 Core.Log.LogWarning("Item groups unresolved " + missingRequested.Count + " ItemData names: " + string.Join(", ", missingRequested));
-            Core.Log.LogInfo("Item aliases GBE=" + GreaterBloodEssenceHash
+            Core.Log.LogInfo("Item aliases BE=" + BloodEssenceHash
+                + " GBE=" + GreaterBloodEssenceHash
                 + " PBE=" + PrimalBloodEssenceHash
                 + " ABE=" + AncestralBloodEssenceHash
                 + " (dest works without item-catalog.csv)");

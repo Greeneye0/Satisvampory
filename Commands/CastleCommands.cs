@@ -373,16 +373,40 @@ namespace Satisvampory.Commands
                 ctx.Reply("No custom groups. Use .s group create <name> then .s group <name> add <item>.");
         }
 
-        [Command(name: "group", usage: ".s group <name>", description: "List members of a built-in or custom material group.")]
+        [Command(name: "group", usage: ".s group <name>", description: "List group members with island totals and a grand total.")]
         public static void ShowGroup(ChatCommandContext ctx, string name)
+        {
+            ShowGroup(ctx, name, null);
+        }
+
+        [Command(name: "group", usage: ".s group <name> full", description: "Same as .s group <name>, plus each item's reserve and production cap.")]
+        public static void ShowGroup(ChatCommandContext ctx, string name, string option)
         {
             if (!TryGetStandingCastleSettingsOwner(ctx, out var SteamID, out var ownerName))
                 return;
-            if (name.Trim().Equals("restore", StringComparison.OrdinalIgnoreCase))
+            if (name.Trim().Equals("restore", StringComparison.OrdinalIgnoreCase) && string.IsNullOrWhiteSpace(option))
             {
                 var restored = Core.PlayerSettings.RestoreAllBuiltInGroups(SteamID, ItemGroupService.BuiltInNames);
                 ctx.Reply($"Restored default groups on {ownerName}'s castle: {string.Join(", ", restored)}. Custom groups were left as-is.");
                 return;
+            }
+            var detail = false;
+            if (!string.IsNullOrWhiteSpace(option))
+            {
+                var act = name.Trim().ToLowerInvariant();
+                if (act is "create" or "addgroup" or "new" or "delete" or "remove" or "del" or "restore")
+                {
+                    CreateOrDeleteGroup(ctx, name, option);
+                    return;
+                }
+                var opt = option.Trim().ToLowerInvariant();
+                if (opt is "full" or "detail" or "all" or "more" or "adv" or "advanced" or "caps")
+                    detail = true;
+                else
+                {
+                    ctx.Reply("Usage: .s group <name>   or   .s group <name> full");
+                    return;
+                }
             }
             if (!ItemGroupService.TryResolveGroup(SteamID, name, out var resolved, out var isBuiltIn))
             {
@@ -396,13 +420,43 @@ namespace Satisvampory.Commands
             var kind = isBuiltIn
                 ? (ItemGroupService.HasCastleOverlay(SteamID, resolved) ? "edited built-in" : "built-in")
                 : "custom";
-            ctx.Reply($"{kind} group <color=green>{resolved}</color> on {ownerName}'s castle ({members.Count} items):");
+            var ids = Core.TerritoryService.GetLogisticsTerritoryIdsForCharacter(ctx.Event.SenderCharacterEntity);
+            var scope = ids.Count > 1 ? "clan island" : "this plot";
+            ctx.Reply($"{kind} group <color=green>{resolved}</color> on {ownerName}'s castle ({members.Count} items, {scope}):");
             if (members.Count == 0)
             {
                 ctx.Reply("  (empty)");
                 return;
             }
-            ctx.Reply("  " + ItemGroupService.FormatMemberNames(members.Select(m => m.Name), 400));
+
+            var rows = new List<(string name, int have, int reserve, string cap)>(members.Count);
+            var total = 0;
+            var character = ctx.Event.SenderCharacterEntity;
+            for (var i = 0; i < members.Count; i++)
+            {
+                var member = members[i];
+                var have = PullService.CountAlliedStores(character, member.Prefab);
+                total += have;
+                var reserve = Core.PlayerSettings.GetPullReserve(SteamID, member.Prefab);
+                var cap = Core.PlayerSettings.TryGetItemCap(SteamID, member.Prefab, out var capN)
+                    ? capN.ToString()
+                    : "unlimited";
+                rows.Add((member.Name, have, reserve, cap));
+            }
+            rows.Sort((a, b) =>
+            {
+                var byHave = b.have.CompareTo(a.have);
+                return byHave != 0 ? byHave : string.Compare(a.name, b.name, StringComparison.OrdinalIgnoreCase);
+            });
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var row = rows[i];
+                if (detail)
+                    ctx.Reply($"  <color=green>{row.name}</color>: <color=white>{row.have}</color>  reserve <color=white>{row.reserve}</color>  cap <color=white>{row.cap}</color>");
+                else
+                    ctx.Reply($"  <color=green>{row.name}</color>: <color=white>{row.have}</color>");
+            }
+            ctx.Reply($"total: <color=white>{total}</color> ({rows.Count} kinds)");
         }
 
         [Command(name: "group", usage: ".s group create|delete|restore <name>", description: "Create a custom group, delete a group, or restore a built-in default.")]

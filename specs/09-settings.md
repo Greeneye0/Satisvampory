@@ -43,6 +43,8 @@ Built-in groups (aliases in parentheses): ore, flowers (herb/herbs), mushrooms, 
 
 - Hell’s Clarion is **mushrooms**, not flowers. `.s group restore` puts that back.
 - First edit of a built-in **copies** the default list, then mutates the copy.
+- `.s group <name>` lists each member’s **island stock** (ClanShare = clan island), sorted by have, then **total** of those totals.
+- `.s group <name> full` also prints each item’s **reserve** and **production cap**.
 - `.s group create|delete|restore <name>`
 - `.s group <name> add|remove <item> …` — quote names with spaces.
 

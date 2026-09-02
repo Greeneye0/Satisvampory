@@ -179,6 +179,7 @@ internal static class ItemCatalog
 
     static void RegisterBuiltInItemAliases()
     {
+        RegisterItemAlias("Blood Essence", "BE");
         RegisterItemAlias("Greater Blood Essence", "GBE", "greater blood");
         RegisterItemAlias("Primal Blood Essence", "PBE", "primal blood");
         RegisterItemAlias("Ancestral Blood Essence", "ABE", "ancestral blood");

@@ -83,7 +83,8 @@ Stand on the plot. Default reserve **10**. Default production cap **unlimited**.
 | `.s cap plank` / `.s cap plank 200` | Show or set. `0` = make none. `-1` = unlimited |
 | `.s capclear plank` | Clear one cap |
 | `.s group` | List built-in and custom groups on this castle |
-| `.s group ore` | List members |
+| `.s group ore` | Each member's island total, then **total** of those totals |
+| `.s group ore full` | Same, plus each item's **reserve** and **cap** |
 | `.s group create belts` / `.s group delete belts` | Custom group |
 | `.s group restore` / `.s group restore mushrooms` | Restore built-ins (Hell’s Clarion is mushrooms, not flowers) |
 | `.s group ore add "Iron Ore"` | First edit of a built-in copies the default list |
@@ -126,7 +127,7 @@ Needs `save-data\Settings\adminlist.txt` SteamID64 **and** console `adminauth`.
 | `.sg asm` | Allow servant auto-stash |
 | `.sg rh` / `.sg repeathunt` | Repeat hunts: servants go back out on the same hunt when they return. Default **OFF**. Chat the owner loot or death. Turning ON captures hunts already out |
 | `.sg rhmax [n]` | Intended max success **%** when repeat is ON (default **99**). The live roll is **vanilla** until a safe cap hook exists; do not patch `GetMissionSuccessChanceForServant_*` |
-| `.sg alias` | List item aliases. Built-in: **GBE** Greater Blood Essence, **PBE** Primal, **ABE** Ancestral, **GSS** Greater Stygian Shard, **SGS** Siege Golem Stone, **DSI** Dark Silver Ingot, **OT** Onyx Tear |
+| `.sg alias` | List item aliases. Built-in: **BE** Blood Essence, **GBE** Greater, **PBE** Primal, **ABE** Ancestral, **GSS** Greater Stygian Shard, **SGS** Siege Golem Stone, **DSI** Dark Silver Ingot, **OT** Onyx Tear |
 | `.sg alias add <alias> <item>` | Admin extra alias for find / pull / dest. Persists. Cannot steal dest words (`blood`) or built-ins |
 | `.sg alias del <alias>` | Remove an admin alias. Built-ins stay |
 | `.sg co` | Allow conveyors |

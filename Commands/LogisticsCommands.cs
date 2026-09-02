@@ -180,7 +180,7 @@ namespace Satisvampory.Commands;
         [Command(name: "settings", shortHand: "s", usage: ".sg s", description: "Displays current settings.", adminOnly: true)]
         public static void ShowGlobal(ChatCommandContext ctx) { var g = Core.PlayerSettings.GetGlobalSettings(); ctx.Reply("Satisvampory server flags:\nSortStash " + LogisticsCommands.OnOff(g.SortStash) + "\nPull " + LogisticsCommands.OnOff(g.Pull) + "\nCraftPull " + LogisticsCommands.OnOff(g.CraftPull) + "\nAutoStashMissions " + LogisticsCommands.OnOff(g.AutoStashMissions) + "\nRepeatHunt " + LogisticsCommands.OnOff(g.RepeatHunt) + " (default OFF; .sg rh) max " + Core.PlayerSettings.GetRepeatHuntMaxSuccess() + "% (.sg rhmax)\nConveyor " + LogisticsCommands.OnOff(g.Conveyor) + "\nConveyorLoops " + LogisticsCommands.OnOff(g.ConveyorLoops) + " (default OFF; .sg convloop)\nSalvage " + LogisticsCommands.OnOff(g.Salvage) + "\nUnitSpawner " + LogisticsCommands.OnOff(g.UnitSpawner) + "\nBrazier " + LogisticsCommands.OnOff(g.Brazier) + "\nNamed " + LogisticsCommands.OnOff(g.Named) + "\nTrash " + LogisticsCommands.OnOff(g.Trash)); }
 
-        [Command(name: "alias", usage: ".sg alias", description: "List item aliases (GBE, PBE, GSS, …).", adminOnly: true)]
+        [Command(name: "alias", usage: ".sg alias", description: "List item aliases (BE, GBE, PBE, GSS, …).", adminOnly: true)]
         public static void ListAliases(ChatCommandContext ctx)
         {
             var rows = ItemGroupService.ListExactAliases();
