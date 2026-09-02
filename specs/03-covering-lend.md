@@ -56,8 +56,9 @@ Park into the first **non-overflow** dest (prefer a chest that can hold the ches
 Enough to place **3 copies** of whichever **unlocked** castle blueprint is hungriest per material (1 copy if leftover-bypass).
 
 - 1× amount is the max cost among unlocked (or start) blueprints plus station recipe costs on the plot, then **`Covering1xCap = 200`** per material. A 1200-stone wall MUST NOT dump 1200.
-- 3× = 1× × `BuildCoverCopies` (3), honor reserve.
-- Park into vanilla-visible dests (generic / matching), not overflow, class cap **3** during covering park.
+- **Blood Essence in chests is 500**, standalone from heart fuel. Do not apply the 200 cap. Do not triple it on covering 3×. Do not count BE sitting in the castle heart toward that 500.
+- 3× = 1× × `BuildCoverCopies` (3), honor reserve (except chest BE stays 500).
+- Park into vanilla-visible dests (generic / matching), not overflow, class cap **3** during covering park. Skip castle hearts as dests and as covering stock.
 
 ### Covering order (`OrderedCoveringTargets`)
 

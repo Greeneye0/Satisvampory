@@ -37,7 +37,7 @@ Do not "simplify" these away. They exist because earlier updates went off the ra
 - Tidy **never** drains `s#`/`r#`, `NS`, skip-quotes (`''`), salvage/trash/spoils/spawner/brazier, or **castle hearts**.
 - Treasury-floor chests **are** tidy sources.
 - Overflow and spoils are tidy **sources only**.
-- Covering **1× leftover-bypass** when ≤1 occupied clan plot, then **3× honor reserve**. Cap **200** per mat at 1×.
+- Covering **1× leftover-bypass** when ≤1 occupied clan plot, then **3× honor reserve**. Cap **200** per mat at 1×. Blood Essence in **chests** is **500**, not counting heart fuel, not capped at 200, not tripled on 3×.
 - Covering pull budget **12 per plot / 120 per tick**. Missing-on-plot first; a new castle (not all kit types yet) fills kit before other mats.
 - `.sg convloop` default **OFF**. Chest→chest without a same-group cycle still works.
 - Castle **guests** never occupy a plot for covering / leftover-bypass / clan pulls.

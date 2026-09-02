@@ -69,6 +69,8 @@ namespace Satisvampory.Services
         const int HeartFuelStack = 500;
         // Covering leftover-bypass is "enough to start placing", not a 1200-stone wall dump.
         const int Covering1xCap = 200;
+        // Chest Blood Essence is a standalone supply, not a build-piece cap and not heart fuel.
+        const int CoveringBloodEssenceChests = 500;
 
         /// <summary>
         /// Chest identity: NetworkId.Index of the stash if present, else inventory
@@ -2542,9 +2544,12 @@ namespace Satisvampory.Services
                 for (var i = 0; i < keys.Count; i++)
                 {
                     var g = keys[i];
+                    if (g == BloodEssenceHash)
+                        continue;
                     max[g] = CapCovering1x(max[g]);
                 }
             }
+            ApplyChestBloodEssenceFloor(max);
             if (destPlot >= 0)
             {
                 if (coveringCache.Count > 160)
@@ -2559,6 +2564,15 @@ namespace Satisvampory.Services
             if (amount <= 0)
                 return 0;
             return amount > Covering1xCap ? Covering1xCap : amount;
+        }
+
+        static void ApplyChestBloodEssenceFloor(Dictionary<int, int> max)
+        {
+            if (max == null)
+                return;
+            max.TryGetValue(BloodEssenceHash, out var have);
+            if (have < CoveringBloodEssenceChests)
+                max[BloodEssenceHash] = CoveringBloodEssenceChests;
         }
 
         static void MergeCosts(Dictionary<int, int> max, List<(int guid, int amount)> costs, float mod)
@@ -2780,7 +2794,8 @@ namespace Satisvampory.Services
             {
                 if (kv.Key == 0 || kv.Value <= 0)
                     continue;
-                result[kv.Key] = kv.Value * copies;
+                // Chest BE is a 500-stack supply, not "3 copies of a wall". Do not triple it.
+                result[kv.Key] = kv.Key == BloodEssenceHash ? kv.Value : kv.Value * copies;
             }
             return result;
         }
@@ -4010,6 +4025,8 @@ namespace Satisvampory.Services
             foreach (var stash in StashesOnPlot(territoryId))
             {
                 if (stash.Has<Refinementstation>())
+                    continue;
+                if (stash.Has<CastleHeart>())
                     continue;
                 if (StashRouting.IsNoShare(stash))
                 {
