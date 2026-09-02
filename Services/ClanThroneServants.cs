@@ -1376,6 +1376,15 @@ namespace Satisvampory.Services
             return names;
         }
 
+        internal static List<(string Name, NetworkId Nid)> DebugIdleServants(int plot)
+        {
+            var rows = AliveRows(plot);
+            var list = new List<(string, NetworkId)>(rows.Count);
+            for (var i = 0; i < rows.Count; i++)
+                list.Add((rows[i].Name, rows[i].Nid));
+            return list;
+        }
+
         static List<ServantRow> AliveRows(int plot)
         {
             var list = new List<ServantRow>();

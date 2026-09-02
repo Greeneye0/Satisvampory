@@ -429,7 +429,7 @@ namespace Satisvampory.Services
                     DestDebugLog.Note("throne", hunt.Plot, 0, "repeat wait servants not ready try=" + (attempt + 1));
                     continue;
                 }
-                if (!TrySend(heart, hunt))
+                if (!TrySend(heart, hunt, requireRepeatOn: true))
                 {
                     DestDebugLog.Note("throne", hunt.Plot, 0, "repeat TrySend false try=" + (attempt + 1));
                     continue;
@@ -447,11 +447,11 @@ namespace Satisvampory.Services
             DestDebugLog.Note("throne", hunt.Plot, 0, "repeat gave up " + dest);
         }
 
-        static bool TrySend(Entity heart, Recipe hunt)
+        static bool TrySend(Entity heart, Recipe hunt, bool requireRepeatOn = true)
         {
             try
             {
-                if (!IsOn(hunt.Plot))
+                if (requireRepeatOn && !IsOn(hunt.Plot))
                     return false;
                 if (heart == Entity.Null || !Core.EntityManager.Exists(heart))
                     return false;
@@ -565,6 +565,240 @@ namespace Satisvampory.Services
                 query.Dispose();
             }
             return false;
+        }
+
+        public static string DebugSend(int plot, string who, string dest)
+        {
+            if (plot < 0)
+                return "{\"error\":\"need plot\"}";
+            var heart = Core.TerritoryService.GetCastleHeart(plot);
+            if (heart == Entity.Null)
+                return "{\"error\":\"no heart on plot " + plot + "\"}";
+            var throne = ClanThroneServants.FindThrone(plot);
+            if (throne == Entity.Null || !throne.Has<NetworkId>())
+                return "{\"error\":\"no throne on plot " + plot + "\"}";
+            if (!TryPickIdle(plot, who, out var nids, out var names, out var pickErr))
+                return "{\"error\":\"" + EscJson(pickErr) + "\"}";
+            if (!TryResolveDest(plot, dest, out var zone, out var destName, out var missionId, out var destErr))
+                return "{\"error\":\"" + EscJson(destErr) + "\"}";
+            var hunt = new Recipe
+            {
+                Plot = plot,
+                Throne = throne.Read<NetworkId>(),
+                S1 = nids.Count > 0 ? nids[0] : default,
+                S2 = nids.Count > 1 ? nids[1] : default,
+                S3 = nids.Count > 2 ? nids[2] : default,
+                MissionDataId = missionId,
+                Zone = zone,
+                DestName = destName,
+                SuccessPct = -1f
+            };
+            byPlot[plot] = hunt;
+            if (!TrySend(heart, hunt, requireRepeatOn: false))
+                return "{\"error\":\"TrySend failed\",\"who\":\"" + EscJson(string.Join(", ", names)) + "\",\"dest\":\"" + EscJson(destName) + "\"}";
+            DestDebugLog.Note("throne", plot, 0, "debug send " + string.Join(",", names) + " -> " + destName);
+            return "{\"queued\":true,\"plot\":" + plot
+                + ",\"who\":\"" + EscJson(string.Join(", ", names))
+                + "\",\"dest\":\"" + EscJson(destName)
+                + "\",\"hint\":\"check servants; Repeat: sent chat if vanilla accepts\"}";
+        }
+
+        public static string DebugSetTime(int plot, string who, int seconds)
+        {
+            if (plot < 0)
+                return "{\"error\":\"need plot\"}";
+            if (seconds < 1)
+                seconds = 1;
+            if (seconds > 24 * 3600)
+                seconds = 24 * 3600;
+            var heart = Core.TerritoryService.GetCastleHeart(plot);
+            if (heart == Entity.Null || !heart.Has<ActiveServantMission>())
+                return "{\"error\":\"no missions on plot " + plot + "\"}";
+            DynamicBuffer<ActiveServantMission> buf;
+            try { buf = heart.ReadBuffer<ActiveServantMission>(); }
+            catch { return "{\"error\":\"no mission buffer\"}"; }
+            var nowTicks = DateTime.UtcNow.Ticks;
+            var changed = 0;
+            var names = new List<string>();
+            for (var m = 0; m < buf.Length; m++)
+            {
+                var mission = buf[m];
+                if (!MissionMatchesWho(mission, who, names))
+                    continue;
+                mission.MissionStartTimeTicks = nowTicks;
+                mission.MissionLengthSeconds = seconds;
+                buf[m] = mission;
+                changed++;
+            }
+            if (changed == 0)
+                return "{\"error\":\"no matching active hunt\",\"who\":\"" + EscJson(who) + "\"}";
+            DestDebugLog.Note("throne", plot, 0, "debug hunttime " + seconds + "s " + string.Join(",", names));
+            return "{\"ok\":true,\"plot\":" + plot
+                + ",\"seconds\":" + seconds
+                + ",\"missions\":" + changed
+                + ",\"who\":\"" + EscJson(string.Join(", ", names)) + "\"}";
+        }
+
+        static bool TryPickIdle(int plot, string who, out List<NetworkId> nids, out List<string> names, out string error)
+        {
+            nids = new List<NetworkId>(3);
+            names = new List<string>(3);
+            error = "";
+            var rows = ClanThroneServants.DebugIdleServants(plot);
+            if (rows.Count == 0)
+            {
+                error = "no idle servants on plot " + plot;
+                return false;
+            }
+            if (string.IsNullOrWhiteSpace(who))
+            {
+                var n = Math.Min(3, rows.Count);
+                for (var i = 0; i < n; i++)
+                {
+                    nids.Add(rows[i].Nid);
+                    names.Add(rows[i].Name);
+                }
+                return true;
+            }
+            var parts = who.Replace(',', ' ').Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            var seen = new HashSet<int>();
+            for (var i = 0; i < parts.Length && nids.Count < 3; i++)
+            {
+                var p = parts[i];
+                if (int.TryParse(p, out var idx) && idx >= 1 && idx <= rows.Count)
+                {
+                    if (!seen.Add(idx))
+                        continue;
+                    nids.Add(rows[idx - 1].Nid);
+                    names.Add(rows[idx - 1].Name);
+                    continue;
+                }
+                for (var r = 0; r < rows.Count && nids.Count < 3; r++)
+                {
+                    if (seen.Contains(r + 1))
+                        continue;
+                    if (rows[r].Name.IndexOf(p, StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+                    seen.Add(r + 1);
+                    nids.Add(rows[r].Nid);
+                    names.Add(rows[r].Name);
+                    break;
+                }
+            }
+            if (nids.Count == 0)
+            {
+                error = "no match for '" + who + "'";
+                return false;
+            }
+            return true;
+        }
+
+        static bool TryResolveDest(int plot, string dest, out MapZoneId zone, out string destName, out int missionId, out string error)
+        {
+            zone = default;
+            destName = "";
+            missionId = 0;
+            error = "";
+            if (!string.IsNullOrWhiteSpace(dest) && TryZoneByName(dest, out zone, out destName, out missionId))
+                return true;
+            if (byPlot.TryGetValue(plot, out var last) && (!string.IsNullOrWhiteSpace(last.DestName) || last.MissionDataId != 0))
+            {
+                zone = last.Zone;
+                destName = last.DestName;
+                missionId = last.MissionDataId;
+                if (string.IsNullOrWhiteSpace(destName))
+                    destName = DestLabel(zone, default);
+                return true;
+            }
+            error = "no dest (pass dest:\\\"Fishing Lake\\\" or send once from the map)";
+            return false;
+        }
+
+        static bool TryZoneByName(string want, out MapZoneId zone, out string destName, out int missionId)
+        {
+            zone = default;
+            destName = "";
+            missionId = 0;
+            var needle = want.Trim();
+            if (needle.Length < 2)
+                return false;
+            var qb = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<MapZoneData>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref qb);
+            qb.Dispose();
+            NativeArray<Entity> rows = default;
+            var bestLen = -1;
+            try
+            {
+                rows = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < rows.Length; i++)
+                {
+                    var e = rows[i];
+                    if (e == Entity.Null || !e.Has<MapZoneData>())
+                        continue;
+                    var data = e.Read<MapZoneData>();
+                    var label = ZoneLabel(data);
+                    if (string.IsNullOrWhiteSpace(label))
+                        continue;
+                    if (label.IndexOf(needle, StringComparison.OrdinalIgnoreCase) < 0
+                        && needle.IndexOf(label, StringComparison.OrdinalIgnoreCase) < 0)
+                        continue;
+                    if (label.Length < bestLen)
+                        continue;
+                    bestLen = label.Length;
+                    zone = new MapZoneId { ChunkCoordinate = data.ChunkCoordinate, ZoneId = data.ZoneIndex };
+                    destName = label;
+                    missionId = data.ServantMissionAsset.GuidHash;
+                }
+            }
+            finally
+            {
+                if (rows.IsCreated)
+                    rows.Dispose();
+                query.Dispose();
+            }
+            return bestLen >= 0;
+        }
+
+        static bool MissionMatchesWho(ActiveServantMission mission, string who, List<string> names)
+        {
+            var hit = false;
+            hit |= MatchServant(mission.Servant1, who, names);
+            hit |= MatchServant(mission.Servant2, who, names);
+            hit |= MatchServant(mission.Servant3, who, names);
+            if (string.IsNullOrWhiteSpace(who))
+                return hit;
+            return hit;
+        }
+
+        static bool MatchServant(NetworkedEntity ne, string who, List<string> names)
+        {
+            var e = ne.GetEntityOnServer();
+            if (e == Entity.Null)
+                return false;
+            var n = ServantName(e);
+            if (string.IsNullOrWhiteSpace(who))
+            {
+                names.Add(n);
+                return true;
+            }
+            var parts = who.Replace(',', ' ').Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries);
+            for (var i = 0; i < parts.Length; i++)
+            {
+                if (n.IndexOf(parts[i], StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    names.Add(n);
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static string EscJson(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return "";
+            return s.Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
 
         static Recipe RecipeFromMission(int plot, Entity heart, ActiveServantMission mission)

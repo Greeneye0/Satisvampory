@@ -43,17 +43,21 @@ GitHub: https://github.com/Greeneye0/Satisvampory (public AGPL).
 
 ## Debug mailbox
 
-Local file mailbox. No network socket. No give/spawn (except covering `sim` with `apply:true`, which actually moves, and `gotothrone`, which actually moves a player).
+Local file mailbox. No network socket. No give/spawn (except covering `sim` with `apply:true`, which actually moves, `gotothrone`, which actually moves a player, `huntsend`, which actually sends servants, and `hunttime`, which writes mission remaining time).
 
 - Write `BepInEx/config/Satisvampory/debug/req.json`
 - Read `res.json`
 - Poll ~0.25s, main thread only
 
-Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, `settings`, `dest`, `sim`, `fair`, `occupy`, `guest`, `cover`, `unstick`, `need`, `selftest`, `log`, `perf`, `logdump`, `servants`, `servantstash`, `thrones`, `gotothrone`, `hunt`.
+Ops include: `help`, `players`, `plots`, `plot`, `item`, `covering`, `upgrade`, `settings`, `dest`, `sim`, `fair`, `occupy`, `guest`, `cover`, `unstick`, `need`, `selftest`, `log`, `perf`, `logdump`, `servants`, `servantstash`, `thrones`, `gotothrone`, `hunt`, `huntsend`, `hunttime`.
 
 `thrones` dumps throne positions, connected players, `.s throne` picks, last rewrite (sitting/selected/from/to), last `gotothrone`, whether Request and Interactor were patched, and servant names on the last `ServantInfoEvent.Response`.
 
-`gotothrone` is debug-only movement. `hunt` with `plot:N` and `name:"1 2"` arms the next vanilla map click to `SendOnMissionEvent` those servants from that plot’s throne (fog/discovered zones stay the sitting map).
+`gotothrone` is debug-only movement. `hunt` with `plot:N` and `name:"1 2"` arms the next vanilla map click.
+
+`huntsend` actually injects `SendOnMissionEvent` (same auto-send path as repeat hunts). `{ "op":"huntsend", "plot":86, "name":"Raven", "dest":"Fishing Lake" }`. Omit `dest` to reuse the plot’s last hunt zone. `name` is servant numbers (`"1 2"`) or name fragments. Does not require sitting the throne.
+
+`hunttime` writes remaining seconds on matching active missions. `{ "op":"hunttime", "plot":86, "name":"Raven", "seconds":30 }`. Empty `name` = every hunt on that plot. Sets start=now and length=seconds.
 
 `players` is the bounce gate. `selftest` includes dest-ranking assertions (`StashRouting.SelfTestDest`).
 

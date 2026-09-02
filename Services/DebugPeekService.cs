@@ -73,6 +73,8 @@ namespace Satisvampory.Services
             string name = "";
             var apply = false;
             var users = 30;
+            var dest = "";
+            var seconds = 0;
             try
             {
                 using var doc = JsonDocument.Parse(text);
@@ -89,11 +91,15 @@ namespace Satisvampory.Services
                     name = nameEl.GetString() ?? "";
                 if (root.TryGetProperty("item", out var itemEl))
                     name = itemEl.GetString() ?? name;
+                if (root.TryGetProperty("dest", out var destEl))
+                    dest = destEl.GetString() ?? "";
                 if (root.TryGetProperty("apply", out var applyEl)
                     && (applyEl.ValueKind == JsonValueKind.True || (applyEl.ValueKind == JsonValueKind.String && applyEl.GetString() == "true")))
                     apply = true;
                 if (root.TryGetProperty("users", out var usersEl) && usersEl.ValueKind == JsonValueKind.Number)
                     users = usersEl.GetInt32();
+                if (root.TryGetProperty("seconds", out var secEl) && secEl.ValueKind == JsonValueKind.Number)
+                    seconds = secEl.GetInt32();
             }
             catch (Exception e)
             {
@@ -111,7 +117,7 @@ namespace Satisvampory.Services
             string body;
             try
             {
-                body = Dispatch(op, plot, guid, name, apply, users);
+                body = Dispatch(op, plot, guid, name, apply, users, dest, seconds);
             }
             catch (Exception e)
             {
@@ -121,12 +127,12 @@ namespace Satisvampory.Services
             TryDeleteReq();
         }
 
-        static string Dispatch(string op, int plot, int guid, string name, bool apply, int users = 30)
+        static string Dispatch(string op, int plot, int guid, string name, bool apply, int users = 30, string dest = "", int seconds = 0)
         {
             switch (op)
             {
                 case "help":
-                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\",\"gotothrone\",\"hunt\"],"
+                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\",\"gotothrone\",\"hunt\",\"huntsend\",\"hunttime\"],"
                         + "\"req\":\"" + Esc(ReqPath) + "\",\"res\":\"" + Esc(ResPath) + "\","
                         + "\"hint\":\"{\\\"op\\\":\\\"log\\\",\\\"name\\\":\\\"dupe\\\"}\","
                         + "\"sim\":\"dry-run covering as if you are standing on plot. apply:true actually moves\","
@@ -141,7 +147,9 @@ namespace Satisvampory.Services
                         + "\"servants\":\"list coffins/servants and loot counts (plot:N optional)\","
                         + "\"thrones\":\"list thrones with positions, connected players, .s throne picks, last hunt rewrite\","
                         + "\"gotothrone\":\"debug: move a connected player onto plot N's throne (name:here returns).\","
-                        + "\"hunt\":\"select plot N servants (name:'1 2') so the next vanilla map click sends them.\","
+                        + "\"hunt\":\"arm next vanilla map click (plot:N name:'1 2')\","
+                        + "\"huntsend\":\"actually send idle servants now (plot, name:'Raven' or '1 2', dest:'Fishing Lake' or last zone)\","
+                        + "\"hunttime\":\"set remaining seconds on an active hunt (plot, name:servant filter, seconds:N)\","
                         + "\"servantstash\":\"stash all returned servants now (plot:N optional)\"}";
                 case "players":
                     return PeekPlayers();
@@ -186,6 +194,12 @@ namespace Satisvampory.Services
                 case "hunt":
                 case "huntsel":
                     return ClanThroneServants.DebugHunt(plot, name);
+                case "huntsend":
+                case "sendhunt":
+                    return RepeatHunts.DebugSend(plot, name, dest);
+                case "hunttime":
+                case "missiontime":
+                    return RepeatHunts.DebugSetTime(plot, name, seconds > 0 ? seconds : users);
                 case "servantstash":
                 case "asmstash":
                     return Core.Stash.DebugStashAllServants(plot);
