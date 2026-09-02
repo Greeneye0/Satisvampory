@@ -1,6 +1,6 @@
 # Satisvampory
 
-Current version **1.0.82**. Server-only V Rising 1.1 BepInEx plugin for dedicated servers.
+Current version **1.0.83**. Server-only V Rising 1.1 BepInEx plugin for dedicated servers.
 
 Satisvampory is a server-side quality-of-life addon. It was built so playing the game stops feeling like a chore: less running between chests, less babysitting castle hearts and servants, and more actually playing. Nothing to install on the client.
 
