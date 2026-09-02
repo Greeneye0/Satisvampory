@@ -164,12 +164,6 @@ namespace Satisvampory.Services
                     var userEnt = pendingStarts[i].User;
                     if (lastSuccess >= 0f)
                         hunt.SuccessPct = lastSuccess;
-                    if (IsOn(hunt.Plot))
-                    {
-                        var cap = Core.PlayerSettings.GetRepeatHuntMaxSuccess() / 100f;
-                        if (hunt.SuccessPct < 0f || hunt.SuccessPct > cap)
-                            hunt.SuccessPct = cap;
-                    }
                     byPlot[hunt.Plot] = hunt;
                     ChatSent(hunt, userEnt);
                     DestDebugLog.Note("throne", hunt.Plot, 0, "sent " + hunt.DestName + " "

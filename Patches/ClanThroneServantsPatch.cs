@@ -56,24 +56,6 @@ namespace Satisvampory.Patches
         static void Postfix()
         {
             RepeatHunts.AfterSends();
-            RepeatHunts.TickCapFrames();
-        }
-    }
-
-    [HarmonyPatch(typeof(ServantHelper), nameof(ServantHelper.GetMissionSuccessChanceForServant_Server))]
-    public static class RepeatHuntSuccessCapPatch
-    {
-        static void Postfix(ref float __result)
-        {
-            if (!Core.HasInitialized)
-                return;
-            if (RepeatHunts.ShouldCapSuccess)
-            {
-                var cap = Core.PlayerSettings.GetRepeatHuntMaxSuccess() / 100f;
-                if (__result > cap)
-                    __result = cap;
-            }
-            RepeatHunts.NoteSuccess(__result);
         }
     }
 

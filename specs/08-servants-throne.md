@@ -22,13 +22,13 @@ When a plot is ON: each time a hunt **returns**, surviving (not dead, not injure
 
 Turning **`.sg rh` ON**, **`.s rh on`**, or **`.s rh all`** captures hunts **already in the field** so they loop when they get back.
 
-**`.sg rhmax [1-100]`** caps success chance on **every send from a plot with repeat ON** (throne UI click and auto-resend). Default **99**. Plots with repeat OFF stay vanilla. `.sg rhmax` with no number shows the current cap.
+**`.sg rhmax [1-100]`** is the intended max success % (default **99**) for plots with repeat ON. **Do not Harmony-patch `GetMissionSuccessChanceForServant_Server` or `_Client`** — those take `FixedList4096Bytes<Entry>` and the IL2CPP trampoline NREs, which makes the native roll return **0% survive** (servants die). Leave the vanilla roll until a safe hook exists. Chat still shows Repeat ON/OFF and the configured max.
 
 On every **send**, the sender (else heart owner) gets: who went, destination, survival % (after cap), and Repeat ON/OFF with the max. Example: `Hunt sent (plot 45 L2) — Haunted Iron Mine (99%): Stephen. Repeat ON (max 99%).`
 
 On every **return** (repeat on or off), the castle **heart owner** (if connected) gets destination, survival %, who came back, loot stacks, or who **died** / injured. Then auto-stash runs as today. Example: `Hunt returned (plot 86 L4) — Bandit Logging Camp (99%): Corey — 120 Plank. Repeat: sent again.`
 
-Same-machine HuntClock reads `debug/repeathunt-client.json` and caps the throne UI chance to `rhmax` while server repeat is ON.
+Do not cap the throne UI via HuntClock on `GetMissionSuccessChanceForServant_Client` (same trampoline crash).
 
 Do not Harmony-patch Burst `GetResponseEntries`. Remember the hunt from `SendOnMissionEvent` (after any throne rewrite). Abort clears that memory.
 
