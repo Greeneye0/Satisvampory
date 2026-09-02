@@ -22,7 +22,8 @@ Interop tree defaults to `C:\VRisingServer\BepInEx\`.
 - Source: git origin `main`.
 - Live DLL: `C:\VRisingServer\BepInEx\plugins\Satisvampory.dll`.
 - While the server is running, stage **`Satisvampory.dll.next`**. Never overwrite `Satisvampory.dll` while `VRisingServer.exe` is up.
-- Copy the plugin only after the process has **exited**.
+- Copy the plugin only after **this** Moo World process has **exited**.
+- There may be other `VRisingServer.exe` processes on the machine. **Never** `Stop-Process -Name VRisingServer`. Stop only the Moo World instance: executable under `C:\VRisingServer\` whose command line has `-serverName "Moo World"` and `-persistentDataPath C:\VRisingServer\save-data`.
 - Start with WMI `Win32_Process.Create` of `cmd.exe /c start_server.bat` in `C:\VRisingServer`. Do not use `Start-Process` (Job Object kills the server). Never assign `$PID`.
 - World: **Moo World** / `world1`.
 - Harmony `OnUpdate` patches take `__instance`, not `system`.

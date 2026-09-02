@@ -17,6 +17,7 @@ Bouncing the dedicated server is not shipping. Copy the DLL and restart only whe
 ## Live dedicated
 
 - Source: this repo. Live DLL: `C:\VRisingServer\BepInEx\plugins\Satisvampory.dll`. Stage `Satisvampory.dll.next` while the server is running.
-- Copy the plugin only after `VRisingServer.exe` has exited. Never dual-load Kindred.
+- Copy the plugin only after the **Moo World** process has exited. Never dual-load Kindred.
+- Never `Stop-Process -Name VRisingServer` — other dedicated worlds may be running. Stop only `C:\VRisingServer\VRisingServer.exe` with `-serverName "Moo World"`.
 - Start with WMI `Win32_Process.Create` of `cmd.exe /c start_server.bat` in `C:\VRisingServer`. Do not use Start-Process (Job Object kills the server). Never assign `$PID`.
 - World: `Moo World` / `world1`. Harmony `OnUpdate` patches take `__instance`, not `system`.
