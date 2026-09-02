@@ -1,5 +1,6 @@
 using Il2CppInterop.Runtime;
 using ProjectM;
+using ProjectM.CastleBuilding;
 using Stunlock.Core;
 using System;
 using System.Collections.Generic;
@@ -17,6 +18,8 @@ namespace Satisvampory.Services
             try
             {
                 if (servant == Entity.Null || !Core.EntityManager.Exists(servant))
+                    return 0;
+                if (servant.Has<CastleHeart>() || servant.Has<PlayerCharacter>())
                     return 0;
                 if (!InventoryUtilities.TryGetInventoryEntity(Core.EntityManager, servant, out var inventory)
                     || inventory == Entity.Null || !Core.EntityManager.Exists(inventory))

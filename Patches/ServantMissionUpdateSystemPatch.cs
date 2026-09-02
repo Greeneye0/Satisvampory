@@ -1,5 +1,6 @@
 using HarmonyLib;
 using ProjectM;
+using ProjectM.CastleBuilding;
 using ProjectM.Network;
 using ProjectM.Shared.Systems;
 using System;
@@ -32,16 +33,24 @@ public static class ServantMissionUpdateSystemPatch
         try
         {
             var any = false;
+            var asmOff = false;
             if (missions.IsCreated)
                 for (var i = 0; i < missions.Length; i++)
                 {
                     any = true;
                     var steamId = SteamOf(missions[i].MissionOwner);
-                    if (steamId != 0 && !Core.PlayerSettings.IsAutoStashMissionsEnabled(steamId)) { DestDebugLog.Miss("servant", -1, default, 0, 0, "asm-off steam=" + steamId + " via=" + via); continue; }
-                    StashOne(missions[i].MissionOwner, steamId);
+                    if (steamId != 0 && !Core.PlayerSettings.IsAutoStashMissionsEnabled(steamId))
+                    {
+                        DestDebugLog.Miss("servant", -1, default, 0, 0, "asm-off steam=" + steamId + " via=" + via);
+                        asmOff = true;
+                    }
                 }
-            if (servants.IsCreated)
-                for (var i = 0; i < servants.Length; i++) { any = true; StashOne(servants[i], 0); }
+            if (!asmOff && servants.IsCreated)
+                for (var i = 0; i < servants.Length; i++)
+                {
+                    any = true;
+                    StashOne(servants[i], 0);
+                }
             if (any) DestDebugLog.Note("servant", -1, 0, "tick via=" + via + " stashed=" + stashed.Count);
         }
         catch (System.Exception e) { Core.Log.LogError($"Exited ServantMission stash ({via}): {e}"); }
@@ -53,7 +62,18 @@ public static class ServantMissionUpdateSystemPatch
         catch { return 0; }
     }
 
-    static void StashOne(Entity servant, ulong steamId) { if (servant == Entity.Null || !Core.EntityManager.Exists(servant)) return; if (!stashed.Add(servant.Index)) return; if (steamId != 0 && !Core.PlayerSettings.IsAutoStashMissionsEnabled(steamId)) return; Utilities.StashServantInventory(servant); }
+    static void StashOne(Entity servant, ulong steamId)
+    {
+        if (servant == Entity.Null || !Core.EntityManager.Exists(servant))
+            return;
+        if (servant.Has<CastleHeart>())
+            return;
+        if (!stashed.Add(servant.Index))
+            return;
+        if (steamId != 0 && !Core.PlayerSettings.IsAutoStashMissionsEnabled(steamId))
+            return;
+        Utilities.StashServantInventory(servant);
+    }
 }
 
 [HarmonyPatch]

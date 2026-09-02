@@ -8,6 +8,7 @@ When a servant returns from a mission, dump loot with the **same dest ranking** 
 - ClanShare ON: dest is the clan island except `.s cse` excluded plots (`GetServantStashPlotIds`).
 - Skip `NS` / special named chests as dests. Skip raided hearts.
 - Overflow dests: prefer non-special overflow, prefer the servant’s home plot.
+- Stash the **returning servants** only (`_TempServantList`). `MissionOwner` is the castle heart — never dump the heart (or a player) as if it were a servant.
 
 Do not give servant loot a different dest order than stash.
 
