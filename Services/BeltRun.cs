@@ -125,7 +125,7 @@ namespace Satisvampory.Services
         static void CollectStationWants(IReadOnlyList<int> plots, ulong ownerId, Dictionary<PrefabGUID, int> counts, BeltBook book)
         {
             var senders = BeltRecipe.ScanSenders(plots, ownerId);
-            var dests = BeltRecipe.DestCandidates(plots);
+            var sources = BeltRecipe.ScanSourceChests(plots);
             foreach (var plot in plots)
             {
                 foreach (var (group, station) in Core.RefinementStations.ReceiveBenches(plot))
@@ -211,7 +211,7 @@ namespace Satisvampory.Services
                             leftover[kv.Key] = extra;
                     }
                     if (leftover.Count > 0)
-                        BeltRecipe.DumpLeftover(station, input, leftover, dests, ownerId, plot);
+                        BeltRecipe.DumpLeftover(station, input, leftover, sources, group, plot);
 
                     foreach (var kv in keep)
                     {

@@ -14,7 +14,7 @@ Nameplate tokens: `s(\d+)` sender, `r(\d+)` receiver. Group number is the digit.
 - Fair-share split when several sinks want the same item.
 - Never drain `s#`/`r#` as generic covering/tidy sources (see dest ranking + tidy).
 - **Full crafts only.** An `r#` station pulls input only when the station hopper plus that line’s senders (matching `s#` plus overflow) can supply **every** ingredient for at least one craft. Cost uses the **matching-floor discount** (`WorkstationLevel.MatchingFloor` → 0.75, same rounding as vanilla). Up to the usual 5-craft feed of complete crafts.
-- **Dump leftover.** If the hopper cannot complete any enabled recipe, leftover input is dest-ranked out of the station (same `RankDeposit` as `.stash` / servant loot, silent). Extra above the complete-craft keep is dumped too. Do not leave a partial recipe sitting in the machine.
+- **Dump leftover.** If the hopper cannot complete any enabled recipe, leftover input goes back to **source chests on that line** (matching `s#`, seeded first, then other `s#` on the group, then overflow). Silent. Extra above the complete-craft keep is dumped the same way. Do not leave a partial recipe sitting in the machine, and do not dest-rank it into product chests.
 
 ### Chest → chest and convloop
 

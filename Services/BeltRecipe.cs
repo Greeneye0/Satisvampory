@@ -141,38 +141,62 @@ namespace Satisvampory.Services
             }
         }
 
-        public static List<(Entity stash, Entity inventory)> DestCandidates(IReadOnlyList<int> plots)
+        public struct SourceChests
         {
-            var dests = new List<(Entity stash, Entity inventory)>(100);
+            public Dictionary<int, List<(Entity stash, Entity inventory)>> Groups;
+            public List<(Entity stash, Entity inventory)> Overflow;
+        }
+
+        public static SourceChests ScanSourceChests(IReadOnlyList<int> plots)
+        {
+            var sources = new SourceChests
+            {
+                Groups = new Dictionary<int, List<(Entity stash, Entity inventory)>>(),
+                Overflow = new List<(Entity stash, Entity inventory)>()
+            };
             if (plots == null)
-                return dests;
+                return sources;
             for (var p = 0; p < plots.Count; p++)
             {
                 var plot = plots[p];
                 var heart = Core.TerritoryService.GetCastleHeart(plot);
                 if (heart == Entity.Null || TerritoryService.IsHeartRaided(heart))
                     continue;
-                foreach (var stash in Core.Stash.ChestsOnPlot(plot))
+                foreach (var (group, sending) in Core.Stash.SendChests(plot))
                 {
-                    if (stash.Has<Refinementstation>())
+                    if (!Core.EntityManager.Exists(sending) || sending.Has<Refinementstation>())
                         continue;
-                    var name = StashRouting.RawName(stash);
+                    var name = StashRouting.RawName(sending);
                     if (StashRouting.IsNoShareName(name) || StashRouting.IsSpecialName(name))
                         continue;
-                    if (!StashRouting.TryGetExternalInventory(stash, out var inv))
+                    if (!StashRouting.TryGetExternalInventory(sending, out var inv))
                         continue;
-                    dests.Add((stash, inv));
+                    if (!sources.Groups.TryGetValue(group, out var list))
+                    {
+                        list = new List<(Entity stash, Entity inventory)>();
+                        sources.Groups[group] = list;
+                    }
+                    list.Add((sending, inv));
+                }
+                foreach (var chest in Core.Stash.OverflowChests(plot))
+                {
+                    if (!StashRouting.TryGetExternalInventory(chest, out var inv))
+                        continue;
+                    sources.Overflow.Add((chest, inv));
                 }
             }
-            return dests;
+            return sources;
         }
 
         public static void DumpLeftover(Entity station, Entity input, Dictionary<PrefabGUID, int> leftover,
-            List<(Entity stash, Entity inventory)> dests, ulong ownerId, int plot)
+            SourceChests sources, int group, int plot)
         {
             if (leftover == null || leftover.Count == 0 || input == Entity.Null)
                 return;
-            if (dests == null || dests.Count == 0)
+            List<(Entity stash, Entity inventory)> line = null;
+            sources.Groups?.TryGetValue(group, out line);
+            var overflow = sources.Overflow;
+            if ((line == null || line.Count == 0) && (overflow == null || overflow.Count == 0))
                 return;
             var sgm = Core.ServerGameManager;
             foreach (var kv in leftover)
@@ -181,20 +205,38 @@ namespace Satisvampory.Services
                 var left = kv.Value;
                 if (item.GuidHash == 0 || left <= 0)
                     continue;
-                var ranked = StashRouting.OrderDepositDests(dests, item, ownerId, plot);
-                for (var d = 0; d < ranked.Count && left > 0; d++)
-                {
-                    var dest = ranked[d];
-                    if (dest.inventory == input)
-                        continue;
-                    var got = Utilities.TransferItems(sgm, input, dest.inventory, item, left);
-                    if (got <= 0)
-                        continue;
-                    var rank = StashRouting.RankDeposit(dest.stash, item, ownerId, true, plot);
-                    DestDebugLog.Move("station-input", plot, item, got, station, dest.stash, rank.Label + "/c" + rank.Class, left - got, "stays");
-                    left -= got;
-                }
+                if (line != null)
+                    left = PushToSources(sgm, station, input, item, left, line, plot, requireSeeded: true);
+                if (left > 0 && line != null)
+                    left = PushToSources(sgm, station, input, item, left, line, plot, requireSeeded: false);
+                if (left > 0 && overflow != null)
+                    PushToSources(sgm, station, input, item, left, overflow, plot, requireSeeded: null);
             }
+        }
+
+        static int PushToSources(ProjectM.Scripting.ServerGameManager sgm, Entity station, Entity input, PrefabGUID item, int left,
+            List<(Entity stash, Entity inventory)> chests, int plot, bool? requireSeeded)
+        {
+            for (var i = 0; i < chests.Count && left > 0; i++)
+            {
+                var chest = chests[i];
+                if (chest.inventory == input || chest.stash == Entity.Null || chest.inventory == Entity.Null)
+                    continue;
+                if (!Core.EntityManager.Exists(chest.stash) || !Core.EntityManager.Exists(chest.inventory))
+                    continue;
+                if (requireSeeded.HasValue)
+                {
+                    var has = StashRouting.InventoryHasItem(chest.inventory, item);
+                    if (requireSeeded.Value != has)
+                        continue;
+                }
+                var got = Utilities.TransferItems(sgm, input, chest.inventory, item, left);
+                if (got <= 0)
+                    continue;
+                DestDebugLog.Move("station-input", plot, item, got, station, chest.stash, "source/s#", left - got, "stays");
+                left -= got;
+            }
+            return left;
         }
     }
 }

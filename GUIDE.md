@@ -132,7 +132,7 @@ Same for any built-in or castle group: `.pull ore`, `.pull flowers`. Exact item 
 
 **Priority.** Stations get fed first, then chest receivers. When several sinks want the same item they split fairly.
 
-**Full crafts.** A machine on a belt only pulls if the line can supply every ingredient for at least one craft, after the matching-floor discount (25% off when the station sits on its floor). If it cannot finish a craft, leftover input is dumped back to dest chests instead of sitting in the hopper. `.s conv` says `not enough for a full craft` when that is why nothing is moving.
+**Full crafts.** A machine on a belt only pulls if the line can supply every ingredient for at least one craft, after the matching-floor discount (25% off when the station sits on its floor). If it cannot finish a craft, leftover input is dumped back to the **source chests** on that line (`s#`, then overflow) instead of sitting in the hopper. `.s conv` says `not enough for a full craft` when that is why nothing is moving.
 
 **Worked example: auto-feed a sawmill and stop at 500 planks**
 
