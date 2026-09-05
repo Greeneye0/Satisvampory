@@ -16,7 +16,7 @@ namespace Satisvampory.Services
     /// One conveyor sink: a station input or an r# chest inventory that still wants an item.
     /// Wanted -1 means "fill this seeded chest" (no numeric cap).
     /// </summary>
-    internal struct BeltSink
+    internal sealed class BeltSink
     {
         public Entity Inventory;
         public PrefabGUID Item;
@@ -55,7 +55,33 @@ namespace Satisvampory.Services
                 list = new List<BeltSink>();
                 grouped[key] = list;
             }
-            list.Add(new BeltSink(inventory, item, amount, chest));
+            BeltSink sink = null;
+            if (!chest)
+            {
+                foreach (var kv in grouped)
+                {
+                    if (kv.Key.hash != item.GuidHash)
+                        continue;
+                    for (var i = 0; i < kv.Value.Count; i++)
+                    {
+                        var existing = kv.Value[i];
+                        if (existing != null && !existing.Chest && existing.Inventory == inventory)
+                        {
+                            sink = existing;
+                            break;
+                        }
+                    }
+                    if (sink != null)
+                        break;
+                }
+            }
+            sink ??= new BeltSink(inventory, item, amount, chest);
+            for (var i = 0; i < list.Count; i++)
+            {
+                if (ReferenceEquals(list[i], sink))
+                    return;
+            }
+            list.Add(sink);
         }
 
         public bool TryGrouped(int group, PrefabGUID item, out List<BeltSink> sinks)
@@ -161,13 +187,8 @@ namespace Satisvampory.Services
             foreach (var station in stations)
             {
                 var groups = CollectReceiverGroups(station);
-                var group = 0;
-                foreach (var g in groups)
-                {
-                    group = g;
-                    break;
-                }
-                if (!TryDescribeStationRecipe(station, product, platformID, haveProduct, hasPlotCap, plotCapAmt, senders, group,
+                var groupList = new List<int>(groups);
+                if (!TryDescribeStationRecipe(station, product, platformID, haveProduct, hasPlotCap, plotCapAmt, senders, groupList,
                         out var recipeOn, out var plotCap, out var outputFull, out var incomplete, out var capNumber, out var inputs, out var inputAtFeedCap, out var stationHave))
                     continue;
 
@@ -264,7 +285,7 @@ namespace Satisvampory.Services
         }
 
         static bool TryDescribeStationRecipe(Entity station, PrefabGUID product, ulong platformID, int haveProduct, bool hasPlotCap, int plotCapAmt,
-            BeltRecipe.SenderPools senders, int group,
+            BeltRecipe.SenderPools senders, IReadOnlyList<int> groups,
             out bool recipeOn, out bool plotCap, out bool outputFull, out bool incomplete, out int? capNumber, out List<PrefabGUID> inputs, out Dictionary<PrefabGUID, bool> inputAtFeedCap, out Dictionary<PrefabGUID, int> stationHave)
         {
             recipeOn = false;
@@ -371,7 +392,7 @@ namespace Satisvampory.Services
                                 inStation += item.Amount;
                         }
                     }
-                    var available = inStation + senders.Of(group, requirement.Guid);
+                    var available = inStation + senders.Of(groups, requirement.Guid);
                     var fromMat = available / inputPerCraft;
                     if (fromMat < crafts)
                         crafts = fromMat;
@@ -556,14 +577,18 @@ namespace Satisvampory.Services
             var islandCounts = BeltCounts.OfPlots(logisticsIds);
             var senders = BeltRecipe.ScanSenders(logisticsIds, platformID);
 
+            var seenStations = new HashSet<Entity>();
             foreach (var logisticsId in logisticsIds)
-            foreach (var (group, station) in Core.RefinementStations.ReceiveBenches(logisticsId))
+            foreach (var (_, station) in Core.RefinementStations.ReceiveBenches(logisticsId))
             {
+                if (!seenStations.Add(station))
+                    continue;
                 if (!Core.EntityManager.Exists(station) || station.Has<Disabled>())
                     continue;
                 if (!station.Has<Refinementstation>() || !station.Has<RefinementstationRecipesBuffer>() || !station.Has<CastleWorkstation>())
                     continue;
 
+                var groupList = new List<int>(CollectReceiverGroups(station));
                 var receivingStation = station.Read<Refinementstation>();
                 var floorScale = BeltRecipe.FloorScale(station);
                 var inputInventoryEntity = receivingStation.InputInventoryEntity.GetEntityOnServer();
@@ -637,7 +662,7 @@ namespace Satisvampory.Services
                                         inStation += inventoryBuffer[i].Amount;
                                 }
                             }
-                            var available = inStation + senders.Of(group, requirement.Guid);
+                            var available = inStation + senders.Of(groupList, requirement.Guid);
                             var fromMat = available / inputPerCraft;
                             if (fromMat < crafts)
                                 crafts = fromMat;

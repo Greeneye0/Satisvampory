@@ -13,7 +13,7 @@ namespace Satisvampory.Services
     /// </summary>
     internal static class BeltRecipe
     {
-        public const int StationFeedMul = 5;
+        public const int StationFeedMul = 1;
 
         public static float FloorScale(Entity station)
         {
@@ -77,6 +77,21 @@ namespace Satisvampory.Services
                     n += overflow;
                 if (Groups != null && Groups.TryGetValue(group, out var grouped) && grouped.TryGetValue(item, out var send))
                     n += send;
+                return n;
+            }
+
+            public int Of(IReadOnlyList<int> groups, PrefabGUID item)
+            {
+                var n = 0;
+                if (Overflow != null && Overflow.TryGetValue(item, out var overflow))
+                    n += overflow;
+                if (groups == null || Groups == null)
+                    return n;
+                for (var i = 0; i < groups.Count; i++)
+                {
+                    if (Groups.TryGetValue(groups[i], out var grouped) && grouped.TryGetValue(item, out var send))
+                        n += send;
+                }
                 return n;
             }
         }
@@ -189,14 +204,28 @@ namespace Satisvampory.Services
         }
 
         public static void DumpLeftover(Entity station, Entity input, Dictionary<PrefabGUID, int> leftover,
-            SourceChests sources, int group, int plot)
+            SourceChests sources, IReadOnlyList<int> groups, int plot)
         {
             if (leftover == null || leftover.Count == 0 || input == Entity.Null)
                 return;
-            List<(Entity stash, Entity inventory)> line = null;
-            sources.Groups?.TryGetValue(group, out line);
+            var line = new List<(Entity stash, Entity inventory)>();
+            var seen = new HashSet<Entity>();
+            if (groups != null && sources.Groups != null)
+            {
+                for (var g = 0; g < groups.Count; g++)
+                {
+                    if (!sources.Groups.TryGetValue(groups[g], out var chests) || chests == null)
+                        continue;
+                    for (var i = 0; i < chests.Count; i++)
+                    {
+                        if (chests[i].stash == Entity.Null || !seen.Add(chests[i].stash))
+                            continue;
+                        line.Add(chests[i]);
+                    }
+                }
+            }
             var overflow = sources.Overflow;
-            if ((line == null || line.Count == 0) && (overflow == null || overflow.Count == 0))
+            if (line.Count == 0 && (overflow == null || overflow.Count == 0))
                 return;
             var sgm = Core.ServerGameManager;
             foreach (var kv in leftover)
@@ -205,9 +234,9 @@ namespace Satisvampory.Services
                 var left = kv.Value;
                 if (item.GuidHash == 0 || left <= 0)
                     continue;
-                if (line != null)
+                if (line.Count > 0)
                     left = PushToSources(sgm, station, input, item, left, line, plot, requireSeeded: true);
-                if (left > 0 && line != null)
+                if (left > 0 && line.Count > 0)
                     left = PushToSources(sgm, station, input, item, left, line, plot, requireSeeded: false);
                 if (left > 0 && overflow != null)
                     PushToSources(sgm, station, input, item, left, overflow, plot, requireSeeded: null);

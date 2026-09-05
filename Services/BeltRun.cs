@@ -128,8 +128,21 @@ namespace Satisvampory.Services
             var sources = BeltRecipe.ScanSourceChests(plots);
             foreach (var plot in plots)
             {
+                var groupsByStation = new Dictionary<Entity, List<int>>();
                 foreach (var (group, station) in Core.RefinementStations.ReceiveBenches(plot))
                 {
+                    if (!groupsByStation.TryGetValue(station, out var groups))
+                    {
+                        groups = new List<int>();
+                        groupsByStation[station] = groups;
+                    }
+                    if (!groups.Contains(group))
+                        groups.Add(group);
+                }
+                foreach (var kv in groupsByStation)
+                {
+                    var station = kv.Key;
+                    var groups = kv.Value;
                     if (!station.Has<Refinementstation>() || !station.Has<CastleWorkstation>() || !station.Has<RefinementstationRecipesBuffer>())
                         continue;
                     var input = station.Read<Refinementstation>().InputInventoryEntity.GetEntityOnServer();
@@ -180,7 +193,7 @@ namespace Satisvampory.Services
                             if (perCraft <= 0)
                                 continue;
                             have.TryGetValue(req.Guid, out var inStation);
-                            var available = inStation + senders.Of(group, req.Guid);
+                            var available = inStation + senders.Of(groups, req.Guid);
                             var fromMat = available / perCraft;
                             if (fromMat < crafts)
                                 crafts = fromMat;
@@ -203,22 +216,24 @@ namespace Satisvampory.Services
                     }
 
                     var leftover = new Dictionary<PrefabGUID, int>();
-                    foreach (var kv in have)
+                    foreach (var row in have)
                     {
-                        keep.TryGetValue(kv.Key, out var stay);
-                        var extra = kv.Value - stay;
+                        keep.TryGetValue(row.Key, out var stay);
+                        var extra = row.Value - stay;
                         if (extra > 0)
-                            leftover[kv.Key] = extra;
+                            leftover[row.Key] = extra;
                     }
                     if (leftover.Count > 0)
-                        BeltRecipe.DumpLeftover(station, input, leftover, sources, group, plot);
+                        BeltRecipe.DumpLeftover(station, input, leftover, sources, groups, plot);
 
-                    foreach (var kv in keep)
+                    foreach (var row in keep)
                     {
-                        have.TryGetValue(kv.Key, out var inStation);
-                        var want = kv.Value - inStation;
-                        if (want > 0)
-                            book.Want(group, kv.Key, input, want, chest: false);
+                        have.TryGetValue(row.Key, out var inStation);
+                        var want = row.Value - inStation;
+                        if (want <= 0)
+                            continue;
+                        for (var g = 0; g < groups.Count; g++)
+                            book.Want(groups[g], row.Key, input, want, chest: false);
                     }
                 }
             }

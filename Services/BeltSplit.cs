@@ -99,11 +99,17 @@ namespace Satisvampory.Services
                     continue;
 
                 var numbered = new List<(int list, int index, BeltSink sink)>();
+                var seen = new HashSet<BeltSink>();
                 for (var li = 0; li < lists.Count; li++)
                 {
                     var list = lists[li];
                     for (var i = list.Count - 1; i >= 0; i--)
-                        numbered.Add((li, i, list[i]));
+                    {
+                        var sink = list[i];
+                        if (sink == null || !seen.Add(sink))
+                            continue;
+                        numbered.Add((li, i, sink));
+                    }
                 }
 
                 var totalWanted = 0;

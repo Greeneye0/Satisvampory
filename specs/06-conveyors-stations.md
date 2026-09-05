@@ -13,7 +13,7 @@ Nameplate tokens: `s(\d+)` sender, `r(\d+)` receiver. Group number is the digit.
 - Overflow chests ignore groups; senders stay on their `s#`/`r#` group.
 - Fair-share split when several sinks want the same item.
 - Never drain `s#`/`r#` as generic covering/tidy sources (see dest ranking + tidy).
-- **Full crafts only.** An `r#` station pulls input only when the station hopper plus that line’s senders (matching `s#` plus overflow) can supply **every** ingredient for at least one craft. Cost uses the **matching-floor discount** (`WorkstationLevel.MatchingFloor` → 0.75, same rounding as vanilla). Up to the usual 5-craft feed of complete crafts.
+- **Full crafts only.** An `r#` station pulls input only when the hopper plus senders on **every** `r#` on that plate (plus overflow) can supply **every** ingredient for **one** craft. Cost uses the **matching-floor discount** (`WorkstationLevel.MatchingFloor` → 0.75, same rounding as vanilla). Do not queue extra crafts. A plate like `R5R4S4` is one station, not one dump/pull per token.
 - **Dump leftover.** If the hopper cannot complete any enabled recipe, leftover input goes back to **source chests on that line** (matching `s#`, seeded first, then other `s#` on the group, then overflow). Silent. Extra above the complete-craft keep is dumped the same way. Do not leave a partial recipe sitting in the machine, and do not dest-rank it into product chests.
 
 ### Chest → chest and convloop
@@ -28,7 +28,7 @@ Do not turn convloop on by default. Loops will vacuum a castle.
 `.s conv <item>`: why that product is not moving (station, line, cap, reserve).
 `.s need`: top 10 station inputs. Higher tier first, then lowest stock after reserve. Shows demand, total, reserve.
 
-Station feed multiplier **5 complete crafts**. Clan island item counts are snapshotted per drain generation.
+Station feed is **one complete craft**. Clan island item counts are snapshotted per drain generation.
 
 ## Salvage (`.s sal`)
 
