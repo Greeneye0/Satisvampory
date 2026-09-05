@@ -15,7 +15,6 @@ namespace Satisvampory.Services
     /// </summary>
     internal static class BeltRun
     {
-        const int StationFeedMul = 5;
         const int SpawnerFeedMul = 2;
         const int BrazierMin = 10;
 
@@ -125,6 +124,8 @@ namespace Satisvampory.Services
 
         static void CollectStationWants(IReadOnlyList<int> plots, ulong ownerId, Dictionary<PrefabGUID, int> counts, BeltBook book)
         {
+            var senders = BeltRecipe.ScanSenders(plots, ownerId);
+            var dests = BeltRecipe.DestCandidates(plots);
             foreach (var plot in plots)
             {
                 foreach (var (group, station) in Core.RefinementStations.ReceiveBenches(plot))
@@ -134,9 +135,9 @@ namespace Satisvampory.Services
                     var input = station.Read<Refinementstation>().InputInventoryEntity.GetEntityOnServer();
                     if (input == Entity.Null || !Core.EntityManager.Exists(input))
                         continue;
-                    var floor = station.Read<CastleWorkstation>().WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor) ? 0.75f : 1f;
-                    if (!Core.ServerGameManager.TryGetBuffer<InventoryBuffer>(input, out var inputSlots))
-                        continue;
+                    var floor = BeltRecipe.FloorScale(station);
+                    var have = BeltRecipe.CountAll(input);
+                    var keep = new Dictionary<PrefabGUID, int>();
                     var recipes = station.ReadBuffer<RefinementstationRecipesBuffer>();
                     for (var r = 0; r < recipes.Length; r++)
                     {
@@ -147,7 +148,6 @@ namespace Satisvampory.Services
                             continue;
                         var remainingOutputs = int.MaxValue;
                         var outputPerCraft = 1;
-                        var capped = false;
                         if (recipeEnt.Has<RecipeOutputBuffer>())
                         {
                             var outputs = recipeEnt.ReadBuffer<RecipeOutputBuffer>();
@@ -159,31 +159,66 @@ namespace Satisvampory.Services
                                     continue;
                                 remainingOutputs = cap - haveOut;
                                 outputPerCraft = outputs[0].Amount > 0 ? outputs[0].Amount : 1;
-                                capped = true;
                             }
                         }
                         if (!recipeEnt.Has<RecipeRequirementBuffer>())
                             continue;
                         var requirements = recipeEnt.ReadBuffer<RecipeRequirementBuffer>();
+                        var crafts = BeltRecipe.StationFeedMul;
+                        if (remainingOutputs != int.MaxValue)
+                        {
+                            var fromCap = remainingOutputs / outputPerCraft;
+                            if (fromCap < crafts)
+                                crafts = fromCap;
+                        }
                         for (var q = 0; q < requirements.Length; q++)
                         {
                             var req = requirements[q];
-                            var perCraft = Mathf.RoundToInt(req.Amount * floor);
-                            var want = StationFeedMul * perCraft;
-                            if (capped)
-                            {
-                                var forRemaining = remainingOutputs * perCraft / outputPerCraft;
-                                if (forRemaining < want)
-                                    want = forRemaining;
-                            }
-                            for (var i = 0; i < inputSlots.Length; i++)
-                            {
-                                if (inputSlots[i].ItemType.Equals(req.Guid))
-                                    want -= inputSlots[i].Amount;
-                            }
-                            if (want > 0)
-                                book.Want(group, req.Guid, input, want, chest: false);
+                            if (req.Guid.GuidHash == 0)
+                                continue;
+                            var perCraft = BeltRecipe.PerCraft(req.Amount, floor);
+                            if (perCraft <= 0)
+                                continue;
+                            have.TryGetValue(req.Guid, out var inStation);
+                            var available = inStation + senders.Of(group, req.Guid);
+                            var fromMat = available / perCraft;
+                            if (fromMat < crafts)
+                                crafts = fromMat;
                         }
+                        if (crafts <= 0)
+                            continue;
+                        for (var q = 0; q < requirements.Length; q++)
+                        {
+                            var req = requirements[q];
+                            if (req.Guid.GuidHash == 0)
+                                continue;
+                            var perCraft = BeltRecipe.PerCraft(req.Amount, floor);
+                            if (perCraft <= 0)
+                                continue;
+                            var target = crafts * perCraft;
+                            keep.TryGetValue(req.Guid, out var already);
+                            if (target > already)
+                                keep[req.Guid] = target;
+                        }
+                    }
+
+                    var leftover = new Dictionary<PrefabGUID, int>();
+                    foreach (var kv in have)
+                    {
+                        keep.TryGetValue(kv.Key, out var stay);
+                        var extra = kv.Value - stay;
+                        if (extra > 0)
+                            leftover[kv.Key] = extra;
+                    }
+                    if (leftover.Count > 0)
+                        BeltRecipe.DumpLeftover(station, input, leftover, dests, ownerId, plot);
+
+                    foreach (var kv in keep)
+                    {
+                        have.TryGetValue(kv.Key, out var inStation);
+                        var want = kv.Value - inStation;
+                        if (want > 0)
+                            book.Want(group, kv.Key, input, want, chest: false);
                     }
                 }
             }

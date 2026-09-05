@@ -1,6 +1,6 @@
 # 01 — Dest ranking
 
-**This is the shared dest contract.** `.stash`, RR (double-tap R / `.s ss`), `.s tidy`, servant mission auto-stash, covering park, and heart-upgrade chest dests all use `StashRouting.RankDeposit` (or tidy’s wrapper around it). Do not invent a second order.
+**This is the shared dest contract.** `.stash`, RR (double-tap R / `.s ss`), `.s tidy`, servant mission auto-stash, covering park, heart-upgrade chest dests, and leftover **station-input dumps** (conveyor hoppers that cannot complete a craft) all use `StashRouting.RankDeposit` (or tidy’s wrapper around it). Do not invent a second order.
 
 Ranking decides **WHERE** an already-decided amount goes. It does not decide **HOW MUCH**. Amounts come from reserve, covering targets, pull quantity, etc.
 

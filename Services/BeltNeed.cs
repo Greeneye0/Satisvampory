@@ -102,8 +102,6 @@ namespace Satisvampory.Services
 
     internal static class BeltInspect
     {
-        const int FeedBurst = 5;
-
         /// <summary>
         /// READ-ONLY snapshot of conveyor feed for crafted product X.
         /// Does not call TransferItems, DistributeInventory, or write stashes.
@@ -142,6 +140,7 @@ namespace Satisvampory.Services
             var territoryCounts = BeltCounts.OfPlots(logisticsIds);
             territoryCounts.TryGetValue(product, out var haveProduct);
             var hasPlotCap = Core.PlayerSettings.TryGetItemCap(platformID, product, out var plotCapAmt);
+            var senders = BeltRecipe.ScanSenders(logisticsIds, platformID);
 
             var stations = new List<Entity>();
             var seenStations = new HashSet<Entity>();
@@ -157,17 +156,23 @@ namespace Satisvampory.Services
                 }
             }
 
-            var matched = new List<(Entity station, string stationName, HashSet<int> groups, bool recipeOn, bool plotCap, bool outputFull, int? capNumber, List<PrefabGUID> inputs, Dictionary<PrefabGUID, bool> inputAtFeedCap, Dictionary<PrefabGUID, int> stationHave)>();
+            var matched = new List<(Entity station, string stationName, HashSet<int> groups, bool recipeOn, bool plotCap, bool outputFull, bool incomplete, int? capNumber, List<PrefabGUID> inputs, Dictionary<PrefabGUID, bool> inputAtFeedCap, Dictionary<PrefabGUID, int> stationHave)>();
 
             foreach (var station in stations)
             {
-                if (!TryDescribeStationRecipe(station, product, platformID, haveProduct, hasPlotCap, plotCapAmt,
-                        out var recipeOn, out var plotCap, out var outputFull, out var capNumber, out var inputs, out var inputAtFeedCap, out var stationHave))
+                var groups = CollectReceiverGroups(station);
+                var group = 0;
+                foreach (var g in groups)
+                {
+                    group = g;
+                    break;
+                }
+                if (!TryDescribeStationRecipe(station, product, platformID, haveProduct, hasPlotCap, plotCapAmt, senders, group,
+                        out var recipeOn, out var plotCap, out var outputFull, out var incomplete, out var capNumber, out var inputs, out var inputAtFeedCap, out var stationHave))
                     continue;
 
                 var stationName = station.EntityName();
-                var groups = CollectReceiverGroups(station);
-                matched.Add((station, stationName, groups, recipeOn, plotCap, outputFull, capNumber, inputs, inputAtFeedCap, stationHave));
+                matched.Add((station, stationName, groups, recipeOn, plotCap, outputFull, incomplete, capNumber, inputs, inputAtFeedCap, stationHave));
             }
 
             if (matched.Count == 0)
@@ -179,7 +184,7 @@ namespace Satisvampory.Services
             // Recipe-ON stations first so an off recipe on another plot does not lead the chat.
             for (var pass = 0; pass < 2; pass++)
             {
-                foreach (var (station, stationName, groups, recipeOn, plotCap, outputFull, capNumber, inputs, inputAtFeedCap, stationHave) in matched)
+                foreach (var (station, stationName, groups, recipeOn, plotCap, outputFull, incomplete, capNumber, inputs, inputAtFeedCap, stationHave) in matched)
                 {
                     if (pass == 0 && !recipeOn) continue;
                     if (pass == 1 && recipeOn) continue;
@@ -195,13 +200,15 @@ namespace Satisvampory.Services
                     }
                     else if (outputFull)
                         lines.Add($"{stationName} is making {itemName}. Not taking more, output full.");
+                    else if (incomplete)
+                        lines.Add($"{stationName} is making {itemName}. Not taking more, not enough for a full craft.");
                     else
                         lines.Add($"{stationName} is making {itemName}.");
 
                     if (groups.Count == 0)
                         continue;
 
-                    var senders = CollectMatchingSenders(logisticsIds, groups);
+                    var stashSenders = CollectMatchingSenders(logisticsIds, groups);
                     var receivingStation = station.Read<Refinementstation>();
                     var inputInventory = receivingStation.InputInventoryEntity.GetEntityOnServer();
 
@@ -211,7 +218,7 @@ namespace Satisvampory.Services
                         var thisInputAtFeedCap = inputAtFeedCap.TryGetValue(input, out var atCap) && atCap;
                         var canAccept = InventoryCanAccept(inputInventory, input);
 
-                        foreach (var (stash, stashName, stashTerritoryId) in senders)
+                        foreach (var (stash, stashName, stashTerritoryId) in stashSenders)
                         {
                             SnapshotStashItem(stash, input, out var have, out var stackableHave);
                             if (have <= 0) continue;
@@ -229,6 +236,8 @@ namespace Satisvampory.Services
                                 why = "Not moving, plot cap.";
                             else if (outputFull)
                                 why = "Not moving, output full.";
+                            else if (incomplete)
+                                why = "Not moving, not enough for a full craft.";
                             else if (thisInputAtFeedCap)
                             {
                                 stationHave.TryGetValue(input, out var haveInStation);
@@ -255,24 +264,20 @@ namespace Satisvampory.Services
         }
 
         static bool TryDescribeStationRecipe(Entity station, PrefabGUID product, ulong platformID, int haveProduct, bool hasPlotCap, int plotCapAmt,
-            out bool recipeOn, out bool plotCap, out bool outputFull, out int? capNumber, out List<PrefabGUID> inputs, out Dictionary<PrefabGUID, bool> inputAtFeedCap, out Dictionary<PrefabGUID, int> stationHave)
+            BeltRecipe.SenderPools senders, int group,
+            out bool recipeOn, out bool plotCap, out bool outputFull, out bool incomplete, out int? capNumber, out List<PrefabGUID> inputs, out Dictionary<PrefabGUID, bool> inputAtFeedCap, out Dictionary<PrefabGUID, int> stationHave)
         {
             recipeOn = false;
             plotCap = false;
             outputFull = false;
+            incomplete = false;
             capNumber = null;
             inputs = new List<PrefabGUID>();
             inputAtFeedCap = new Dictionary<PrefabGUID, bool>();
             stationHave = new Dictionary<PrefabGUID, int>();
 
             var recipesBuffer = station.ReadBuffer<RefinementstationRecipesBuffer>();
-            var floorScale = 1f;
-            if (station.Has<CastleWorkstation>())
-            {
-                var castleWorkstation = station.Read<CastleWorkstation>();
-                if (castleWorkstation.WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor))
-                    floorScale = 0.75f;
-            }
+            var floorScale = BeltRecipe.FloorScale(station);
 
             var receivingStation = station.Read<Refinementstation>();
             var inputInventoryEntity = receivingStation.InputInventoryEntity.GetEntityOnServer();
@@ -288,6 +293,7 @@ namespace Satisvampory.Services
             var anyEnabledUncapped = false;
             var anyEnabledCapped = false;
             var anyDisabled = false;
+            var anyComplete = false;
             var wantedByInput = new Dictionary<PrefabGUID, int>();
 
             foreach (var recipe in recipesBuffer)
@@ -341,26 +347,58 @@ namespace Satisvampory.Services
                 anyEnabledUncapped = true;
                 if (!recipeEntity.Has<RecipeRequirementBuffer>()) continue;
                 var requirements = recipeEntity.ReadBuffer<RecipeRequirementBuffer>();
-                foreach (var requirement in requirements)
+                var crafts = BeltRecipe.StationFeedMul;
+                if (recipeCapped)
                 {
-                    var inputPerCraft = Mathf.RoundToInt(requirement.Amount * floorScale);
-                    var feedShort = FeedBurst * inputPerCraft;
-                    if (recipeCapped)
-                    {
-                        var inputForRemaining = remainingOutputs * inputPerCraft / outputPerCraft;
-                        if (inputForRemaining < feedShort)
-                            feedShort = inputForRemaining;
-                    }
-
+                    var fromCap = remainingOutputs / outputPerCraft;
+                    if (fromCap < crafts)
+                        crafts = fromCap;
+                }
+                for (var q = 0; q < requirements.Length; q++)
+                {
+                    var requirement = requirements[q];
+                    if (requirement.Guid.GuidHash == 0)
+                        continue;
+                    var inputPerCraft = BeltRecipe.PerCraft(requirement.Amount, floorScale);
+                    if (inputPerCraft <= 0)
+                        continue;
+                    var inStation = 0;
                     if (haveInputInv)
                     {
                         foreach (var item in inputInv)
                         {
                             if (item.ItemType.Equals(requirement.Guid))
-                                feedShort -= item.Amount;
+                                inStation += item.Amount;
                         }
                     }
-
+                    var available = inStation + senders.Of(group, requirement.Guid);
+                    var fromMat = available / inputPerCraft;
+                    if (fromMat < crafts)
+                        crafts = fromMat;
+                }
+                if (crafts <= 0)
+                    continue;
+                anyComplete = true;
+                for (var q = 0; q < requirements.Length; q++)
+                {
+                    var requirement = requirements[q];
+                    if (requirement.Guid.GuidHash == 0)
+                        continue;
+                    var inputPerCraft = BeltRecipe.PerCraft(requirement.Amount, floorScale);
+                    if (inputPerCraft <= 0)
+                        continue;
+                    var inStation = 0;
+                    if (haveInputInv)
+                    {
+                        foreach (var item in inputInv)
+                        {
+                            if (item.ItemType.Equals(requirement.Guid))
+                                inStation += item.Amount;
+                        }
+                    }
+                    var feedShort = crafts * inputPerCraft - inStation;
+                    if (feedShort <= 0)
+                        continue;
                     wantedByInput.TryGetValue(requirement.Guid, out var alreadyQueued);
                     if (feedShort > alreadyQueued)
                         wantedByInput[requirement.Guid] = feedShort;
@@ -387,12 +425,13 @@ namespace Satisvampory.Services
                 stationHave[input] = haveInStation;
             }
 
-            // Three stop reasons. Never label input-stocked (wanted<=0) as cap.
+            // Stop reasons. Never label input-stocked (wanted<=0) as cap.
             outputFull = recipeOn && !InventoryCanAccept(outputInventoryEntity, product);
             var productAtCap = hasPlotCap && haveProduct >= plotCapAmt;
             plotCap = recipeOn && (productAtCap || (anyEnabledCapped && !anyEnabledUncapped));
             if (plotCap && hasPlotCap)
                 capNumber = plotCapAmt;
+            incomplete = recipeOn && !plotCap && !outputFull && !anyComplete;
 
             return true;
         }
@@ -515,6 +554,7 @@ namespace Satisvampory.Services
             foreach (var id in logisticsIds)
                 plotCounts[id] = BeltCounts.OfPlot(id);
             var islandCounts = BeltCounts.OfPlots(logisticsIds);
+            var senders = BeltRecipe.ScanSenders(logisticsIds, platformID);
 
             foreach (var logisticsId in logisticsIds)
             foreach (var (group, station) in Core.RefinementStations.ReceiveBenches(logisticsId))
@@ -525,8 +565,7 @@ namespace Satisvampory.Services
                     continue;
 
                 var receivingStation = station.Read<Refinementstation>();
-                var castleWorkstation = station.Read<CastleWorkstation>();
-                var floorScale = castleWorkstation.WorkstationLevel.HasFlag(WorkstationLevel.MatchingFloor) ? 0.75f : 1f;
+                var floorScale = BeltRecipe.FloorScale(station);
                 var inputInventoryEntity = receivingStation.InputInventoryEntity.GetEntityOnServer();
                 var haveInputInv = inputInventoryEntity != Entity.Null && Core.EntityManager.Exists(inputInventoryEntity)
                     && inputInventoryEntity.Has<InventoryBuffer>();
@@ -574,31 +613,59 @@ namespace Satisvampory.Services
                         if (!recipeEntity.Has<RecipeRequirementBuffer>())
                             continue;
                         var requirements = recipeEntity.ReadBuffer<RecipeRequirementBuffer>();
+                        var crafts = BeltRecipe.StationFeedMul;
+                        if (recipeCapped)
+                        {
+                            var fromCap = remainingOutputs / outputPerCraft;
+                            if (fromCap < crafts)
+                                crafts = fromCap;
+                        }
                         foreach (var requirement in requirements)
                         {
                             if (requirement.Guid.GuidHash == 0)
                                 continue;
                             inputs.Add(requirement.Guid);
-                            var inputPerCraft = Mathf.RoundToInt(requirement.Amount * floorScale);
-                            var feedShort = FeedBurst * inputPerCraft;
-                            if (recipeCapped)
-                            {
-                                var inputForRemaining = remainingOutputs * inputPerCraft / outputPerCraft;
-                                if (inputForRemaining < feedShort)
-                                    feedShort = inputForRemaining;
-                            }
+                            var inputPerCraft = BeltRecipe.PerCraft(requirement.Amount, floorScale);
+                            if (inputPerCraft <= 0)
+                                continue;
+                            var inStation = 0;
                             if (haveInputInv)
                             {
                                 for (var i = 0; i < inventoryBuffer.Length; i++)
                                 {
                                     if (inventoryBuffer[i].ItemType.Equals(requirement.Guid))
-                                        feedShort -= inventoryBuffer[i].Amount;
+                                        inStation += inventoryBuffer[i].Amount;
                                 }
                             }
-                            if (feedShort <= 0)
-                                continue;
-                            wantByItem.TryGetValue(requirement.Guid.GuidHash, out var haveWant);
-                            wantByItem[requirement.Guid.GuidHash] = haveWant + feedShort;
+                            var available = inStation + senders.Of(group, requirement.Guid);
+                            var fromMat = available / inputPerCraft;
+                            if (fromMat < crafts)
+                                crafts = fromMat;
+                        }
+                        if (crafts > 0)
+                        {
+                            foreach (var requirement in requirements)
+                            {
+                                if (requirement.Guid.GuidHash == 0)
+                                    continue;
+                                var inputPerCraft = BeltRecipe.PerCraft(requirement.Amount, floorScale);
+                                if (inputPerCraft <= 0)
+                                    continue;
+                                var inStation = 0;
+                                if (haveInputInv)
+                                {
+                                    for (var i = 0; i < inventoryBuffer.Length; i++)
+                                    {
+                                        if (inventoryBuffer[i].ItemType.Equals(requirement.Guid))
+                                            inStation += inventoryBuffer[i].Amount;
+                                    }
+                                }
+                                var feedShort = crafts * inputPerCraft - inStation;
+                                if (feedShort <= 0)
+                                    continue;
+                                wantByItem.TryGetValue(requirement.Guid.GuidHash, out var haveWant);
+                                wantByItem[requirement.Guid.GuidHash] = haveWant + feedShort;
+                            }
                         }
                         if (outputGuid.GuidHash != 0)
                             recipes.Add((outputGuid, inputs));
