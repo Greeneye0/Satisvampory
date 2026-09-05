@@ -39,7 +39,7 @@ namespace Satisvampory.Commands
             ctx.Reply("<color=white>CLAN</color>: <color=white>.s cs</color> all clan plots as one. <color=white>.s rh</color> repeat hunts per castle. <color=white>SERVER</color> admin: <color=white>.sg s</color>  <color=white>.sg rh</color>  <color=white>.sg sal</color>  (need adminauth). Player toggles still start off except scoop auto and .s dpl.");
             ctx.Reply("Example: <color=white>.s bagcap cotton 200</color> then <color=white>.s</color> — your bags. <color=white>.s cap cotton 200</color> — castle conveyors.");
             ctx.Reply("Example: <color=white>.s reserve plank 50</color> then <color=white>.pull plank 200</color> — pull ignores reserve. Name chests <color=white>s1</color>/<color=white>r1</color> then <color=white>.s co</color>.");
-            ctx.Reply("Ambiguous names: numbered list, then <color=white>.s 2</color> or <color=white>.s pick 2</color>. <color=white>.s settings</color>  <color=white>.s conv plank</color>  <color=white>.s need</color>");
+            ctx.Reply("Ambiguous names: numbered list, then <color=white>.s 2</color> or <color=white>.s pick 2</color>. <color=white>.s settings</color>  <color=white>.s item \"Iron Ore\"</color>  <color=white>.s conv plank</color>  <color=white>.s need</color>");
         }
 
         [Command(name: "pick", shortHand: "p", usage: ".s pick <number>", description: "Pick a numbered item from the last ambiguous name search.")]
@@ -798,6 +798,15 @@ namespace Satisvampory.Commands
                     ctx.Reply($"  <color=green>{member.Name}</color>: leave <color=white>{leftover}</color>. Stores: <color=white>{stores}</color> (takeable <color=white>{takeable}</color>)");
                 }
             }
+        }
+
+        [Command(name: "item", usage: ".s item <item>", description: "Per-plot chest counts, machines using the item (moving/not moving), cap, reserve, and total.")]
+        public static void ItemStockCmd(ChatCommandContext ctx, FoundItem item)
+        {
+            if (LogisticsCommands.HandleAmbiguousItem(ctx, item, PendingItemCommand.ItemStock))
+                return;
+            foreach (var line in ItemStock.Report(ctx.Event.SenderCharacterEntity, item.prefab))
+                ctx.Reply(line);
         }
 
         [Command(name: "conv", usage: ".s conv <item>", description: "Troubleshoot conveyor for a crafted item (station, line, why not moving).")]

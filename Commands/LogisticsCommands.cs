@@ -45,6 +45,7 @@ namespace Satisvampory.Commands;
             else if (cmd == PendingItemCommand.FindItem) InventoryCommands.LocateItem(ctx, item);
             else if (cmd == PendingItemCommand.AdminStash) InventoryCommands.GiveIntoPlot(ctx, item, pending.Amount);
             else if (cmd == PendingItemCommand.Conv) CastleCommands.ConvTroubleshoot(ctx, item);
+            else if (cmd == PendingItemCommand.ItemStock) CastleCommands.ItemStockCmd(ctx, item);
             else if (cmd == PendingItemCommand.ExcludeToggle) ScoopCommands.DoExcludeToggle(ctx, item);
             else if (cmd == PendingItemCommand.BagCapShow) ScoopCommands.DoBagCapShow(ctx, item);
             else if (cmd == PendingItemCommand.BagCapSet) ScoopCommands.DoBagCapSet(ctx, item, pending.Amount);

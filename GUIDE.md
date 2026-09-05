@@ -279,6 +279,12 @@ Or `.s rh all` for everything, `.s rh off` for the castle you stand on.
 .fc salvage
 ```
 
+**`.s item`.** One report for a single item: each chest count by plot, then each machine that uses it (hopper/output and whether the belt is **moving** or **not moving**), then cap and reserve, then the island total.
+
+```
+.s item "Iron Ore"
+```
+
 ---
 
 ## 11. `.s need`
@@ -429,6 +435,7 @@ Players can still stash and use belts on their own plot, but nothing leaves ches
 | Command | Scope | What it does | Example |
 | --- | --- | --- | --- |
 | `.s co` | You | Toggle conveyors | `.s co` |
+| `.s item <item>` | Plot / island | Chests by plot, machines (moving / not), cap, reserve, total | `.s item "Iron Ore"` |
 | `.s conv <item>` | Plot / island | Why a belt is not moving that item | `.s conv plank` |
 | `.s need` | Plot / island | Top 10 station inputs wanted | `.s need` |
 | `.s cs` / `.s gs` | Clan | Clan Share on or off | `.s cs` |
@@ -452,6 +459,7 @@ Players can still stash and use belts on their own plot, but nothing leaves ches
 
 | Command | What it does | Example |
 | --- | --- | --- |
+| `.s item <item>` | Chest counts, machines, cap, reserve, total | `.s item "Iron Ore"` |
 | `.s conv <item>` | Belt troubleshooting | `.s conv "Iron Ingot"` |
 | `.s need` | Station demand, stock, reserve | `.s need` |
 | `.s diag` | Mark the server log for dupes, missing items, or lag | `.s diag` |

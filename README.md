@@ -31,6 +31,7 @@ Type **.s help** in game. Player commands use the **.s** prefix, admin toggles u
 
 ## Diagnostics
 
+- `.s item <item>` - Per-plot chest counts, machines using it (moving / not moving), cap, reserve, and total.
 - `.s conv <item>` - Why a conveyor is not moving that item (station, line, reason).
 - **.s need** - Station demand, total stock, and reserve for the top 10 inputs.
 - **.s diag** - Drops a marker in the server's rolling log for dupes, missing items, or lag. Tell your admin the time.
@@ -142,6 +143,7 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 | Command | Scope | What it does | Example |
 | --- | --- | --- | --- |
 | `.s co` | You | Toggle conveyors | `.s co` |
+| `.s item <item>` | Plot / island | Chests by plot, machines (moving / not), cap, reserve, total | `.s item "Iron Ore"` |
 | `.s conv <item>` | Plot / island | Why a belt is not moving that item | `.s conv plank` |
 | `.s need` | Plot / island | Top 10 station inputs wanted | `.s need` |
 | `.s cs` / `.s gs` | Clan | Clan Share on or off | `.s cs` |
@@ -165,6 +167,7 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 
 | Command | What it does | Example |
 | --- | --- | --- |
+| `.s item <item>` | Chest counts, machines, cap, reserve, total | `.s item "Iron Ore"` |
 | `.s conv <item>` | Belt troubleshooting | `.s conv "Iron Ingot"` |
 | `.s need` | Station demand, stock, reserve | `.s need` |
 | `.s diag` | Mark the server log for dupes, missing items, or lag | `.s diag` |

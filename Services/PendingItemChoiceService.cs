@@ -21,6 +21,7 @@ namespace Satisvampory.Services
         FindItem,
         AdminStash,
         Conv,
+        ItemStock,
         ExcludeToggle,
         BagCapShow,
         BagCapSet,

@@ -62,6 +62,7 @@ If ClanShare is **ON**, dest/source is the **clan island**. If **OFF**, standing
 | `.s sp` | You | Silent pull (no “from where” chat) |
 | `.s ssh` | You | Silent stash |
 | `.s rrglobal` | You | Allow **off-plot** stash/RR. Default **OFF**. Does not shrink on-plot ClanShare dest |
+| `.s item "Iron Ore"` | Plot / clan island | Per-chest counts by plot, machines using it (moving / not moving), cap, reserve, total |
 | `.s conv plank` | Plot / clan island | Why a conveyor is not moving that product |
 | `.s need` | Plot / clan island | Top 10 station inputs the conveyor wants. Shows demand, total, reserve. Higher tier first, then lowest stock after reserve |
 

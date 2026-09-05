@@ -54,6 +54,15 @@ Find an item in chests. Always shows the plot you are standing on (`plot {id} L{
 
 Spotlights matching chests for the searching player.
 
+## `.s item <item>`
+
+Stock report on the standing plot, or the clan island if ClanShare is on. One chat line per fact (no number dump).
+
+1. Each chest that holds the item, grouped by plot (`(here)` on the standing plot).
+2. Each refinement station that consumes or produces it, with hopper/output counts and conveyor status: **moving**, **not moving** (reason), or **no conveyor**.
+3. Castle **cap** and **reserve**.
+4. **Total** (chests + station hoppers/outputs) last.
+
 ## `.fc` / `.findchest`
 
 Find chests by name. Same plot / `(here)` labels as `.fi`.
