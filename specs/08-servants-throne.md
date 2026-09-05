@@ -30,15 +30,16 @@ On every **send**, the sender (else heart owner) gets: who went, destination, su
 
 On every **return** (repeat on or off), connected **clan members** (and the heart owner) get destination, who came back, loot stacks, or who **died** / injured. Example: `Hunt returned (plot 86 L4) — Pools of Rebirth: Raven — 10 Oil. Repeat ON — sending again.` After the resend: `Repeat: sent Raven to Pools of Rebirth (95% repeat hunt).` The % is **`.sg rhmax`**, labeled repeat hunt so it is not the vanilla throne 100%. Return dest/zone/prefab come from the **finishing mission**, not the plot’s last send (two hunts from the same castle can be different lakes).
 
-On **login**, **haul first** (find-style: plot header, then `Nx Item` lines), then servants. Window is last logout, or **72 hours** if they have been away longer (or never recorded). ClanShare ON: clan island except `.s cse`. One item per chat line so vanilla does not treat a number dump as personal info. Example:
+On **login**, **servants first**, then haul (find-style: plot header, then `Nx Item` lines). Vanilla client chat history is a short ring and **cannot** be lengthened from the dedicated server, so haul items are listed **smallest count first** — the largest returned stack is the last chat line and stays on screen after older lines roll off. Window is last logout, or **72 hours** if they have been away longer (or never recorded). ClanShare ON: clan island except `.s cse`. One item per chat line so vanilla does not treat a number dump as personal info. Example:
 
-`Hunt haul since logout (2.2h)`  
-`<color=yellow>plot 86 L4</color>`  
-`  <color=white>689</color>x <color=green>Pristine Hide</color>`  
 `Servants`  
 `<color=yellow>plot 86 L4</color>`  
 `  Corey — hunt Ancient Village 1h 38m`  
-`  Raven — home`
+`  Raven — home`  
+`Hunt haul since logout (2.2h)`  
+`<color=yellow>plot 86 L4</color>`  
+`  <color=white>10</color>x <color=green>Oil</color>`  
+`  <color=white>689</color>x <color=green>Pristine Hide</color>`
 
 No haul: `Hunt haul …` then `  none`. Do not fire this on plugin boot for people already connected.
 

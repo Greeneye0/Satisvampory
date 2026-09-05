@@ -323,7 +323,7 @@ Example output line: `Iron Ore: demand 120, total 40, reserve 10`.
 - On **send**, the sender (or heart owner) sees who went, where, survival percent, and whether repeat is on. Example: `Hunt sent (plot 45 L2) — Haunted Iron Mine (99%): Stephen. Repeat ON (max 99%).`
 - On **return**, connected clan members and the heart owner see the destination, who came back, loot stacks, and anyone who died or was injured. Example: `Hunt returned (plot 86 L4) — Pools of Rebirth: Raven — 10 Oil. Repeat ON — sending again.`
 - If a repeat send fails, chat says `could not send` with the real reason instead of pretending they left.
-- On **login**, haul is listed first (per castle, `689x Pristine Hide` like `.fi`), then servants (home / hunt dest and time left / injured / dead). Window is last logout, or 72 hours if you were gone longer.
+- On **login**, servants first (home / hunt dest and time left / injured / dead), then haul per castle (`Nx Item` like `.fi`, smallest count first so the largest stack stays at the bottom of chat). Vanilla chat history cannot be lengthened from the server. Window is last logout, or 72 hours if you were gone longer.
 
 ---
 

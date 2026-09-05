@@ -17,7 +17,8 @@ using UnityEngine;
 namespace Satisvampory.Services
 {
     /// <summary>
-    /// On login: servants by plot/status, plus hunt haul since last logout or 72h (whichever is less).
+    /// On login: servants by plot/status, then hunt haul since last logout or 72h
+    /// (smallest stacks first so the largest count is the last chat line).
     /// </summary>
     internal static class HuntLoginNote
     {
@@ -194,10 +195,13 @@ namespace Satisvampory.Services
             if (haulLines.Count == 0 && servantLines.Count == 0)
                 return;
 
-            for (var i = 0; i < haulLines.Count; i++)
-                Tell(user, haulLines[i]);
+            // Vanilla client chat history is a short ring; oldest lines fall off the top.
+            // Servants first, then haul, with smallest stacks first so the largest count
+            // is the last (still-visible) line. Server plugins cannot lengthen that ring.
             for (var i = 0; i < servantLines.Count; i++)
                 Tell(user, servantLines[i]);
+            for (var i = 0; i < haulLines.Count; i++)
+                Tell(user, haulLines[i]);
             DestDebugLog.Note("throne", plots.Count > 0 ? plots[0] : -1, steamId,
                 "login servants=" + servantLines.Count + " haul=" + haulLines.Count
                 + " hours=" + hours.ToString("0.0", CultureInfo.InvariantCulture));
@@ -391,7 +395,11 @@ namespace Satisvampory.Services
                 var plot = plotOrder[p];
                 lines.Add("<color=yellow>" + Core.TerritoryService.FormatPlotLabel(plot) + "</color>");
                 var parts = new List<KeyValuePair<string, int>>(byPlot[plot]);
-                parts.Sort((a, b) => b.Value.CompareTo(a.Value));
+                parts.Sort((a, b) =>
+                {
+                    var c = a.Value.CompareTo(b.Value);
+                    return c != 0 ? c : string.Compare(a.Key, b.Key, StringComparison.OrdinalIgnoreCase);
+                });
                 for (var i = 0; i < parts.Count; i++)
                 {
                     lines.Add("  <color=white>" + parts[i].Value + "</color>x <color=green>" + parts[i].Key + "</color>");
