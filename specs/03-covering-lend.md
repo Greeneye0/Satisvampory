@@ -20,6 +20,8 @@ Skip raided hearts. Return unused **ledgered** kit/upgrade leftovers to the **so
 
 Do not drop the per-plot cap. A 4-pull cap starved covering (Grave Dust / Amethyst sitting in source while dests were empty).
 
+A pull is a **move**, not a search. A covering / upgrade attempt that moves nothing (no-source, reserve-blocked) refunds its pull (`RefundLendPull`). `MaxCoverMissesPerPass` = **24** refunded misses per pass bounds the walk; the cursor resumes past them next tick. Do not let unobtainable zero-stock items (Siege Golem Stone, EMP, seeds) burn the 12-pull cap every tick.
+
 Zero connected players: no lends; return leftovers.
 
 ## Occupied / leftover-bypass
@@ -64,12 +66,12 @@ Enough to place **3 copies** of whichever **unlocked** castle blueprint is hungr
 
 Materials needed on the dest plot, compared to **stock already on that plot**:
 
-1. **Kit-zero** (none of that kit mat on the plot): plank, stone brick, gem dust, copper, iron, stone, Blood Essence.
-2. Then:
-   - **New castle** (`!PlotHasAllKitTypes`): remaining **kit-more**, then other-zero (rotate), then other-more (rotate).
-   - **Established castle**: **other-zero** (rotate by plot cursor), then kit-more, then other-more (rotate).
+Only items with a **shortfall** (stock on plot < target) are listed.
 
-Missing-on-plot **first**. Do not top up planks that are already present while Grave Dust / Amethyst on the dest is still 0.
+1. **Kit-zero** pinned first (none of that kit mat on the plot): plank, stone brick, gem dust, copper, iron, stone, Blood Essence. **New castle** (`!PlotHasAllKitTypes`) also pins **kit-more** after it.
+2. Everything else is **one ring**: other-zero, other-more, and (established castle) kit-more, sorted by guid and rotated by the per-plot `coverCursor`.
+
+The cursor advances by the number of items **attempted** in the pass, not by 1. A tick that spends its budget on the first 12 items of the ring resumes at item 13 next tick, so a partial-stock item (Grave Dust 2/4) is reached within a few ticks. Never restart a tick at a fixed bucket: with ~19 unobtainable zero-stock items per plot the old bucket order never reached kit-more / other-more at all (1.0.92 and earlier).
 
 ## Heart upgrade costs
 

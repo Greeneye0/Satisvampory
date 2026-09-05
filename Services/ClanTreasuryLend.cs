@@ -162,6 +162,9 @@ namespace Satisvampory.Services
         // instead of spending the whole tick topping 200-stack kit types.
         const int MaxLendPullsPerTick = 120;
         const int MaxLendPullsPerPlot = 12;
+        // Refunded misses (no-source / reserve-blocked) per covering pass before the walk stops.
+        // Bounds tick time now that misses no longer cost a pull; the cursor resumes next tick.
+        const int MaxCoverMissesPerPass = 24;
         static readonly Dictionary<int, int> coverCursor = new();
         static readonly Dictionary<int, DateTime> leftAt = new();
         static int lendPullsLeft;
@@ -2187,6 +2190,13 @@ namespace Satisvampory.Services
             }
         }
 
+        /// <summary>
+        /// One needed list, one per-plot cursor. Kit-zero mats are pinned in front (new castle also pins
+        /// kit-more). Everything else with a shortfall is one sorted ring rotated by <c>coverCursor</c>;
+        /// LendTargetAmounts advances the cursor by the number of items it attempted, so a tick that
+        /// burns its budget on unobtainable zero-stock items resumes past them next tick instead of
+        /// restarting at the same bucket and starving partial-stock items (Grave Dust 2/4) forever.
+        /// </summary>
         static List<KeyValuePair<int, int>> OrderedCoveringTargets(int destPlot, Dictionary<int, int> targets, bool stockOnPlot)
         {
             var result = new List<KeyValuePair<int, int>>();
@@ -2196,8 +2206,7 @@ namespace Satisvampory.Services
             var kit = new HashSet<int>(kitOrder);
             var kitZero = new List<KeyValuePair<int, int>>();
             var kitMore = new List<KeyValuePair<int, int>>();
-            var otherZero = new List<KeyValuePair<int, int>>();
-            var otherMore = new List<KeyValuePair<int, int>>();
+            var rest = new List<KeyValuePair<int, int>>();
             foreach (var kv in targets)
             {
                 if (kv.Key == 0 || kv.Value <= 0)
@@ -2205,32 +2214,24 @@ namespace Satisvampory.Services
                 var local = 0;
                 if (stockOnPlot && destPlot >= 0)
                     local = CountVanillaOnPlot(destPlot, new PrefabGUID(kv.Key));
-                var zero = local <= 0;
+                if (local >= kv.Value)
+                    continue;
                 if (kit.Contains(kv.Key))
                 {
-                    if (zero) kitZero.Add(kv);
-                    else if (local < kv.Value) kitMore.Add(kv);
+                    if (local <= 0) kitZero.Add(kv);
+                    else kitMore.Add(kv);
                 }
-                else if (zero) otherZero.Add(kv);
-                else if (local < kv.Value) otherMore.Add(kv);
+                else rest.Add(kv);
             }
             kitZero.Sort((a, b) => Array.IndexOf(kitOrder, a.Key).CompareTo(Array.IndexOf(kitOrder, b.Key)));
             kitMore.Sort((a, b) => Array.IndexOf(kitOrder, a.Key).CompareTo(Array.IndexOf(kitOrder, b.Key)));
-            var newCastle = destPlot >= 0 && !PlotHasAllKitTypes(destPlot);
+            var newCastle = stockOnPlot && destPlot >= 0 && !PlotHasAllKitTypes(destPlot);
+            result.AddRange(kitZero);
             if (newCastle)
-            {
-                result.AddRange(kitZero);
                 result.AddRange(kitMore);
-                RotateAppend(result, otherZero, destPlot);
-                RotateAppend(result, otherMore, destPlot);
-            }
             else
-            {
-                result.AddRange(kitZero);
-                RotateAppend(result, otherZero, destPlot);
-                result.AddRange(kitMore);
-                RotateAppend(result, otherMore, destPlot);
-            }
+                rest.AddRange(kitMore);
+            RotateAppend(result, rest, stockOnPlot ? destPlot : -1);
             return result;
         }
 
@@ -2239,11 +2240,20 @@ namespace Satisvampory.Services
             if (rest.Count == 0)
                 return;
             rest.Sort((a, b) => a.Key.CompareTo(b.Key));
-            coverCursor.TryGetValue(plot, out var cursor);
+            var cursor = 0;
+            if (plot >= 0)
+                coverCursor.TryGetValue(plot, out cursor);
             var start = ((cursor % rest.Count) + rest.Count) % rest.Count;
-            coverCursor[plot] = cursor + 1;
             for (var i = 0; i < rest.Count; i++)
                 dest.Add(rest[(start + i) % rest.Count]);
+        }
+
+        static void AdvanceCoverCursor(int plot, int attempted)
+        {
+            if (plot < 0 || attempted <= 0)
+                return;
+            coverCursor.TryGetValue(plot, out var cursor);
+            coverCursor[plot] = (cursor + attempted) & 0x3fffffff;
         }
 
         static IEnumerator LendTargetAmounts(int destPlot, List<Entity> destInvs, Dictionary<int, int> targets,
@@ -2253,9 +2263,15 @@ namespace Satisvampory.Services
                 yield break;
 
             var destFull = false;
+            var attempted = 0;
+            var misses = 0;
+            try
+            {
             foreach (var kv in OrderedCoveringTargets(destPlot, targets, stockOnPlot))
             {
                 if (!CanLendPull())
+                    yield break;
+                if (misses >= MaxCoverMissesPerPass)
                     yield break;
                 var guid = kv.Key;
                 var target = kv.Value;
@@ -2294,6 +2310,7 @@ namespace Satisvampory.Services
                     continue;
 
                 ConsumeLendPull();
+                attempted++;
                 var fail = false;
                 var leftoverBlocked = 0;
                 var leftoverHave = 0;
@@ -2317,6 +2334,14 @@ namespace Satisvampory.Services
                         DestDebugLog.Miss(via, destPlot, type, leftoverHave, target, "leftover-blocked leftover=" + leftoverReserve);
                     else if (!fail)
                         DestDebugLog.Miss(via, destPlot, type, local, target, "no-source dest=" + destMode);
+                    // A search that moved nothing is not a pull. Give the budget back so the
+                    // 12-per-plot cap is spent on moves, not on unobtainable seeds; the miss cap
+                    // above still bounds the walk.
+                    if (!fail)
+                    {
+                        RefundLendPull();
+                        misses++;
+                    }
                 }
 
                 if (moved <= 0 && local == 0 && !DestHasRoomFor(useInvs, type))
@@ -2329,6 +2354,12 @@ namespace Satisvampory.Services
                     yield return null;
                     Core.TerritoryService.StartTimer();
                 }
+            }
+            }
+            finally
+            {
+                if (stockOnPlot)
+                    AdvanceCoverCursor(destPlot, attempted);
             }
         }
 
