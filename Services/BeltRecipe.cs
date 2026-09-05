@@ -94,6 +94,47 @@ namespace Satisvampory.Services
                 }
                 return n;
             }
+
+            /// <summary>
+            /// A station booked <paramref name="amount"/> of <paramref name="item"/>. Take it out of the
+            /// pool so the next station sharing the same s# chest does not plan a craft on the same
+            /// stacks. Two S2R2 stations over one 9-sap chest otherwise both "see" 9, both pull, both
+            /// end up short of a full craft, both dump, and repeat every tick.
+            /// </summary>
+            public void Claim(IReadOnlyList<int> groups, PrefabGUID item, int amount)
+            {
+                if (amount <= 0 || item.GuidHash == 0)
+                    return;
+                if (groups != null && Groups != null)
+                {
+                    for (var i = 0; i < groups.Count && amount > 0; i++)
+                    {
+                        if (!Groups.TryGetValue(groups[i], out var grouped) || !grouped.TryGetValue(item, out var send) || send <= 0)
+                            continue;
+                        var take = send < amount ? send : amount;
+                        grouped[item] = send - take;
+                        amount -= take;
+                    }
+                }
+                if (amount > 0 && Overflow != null && Overflow.TryGetValue(item, out var overflow) && overflow > 0)
+                {
+                    var take = overflow < amount ? overflow : amount;
+                    Overflow[item] = overflow - take;
+                }
+            }
+
+            /// <summary>
+            /// A station dumped <paramref name="amount"/> of <paramref name="item"/> back to its s# chest
+            /// this tick. Credit the pool so a sibling station can book it in the same pass.
+            /// </summary>
+            public void Credit(IReadOnlyList<int> groups, PrefabGUID item, int amount)
+            {
+                if (amount <= 0 || item.GuidHash == 0 || groups == null || groups.Count == 0 || Groups == null)
+                    return;
+                var stock = Stock(Groups, groups[0]);
+                stock.TryGetValue(item, out var have);
+                stock[item] = have + amount;
+            }
         }
 
         public static SenderPools ScanSenders(IReadOnlyList<int> plots, ulong fallbackOwner)

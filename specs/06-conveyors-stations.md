@@ -14,6 +14,7 @@ Nameplate tokens: `s(\d+)` sender, `r(\d+)` receiver. Group number is the digit.
 - Fair-share split when several sinks want the same item.
 - Never drain `s#`/`r#` as generic covering/tidy sources (see dest ranking + tidy).
 - **Full crafts only.** An `r#` station pulls input only when the hopper plus senders on **every** `r#` on that plate (plus overflow) can supply **every** ingredient for **one** craft. Cost uses the **matching-floor discount** (`WorkstationLevel.MatchingFloor` → 0.75, same rounding as vanilla). Do not queue extra crafts. A plate like `R5R4S4` is one station, not one dump/pull per token.
+- **Shared senders are claimed, not shared.** Stations on the same line are planned in order of **most input already held** first. When a station books a want, that amount is **claimed** out of the sender pool (`SenderPools.Claim`) before the next station plans, and a dumped leftover is **credited** back to the pool (`SenderPools.Credit`) in the same pass. Two `S2R2` stations over one chest holding 9 Venom Sap must resolve to one station with a full craft and one empty, not both pulling 4/5 and dumping every tick (1.0.93 and earlier flickered).
 - **Dump leftover.** If the hopper cannot complete any enabled recipe, leftover input goes back to **source chests on that line** (matching `s#`, seeded first, then other `s#` on the group, then overflow). Silent. Extra above the complete-craft keep is dumped the same way. Do not leave a partial recipe sitting in the machine, and do not dest-rank it into product chests.
 
 ### Chest → chest and convloop

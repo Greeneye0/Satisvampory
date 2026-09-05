@@ -139,17 +139,27 @@ namespace Satisvampory.Services
                     if (!groups.Contains(group))
                         groups.Add(group);
                 }
+                // Stations that already hold the most input plan first, so a hopper that is one
+                // stack short of a craft claims the shared s# stock before an empty sibling does.
+                var ordered = new List<(Entity station, List<int> groups, Entity input, Dictionary<PrefabGUID, int> have, int held)>();
                 foreach (var kv in groupsByStation)
                 {
                     var station = kv.Key;
-                    var groups = kv.Value;
                     if (!station.Has<Refinementstation>() || !station.Has<CastleWorkstation>() || !station.Has<RefinementstationRecipesBuffer>())
                         continue;
                     var input = station.Read<Refinementstation>().InputInventoryEntity.GetEntityOnServer();
                     if (input == Entity.Null || !Core.EntityManager.Exists(input))
                         continue;
-                    var floor = BeltRecipe.FloorScale(station);
                     var have = BeltRecipe.CountAll(input);
+                    var held = 0;
+                    foreach (var row in have)
+                        held += row.Value;
+                    ordered.Add((station, kv.Value, input, have, held));
+                }
+                ordered.Sort((a, b) => b.held.CompareTo(a.held));
+                foreach (var (station, groups, input, have, _) in ordered)
+                {
+                    var floor = BeltRecipe.FloorScale(station);
                     var keep = new Dictionary<PrefabGUID, int>();
                     var recipes = station.ReadBuffer<RefinementstationRecipesBuffer>();
                     for (var r = 0; r < recipes.Length; r++)
@@ -224,7 +234,11 @@ namespace Satisvampory.Services
                             leftover[row.Key] = extra;
                     }
                     if (leftover.Count > 0)
+                    {
                         BeltRecipe.DumpLeftover(station, input, leftover, sources, groups, plot);
+                        foreach (var row in leftover)
+                            senders.Credit(groups, row.Key, row.Value);
+                    }
 
                     foreach (var row in keep)
                     {
@@ -232,6 +246,7 @@ namespace Satisvampory.Services
                         var want = row.Value - inStation;
                         if (want <= 0)
                             continue;
+                        senders.Claim(groups, row.Key, want);
                         for (var g = 0; g < groups.Count; g++)
                             book.Want(groups[g], row.Key, input, want, chest: false);
                     }
