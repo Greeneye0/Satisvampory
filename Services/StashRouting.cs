@@ -459,7 +459,8 @@ namespace Satisvampory.Services
             return hasSmall && hasMat;
         }
 
-        /// <summary>Match tier for CategoryMatch specificity: 3 dest/custom group word, 2 ItemCategory word, 1 partial item name.</summary>
+        /// <summary>Match tier for CategoryMatch specificity: 4 custom group, 3 built-in group / essence alias, 2 ItemCategory word, 1 partial item name.</summary>
+        public const int TierCustomGroup = 4;
         public const int TierGroup = 3;
         public const int TierCategory = 2;
         public const int TierPartial = 1;
@@ -481,6 +482,30 @@ namespace Satisvampory.Services
                 return item.GuidHash == essenceHash;
             }
             var variants = TokenVariants(token);
+
+            // 1.0.102: custom groups first and above built-ins. Exact normalized name only
+            // (plural / spelling fold), never a substring.
+            foreach (var (name, _) in Core.PlayerSettings.ListCustomGroups(ownerId))
+            {
+                if (string.IsNullOrEmpty(name))
+                    continue;
+                var gNorm = ItemGroupService.NormalizeName(name);
+                if (gNorm.Length < 3)
+                    continue;
+                if (!VariantsOverlap(token, gNorm))
+                    continue;
+                foreach (var m in ItemGroupService.ResolveMembers(ownerId, name))
+                {
+                    if (m.GuidHash == item.GuidHash)
+                    {
+                        tier = TierCustomGroup;
+                        return true;
+                    }
+                }
+                // The token IS this custom group's name and the item is not in it: no fallback
+                // to a built-in or partial-name match on the same word.
+                return false;
+            }
 
             var tokenIsDestGroup = false;
             foreach (var v in variants)
@@ -515,25 +540,6 @@ namespace Satisvampory.Services
             // "Stone" is stone dests, not Miststone. Membership already failed.
             if (tokenIsDestGroup)
                 return false;
-
-            foreach (var (name, _) in Core.PlayerSettings.ListCustomGroups(ownerId))
-            {
-                if (string.IsNullOrEmpty(name))
-                    continue;
-                var gNorm = ItemGroupService.NormalizeName(name);
-                if (gNorm.Length < 3)
-                    continue;
-                if (!VariantsOverlap(token, gNorm))
-                    continue;
-                foreach (var m in ItemGroupService.ResolveMembers(ownerId, name))
-                {
-                    if (m.GuidHash == item.GuidHash)
-                    {
-                        tier = TierGroup;
-                        return true;
-                    }
-                }
-            }
 
             if (allowCategory && itemCat != ItemCategory.NONE)
             {
@@ -826,6 +832,7 @@ namespace Satisvampory.Services
 
         static string TierWord(int tier) => tier switch
         {
+            TierCustomGroup => "custom group",
             TierGroup => "group word",
             TierCategory => "item category",
             TierPartial => "partial name",

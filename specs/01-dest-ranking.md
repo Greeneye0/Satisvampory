@@ -48,11 +48,12 @@ Lower class wins. Then higher **specificity**, then **seeded** (already has the 
 
 | Tier | Token kind | Example |
 | --- | --- | --- |
-| 3 | **Group word**: built-in dest group (`alchemy`, `bone`, `blood`, …), custom group name, essence alias | `Alchemy` for Grave Dust (alchemy group member) |
+| 4 | **Custom group** name (`.s group create …`) | `AlchTest` for its members |
+| 3 | **Built-in group word** (`alchemy`, `bone`, `blood`, …), essence alias | `Alchemy` for Grave Dust (alchemy group member) |
 | 2 | **ItemCategory word** (vanilla category flag) | `Consumable` |
-| 1 | **Partial item name** | `Grave` for Grave Dust |
+| 1 | **Partial item name** (3+ chars, not all digits) | `Grave` for Grave Dust |
 
-A group word beats an ItemCategory word beats a partial name, regardless of token count. Exact item name is still its own class above all of these. To make a chest win by group, put the item in that group (`.s group bone add "Grave Dust"`); to win outright, name the chest the exact item (`Grave Dust R1S1`).
+Custom group beats built-in group beats ItemCategory word beats partial name, regardless of token count. Exact item name is still its own class above all of these. Group names match **exactly** after normalization (plural / spelling fold only), never as a substring. A token that is a custom group's name and whose item is not a member does **not** fall back to a built-in or partial match on that word (1.0.102). To make a chest win by group, put the item in that group (`.s group bone add "Grave Dust"`); to win outright, name the chest the exact item (`Grave Dust R1S1`).
 
 | Class | Label | Meaning |
 | --- | --- | --- |
