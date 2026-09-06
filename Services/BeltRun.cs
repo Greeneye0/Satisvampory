@@ -98,7 +98,7 @@ namespace Satisvampory.Services
                     var output = station.Read<Refinementstation>().OutputInventoryEntity.GetEntityOnServer();
                     if (output == Entity.Null)
                         continue;
-                    BeltSplit.FromGroup(book, sgm, group, output, overflow, ownerId, chest: false, applyReserve: false, sendingStash: default);
+                    BeltSplit.FromGroup(book, sgm, group, output, overflow, ownerId, chest: false, applyReserve: false, sendingStash: station);
                     if (Core.TerritoryService.ShouldUpdateYield())
                         yield return null;
                 }

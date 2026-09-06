@@ -269,16 +269,24 @@ namespace Satisvampory.Services
             if (line.Count == 0 && (overflow == null || overflow.Count == 0))
                 return;
             var sgm = Core.ServerGameManager;
+            ulong ownerId = 0;
+            Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out ownerId);
             foreach (var kv in leftover)
             {
                 var item = kv.Key;
                 var left = kv.Value;
                 if (item.GuidHash == 0 || left <= 0)
                     continue;
+                // 1.0.109: the source line is ordered by DEST RANKING for this item (priority '+',
+                // seeded s#, exact, category...), not "seeded first". Overflow stays last.
                 if (line.Count > 0)
-                    left = PushToSources(sgm, station, input, item, left, line, plot, requireSeeded: true);
-                if (left > 0 && line.Count > 0)
-                    left = PushToSources(sgm, station, input, item, left, line, plot, requireSeeded: false);
+                {
+                    var ranked = StashRouting.OrderDepositDests(line, item, ownerId, plot);
+                    if (ranked.Count > 0)
+                        left = PushToSources(sgm, station, input, item, left, ranked, plot, requireSeeded: null);
+                    if (left > 0)
+                        left = PushToSources(sgm, station, input, item, left, line, plot, requireSeeded: null);
+                }
                 if (left > 0 && overflow != null)
                     PushToSources(sgm, station, input, item, left, overflow, plot, requireSeeded: null);
             }

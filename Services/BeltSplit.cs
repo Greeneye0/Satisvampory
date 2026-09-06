@@ -72,6 +72,53 @@ namespace Satisvampory.Services
             return Utilities.TransferItems(sgm, from, to, item, amount);
         }
 
+        /// <summary>
+        /// 1.0.109: station output nobody on the line wants (no r#, or r# at production cap) is
+        /// pushed back by DEST RANKING on the island - priority '+', s#, exact, category, seeded,
+        /// generic - with overflow as the ranked last resort, instead of straight to overflow.
+        /// </summary>
+        static void PushBackRanked(ServerGameManager sgm, Entity station, Entity from, PrefabGUID item, int amount, Entity[] overflow, ulong ownerId)
+        {
+            if (amount <= 0 || from == Entity.Null || item.GuidHash == 0)
+                return;
+            var left = amount;
+            var plot = station != Entity.Null ? Core.TerritoryService.GetTerritoryId(station) : -1;
+            if (plot >= 0)
+            {
+                var plots = Core.TerritoryService.GetLogisticsTerritoryIds(plot);
+                var candidates = new List<(Entity stash, Entity inventory)>();
+                foreach (var p in plots ?? (IReadOnlyList<int>)new[] { plot })
+                {
+                    foreach (var stash in Core.Stash.ChestsOnPlot(p))
+                    {
+                        if (stash == Entity.Null || !Core.EntityManager.Exists(stash))
+                            continue;
+                        if (stash.Has<Refinementstation>() || stash.Has<ProjectM.CastleBuilding.CastleHeart>())
+                            continue;
+                        var plate = StashRouting.RawName(stash);
+                        if (StashRouting.IsNoShareName(plate) || StashRouting.IsSpecialName(plate))
+                            continue;
+                        if (!StashRouting.TryGetExternalInventory(stash, out var inv) || inv == from)
+                            continue;
+                        candidates.Add((stash, inv));
+                    }
+                }
+                foreach (var (stash, inv) in StashRouting.OrderDepositDests(candidates, item, ownerId, plot))
+                {
+                    if (left <= 0)
+                        break;
+                    var got = Move(sgm, from, inv, item, left);
+                    if (got <= 0)
+                        continue;
+                    left -= got;
+                    DestDebugLog.Move("conveyor", plot, item, got, station, stash, "pushback",
+                        Core.PlayerSettings.GetPullReserve(ownerId, item), "chest");
+                }
+            }
+            if (left > 0)
+                DumpToOverflow(sgm, from, item, left, overflow);
+        }
+
         static void DumpToOverflow(ServerGameManager sgm, Entity from, PrefabGUID item, int leftover, Entity[] overflow)
         {
             if (leftover <= 0 || overflow == null)
@@ -192,7 +239,7 @@ namespace Satisvampory.Services
                 if (!book.TryGrouped(group, item, out var sinks) || sinks == null)
                 {
                     if (!chest)
-                        DumpToOverflow(sgm, inventory, item, available, overflow);
+                        PushBackRanked(sgm, sendingStash, inventory, item, available, overflow, ownerId);
                     continue;
                 }
 
@@ -239,7 +286,7 @@ namespace Satisvampory.Services
                         }
                     }
                     if (extra > 0)
-                        DumpToOverflow(sgm, inventory, item, extra, overflow);
+                        PushBackRanked(sgm, sendingStash, inventory, item, extra, overflow, ownerId);
                 }
                 else
                 {
@@ -283,7 +330,7 @@ namespace Satisvampory.Services
                         }
                     }
                     if (!chest && moved < available)
-                        DumpToOverflow(sgm, inventory, item, available - moved, overflow);
+                        PushBackRanked(sgm, sendingStash, inventory, item, available - moved, overflow, ownerId);
                 }
             }
 
