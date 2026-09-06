@@ -58,6 +58,10 @@ Two or more chests anywhere on the island (ClanShare on) with the **same clean n
 - Twins that are also on the same belt line tie on rank and stay put; the balance comes from deposits, not from belts shuffling between them.
 - Different `+` counts are not twins: the higher one simply wins.
 
+## Restricted furniture (1.0.119)
+
+Vanilla restricted storage (Consumables, Jewel / Coin / Fish storage, soul-shard rules) rejects other categories at `TryAddItem`. A chest whose furniture cannot hold the item is class **97 `restricted`**: never a dest whatever the plate says, so a plate name can no longer make the stash pick a container that then silently refuses. `.s why` reports the restriction and what the name alone would have ranked.
+
 ## Exclusions `--word` (1.0.110)
 
 A token starting with `--` on the nameplate is an **exclusion**, not part of the name. `Weapons --copper --iron+` is the name `Weapons`, priority 1, and never takes anything `copper` or `iron` matches.

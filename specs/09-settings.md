@@ -40,7 +40,7 @@ Not scoop bagcap.
 ## Item aliases
 
 - **Server** aliases (`.sg alias`, admin) and built-ins (`be`, `gbe`, …) apply everywhere.
-- **Castle** aliases (`.s alias add / del`, 1.0.116) live on the castle owner's row. With ClanShare on they apply across the **whole clan island** (1.0.117): every owner's aliases resolve on every island castle for chest plates, `--exclusions`, and item arguments to `.fi` / `.pull` / group edits. Resolution: standing owner's alias, then other island owners', then server alias, then built-in. `.s alias` lists the island's aliases, marking the ones set on another clan castle. Same guards as server aliases (2–16 chars, no spaces, no dest words, no belt tokens); a castle alias cannot shadow a built-in.
+- **Castle** aliases (`.s alias add / del`, 1.0.116) live on the castle owner's row. With ClanShare on they apply across the **whole clan island** (1.0.117): every owner's aliases resolve on every island castle for chest plates, `--exclusions`, and item arguments to `.fi` / `.pull` / group edits. Resolution: standing owner's alias, then other island owners', then server alias, then built-in. `.s alias` lists the island's aliases, marking the ones set on another clan castle. Same guards as server aliases (3–16 chars, no spaces, no dest words, no belt tokens); a castle alias cannot shadow a built-in.
 
 ## Item groups (castle)
 

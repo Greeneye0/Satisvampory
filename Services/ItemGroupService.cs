@@ -174,7 +174,7 @@ namespace Satisvampory.Services
         {
             var key = FoundItemConverter.Normalize(alias);
             if (IsReservedAlias(key))
-                return "Alias must be 2–16 letters/digits with no spaces, and cannot be a dest word (blood, stone, salvage, s1, …).";
+                return "Alias must be 3–16 letters/digits with no spaces, and cannot be a dest word (blood, stone, salvage, s1, …).";
             if (builtInAliasKeys.Contains(key))
                 return "Cannot shadow built-in alias <color=white>" + key + "</color>.";
             if (prefab.GuidHash == 0)
@@ -200,7 +200,8 @@ namespace Satisvampory.Services
             if (string.IsNullOrWhiteSpace(alias))
                 return true;
             var t = FoundItemConverter.Normalize(alias);
-            if (t.Length < 2 || t.Length > 16)
+            // 1.0.119: player / admin aliases need 3-16 characters (built-ins like "be" are registered at boot).
+            if (t.Length < 3 || t.Length > 16)
                 return true;
             if (t.IndexOf(' ') >= 0)
                 return true;
@@ -557,7 +558,7 @@ namespace Satisvampory.Services
         {
             var key = FoundItemConverter.Normalize(alias);
             if (IsReservedAlias(key))
-                return "Alias must be 2–16 letters/digits with no spaces, and cannot be a dest word (blood, stone, salvage, s1, …).";
+                return "Alias must be 3–16 letters/digits with no spaces, and cannot be a dest word (blood, stone, salvage, s1, …).";
             if (builtInAliasKeys.Contains(key))
                 return "Cannot overwrite built-in alias <color=white>" + key + "</color>.";
             if (prefab.GuidHash == 0)

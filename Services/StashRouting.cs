@@ -998,6 +998,12 @@ namespace Satisvampory.Services
             var plate = RawName(stash);
             var destName = DestName(stash);
             var matchName = RankMatchName(plate, destName);
+            if (rank.Class == ClassRestricted)
+            {
+                AcceptsItem(stash, item, out var why);
+                var core = RankDepositCore(stash, item, ownerId, hasItem, standingPlot);
+                return $"{why} (name would be c{core.Class} {core.Label})";
+            }
             if (rank.Class == ClassExcluded)
             {
                 var word = ExcludedBy(stash, item, ownerId);
@@ -1245,10 +1251,68 @@ namespace Satisvampory.Services
         /// </summary>
         public const int ClassExcluded = 98;
         public const string LabelExcluded = "excluded";
+        public const int ClassRestricted = 97;
+        public const string LabelRestricted = "restricted";
+
+        /// <summary>
+        /// 1.0.119: does the furniture itself accept this item? Vanilla restricted storage
+        /// (Consumables, Jewel Storage, Coin Storage, ...) rejects other categories at TryAddItem,
+        /// so ranking such a chest first only makes the stash skip it silently.
+        /// </summary>
+        public static bool AcceptsItem(Entity stash, PrefabGUID item, out string reason)
+        {
+            reason = null;
+            if (stash == Entity.Null || item.GuidHash == 0 || !Core.EntityManager.Exists(stash))
+                return true;
+            try
+            {
+                var sgm = Core.ServerGameManager;
+                if (!sgm.TryGetBuffer<InventoryInstanceElement>(stash, out var instances) || instances.Length == 0)
+                    return true;
+                ItemData data = default;
+                if (Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(item, out var prefab))
+                    data = prefab.Read<ItemData>();
+                var soulshard = data.ItemCategory == ItemCategory.Soulshard;
+                string why = null;
+                foreach (var inst in instances)
+                {
+                    if (inst.RestrictedType != PrefabGUID.Empty && inst.RestrictedType != data.ItemTypeGUID)
+                    {
+                        why = "container only takes " + ItemLabel(inst.RestrictedType);
+                        continue;
+                    }
+                    if (inst.RestrictedCategory != 0 && (inst.RestrictedCategory & (long)data.ItemCategory) == 0)
+                    {
+                        why = "container restricted to " + ((ItemCategory)inst.RestrictedCategory).ToString().ToLowerInvariant();
+                        continue;
+                    }
+                    if (soulshard && inst.RestrictedCategory == 0)
+                    {
+                        why = "soul shards need a restricted container";
+                        continue;
+                    }
+                    return true;
+                }
+                reason = why ?? "container rejects this item";
+                return false;
+            }
+            catch
+            {
+                return true;
+            }
+        }
 
         public static DepositRank RankDeposit(Entity stash, PrefabGUID item, ulong ownerId, bool hasItem, int standingPlot = -1)
         {
             var rank = RankDepositCore(stash, item, ownerId, hasItem, standingPlot);
+            // 1.0.119: furniture that cannot hold the item is never a dest, whatever its name.
+            if (rank.Class < 90 && !AcceptsItem(stash, item, out _))
+            {
+                rank.Class = ClassRestricted;
+                rank.Spec = 0;
+                rank.Label = LabelRestricted;
+                return rank;
+            }
             // 1.0.110: "--word" on the plate: never a dest for items that word matches.
             if (rank.Class < 90 && ExcludedBy(stash, item, ownerId) != null)
             {
