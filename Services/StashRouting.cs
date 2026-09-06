@@ -1519,10 +1519,130 @@ namespace Satisvampory.Services
                 ranked.Add((rank, stash, inventory));
             }
             ranked.Sort((a, b) => a.rank.CompareTo(b.rank));
+            OrderTwinsEmptiestFirst(ranked, item);
             var result = new List<(Entity stash, Entity inventory)>(ranked.Count);
             foreach (var row in ranked)
                 result.Add((row.stash, row.inventory));
             return result;
+        }
+
+        /// <summary>
+        /// 1.0.112: twins = chests with the same clean name AND the same '+' count (>0) that tie
+        /// on rank, anywhere on the island. Within a twin run, the chest holding the LEAST of the
+        /// item goes first, so successive deposits balance across the twins.
+        /// </summary>
+        static void OrderTwinsEmptiestFirst(List<(DepositRank rank, Entity stash, Entity inventory)> ranked, PrefabGUID item)
+        {
+            var sgm = Core.ServerGameManager;
+            var i = 0;
+            while (i < ranked.Count)
+            {
+                var j = i + 1;
+                var boost = PriorityOf(ranked[i].stash);
+                var name = TwinKey(ranked[i].stash);
+                if (boost > 0 && name.Length > 0)
+                {
+                    while (j < ranked.Count
+                        && ranked[j].rank.CompareTo(ranked[i].rank) == 0
+                        && PriorityOf(ranked[j].stash) == boost
+                        && TwinKey(ranked[j].stash) == name)
+                        j++;
+                }
+                if (j - i > 1)
+                {
+                    var run = ranked.GetRange(i, j - i);
+                    run.Sort((a, b) => sgm.GetInventoryItemCount(a.inventory, item).CompareTo(sgm.GetInventoryItemCount(b.inventory, item)));
+                    for (var k = 0; k < run.Count; k++)
+                        ranked[i + k] = run[k];
+                }
+                i = j;
+            }
+        }
+
+        static string TwinKey(Entity stash)
+        {
+            var n = RawName(stash);
+            return string.IsNullOrWhiteSpace(n) ? "" : Normalize(n);
+        }
+
+        /// <summary>
+        /// The run of twins at the top of an already-ordered dest list (same name, same '+' > 0,
+        /// same rank as the first entry). Empty unless there are at least two.
+        /// </summary>
+        public static List<(Entity stash, Entity inventory)> TopTwins(List<(Entity stash, Entity inventory)> ordered, PrefabGUID item, ulong ownerId)
+        {
+            var twins = new List<(Entity stash, Entity inventory)>();
+            if (ordered == null || ordered.Count < 2)
+                return twins;
+            var first = ordered[0];
+            var boost = PriorityOf(first.stash);
+            var name = TwinKey(first.stash);
+            if (boost <= 0 || name.Length == 0)
+                return twins;
+            var firstRank = RankDeposit(first.stash, item, ownerId, InventoryHasItem(first.inventory, item));
+            twins.Add(first);
+            for (var i = 1; i < ordered.Count; i++)
+            {
+                var d = ordered[i];
+                if (PriorityOf(d.stash) != boost || TwinKey(d.stash) != name)
+                    break;
+                var r = RankDeposit(d.stash, item, ownerId, InventoryHasItem(d.inventory, item));
+                if (r.CompareTo(firstRank) != 0)
+                    break;
+                twins.Add(d);
+            }
+            if (twins.Count < 2)
+                twins.Clear();
+            return twins;
+        }
+
+        /// <summary>
+        /// Split <paramref name="amount"/> across twins so their counts of the item end as even as
+        /// possible: fill the lowest up toward the others first, then share the rest evenly.
+        /// Returns (dest, give) in the order to place them.
+        /// </summary>
+        public static List<((Entity stash, Entity inventory) dest, int give)> SplitAcrossTwins(List<(Entity stash, Entity inventory)> twins, PrefabGUID item, int amount)
+        {
+            var plan = new List<((Entity stash, Entity inventory), int)>();
+            if (twins == null || twins.Count < 2 || amount <= 0)
+                return plan;
+            var sgm = Core.ServerGameManager;
+            var counts = new int[twins.Count];
+            var total = amount;
+            for (var i = 0; i < twins.Count; i++)
+            {
+                counts[i] = sgm.GetInventoryItemCount(twins[i].inventory, item);
+                total += counts[i];
+            }
+            var target = (total + twins.Count - 1) / twins.Count;
+            var give = new int[twins.Count];
+            var left = amount;
+            // Pass 1: lift each twin up to the target, emptiest first.
+            var order = new List<int>();
+            for (var i = 0; i < twins.Count; i++) order.Add(i);
+            order.Sort((a, b) => counts[a].CompareTo(counts[b]));
+            foreach (var i in order)
+            {
+                if (left <= 0) break;
+                var need = target - counts[i];
+                if (need <= 0) continue;
+                var g = need < left ? need : left;
+                give[i] += g;
+                left -= g;
+            }
+            // Pass 2: any rounding remainder to the emptiest.
+            foreach (var i in order)
+            {
+                if (left <= 0) break;
+                give[i] += 1;
+                left -= 1;
+            }
+            foreach (var i in order)
+            {
+                if (give[i] > 0)
+                    plan.Add((twins[i], give[i]));
+            }
+            return plan;
         }
 
         static Dictionary<int, Dictionary<Entity, Entity>> plotInvStash;

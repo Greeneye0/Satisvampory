@@ -215,6 +215,40 @@ namespace Satisvampory.Services
         {
             var item = row.ItemType;
             var ranked = StashRouting.OrderDepositDests(dests, item, ownerId, plot);
+
+            // 1.0.112: twins (same name, same '+' count, tied rank) share the stack evenly.
+            var twins = StashRouting.TopTwins(ranked, item, ownerId);
+            if (twins.Count > 1)
+            {
+                foreach (var (dest, give) in StashRouting.SplitAcrossTwins(twins, item, row.Amount))
+                {
+                    if (row.Amount <= 0)
+                        break;
+                    try
+                    {
+                        var part = row;
+                        part.Amount = give < row.Amount ? give : row.Amount;
+                        var resp = InventoryUtilitiesServer.TryAddItem(add, dest.inventory, part);
+                        if (!resp.Success)
+                            continue;
+                        var got = part.Amount - resp.RemainingAmount;
+                        if (got <= 0)
+                            continue;
+                        Credit(dest.stash, item, got, plot, ownerId, movedTypes, moved);
+                        row.Amount -= got;
+                    }
+                    catch (Exception e)
+                    {
+                        Core.LogException(e, "Item Storage (twins)");
+                    }
+                }
+                if (row.Amount <= 0)
+                {
+                    InventoryUtilitiesServer.ClearSlot(Core.EntityManager, bag, slot);
+                    return;
+                }
+            }
+
             for (var d = 0; d < ranked.Count && row.Amount > 0; d++)
             {
                 try

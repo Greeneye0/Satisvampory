@@ -49,6 +49,15 @@ One or more `+` at the **end** of the nameplate is a priority boost, not part of
 - `+` on an empty generic, unmatched custom, overflow, special, or NS chest does nothing.
 - Applies wherever `RankDeposit` is used: stash, RR, tidy, servant auto-stash, covering park, belt mutual links, `.pull` order (a `+` chest is drained last).
 
+## Twins: split across same-name `+` chests (1.0.112)
+
+Two or more chests anywhere on the island (ClanShare on) with the **same clean name** and the **same number of `+`** (at least one) that tie on rank are **twins**.
+
+- `.stash` / RR: a stack is **split** across the twins so their counts of that item end as even as possible (lift the emptiest first, then share the rest).
+- Tidy, covering park, push-back, servant stash: every deposit goes to the twin holding the **least** of the item, so they balance over successive moves.
+- Twins that are also on the same belt line tie on rank and stay put; the balance comes from deposits, not from belts shuffling between them.
+- Different `+` counts are not twins: the higher one simply wins.
+
 ## Exclusions `--word` (1.0.110)
 
 A token starting with `--` on the nameplate is an **exclusion**, not part of the name. `Weapons --copper --iron+` is the name `Weapons`, priority 1, and never takes anything `copper` or `iron` matches.

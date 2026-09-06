@@ -200,8 +200,11 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 | `plank s1` / `plank r1` | Belt sender / receiver, line 1 |
 | `overflow` | Last-resort dump |
 | `salvage`, `spoils`, `trash`, `spawner`, `brazier`, `night`, `prox` | Special-purpose chests |
-| `NS` or trailing `''` | Skip entirely |
+| `NS`, or `''` at the start or end | Skip entirely |
 | blank, `General`, `Empty`, `Everything Else` | Generic dump |
+| `Stone Brick R1S1+` | Priority: trailing `+` beats every other chest for items it matches or holds. More `+` = higher |
+| `Weapons --copper --iron+` | Exclusions: never deposit what a `--word` matches (alias, item, group, category, or name fragment) |
+| two chests named `Ingots+` (same name, same `+` count) | **Split deposits.** Twins anywhere on the clan island share stashed stacks evenly and balance over tidy / belt push-back. Use this to spread one resource across two castles or two rooms |
 
 ## Credits and license
 
