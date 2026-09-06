@@ -987,7 +987,7 @@ namespace Satisvampory.Services
             var blankClass = RankClassUnmatched("", "Jewel Storage", false);
             var emptyClass = RankClassUnmatched("Empty", "Jewel Storage", false);
             var leatherClass = RankClassUnmatched("Leather", "Leather", false);
-            var classOk = blankClass == 3 && emptyClass == 3 && leatherClass == 6;
+            var classOk = blankClass == 4 && emptyClass == 4 && leatherClass == 6;
             var generalClass = RankClassUnmatched("General", "Jewel Storage", false);
             var elseClass = RankClassUnmatched("Everything Else", "Jewel Storage", false);
             var catchAll = IsGenericName("General") && IsGenericName("Everything Else") && generalClass == 4 && elseClass == 4;

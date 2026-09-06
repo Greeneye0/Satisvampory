@@ -536,6 +536,21 @@ namespace Satisvampory.Services
             return null;
         }
 
+        /// <summary>Test-only: bind an exact alias in memory (no settings write).</summary>
+        internal static void RegisterAliasInMemory(string alias, PrefabGUID prefab)
+        {
+            var key = FoundItemConverter.Normalize(alias);
+            FoundItemConverter.RegisterExactAlias(key, prefab);
+            exactAliasToHash[key] = prefab.GuidHash;
+        }
+
+        internal static void UnregisterAliasInMemory(string alias)
+        {
+            var key = FoundItemConverter.Normalize(alias);
+            FoundItemConverter.UnregisterExactAlias(key);
+            exactAliasToHash.Remove(key);
+        }
+
         public static string UnbindAdminAlias(string alias)
         {
             var key = FoundItemConverter.Normalize(alias);

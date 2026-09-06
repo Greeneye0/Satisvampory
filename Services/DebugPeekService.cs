@@ -228,6 +228,16 @@ namespace Satisvampory.Services
                     return DestDebugLog.MailboxPerf();
                 case "logdump":
                     return DestDebugLog.MailboxDump(Path.Combine(Dir, "log.txt"));
+                case "sorttest":
+                {
+                    ulong owner = 0;
+                    var p = plot >= 0 ? plot : FirstStandingPlot();
+                    if (p >= 0)
+                        Core.TerritoryService.TryGetTerritoryOwnerPlatformId(p, out owner);
+                    if (owner == 0 && users > 0)
+                        owner = (ulong)users;
+                    return owner == 0 ? "{\"error\":\"no owner: stand on a plot or pass plot\"}" : SortLogicTest.Run(owner);
+                }
                 case "selftest":
                     return "{\"dest\":" + StashRouting.SelfTestDest()
                         + ",\"coveringCap1200\":" + ClanTreasuryLend.CapCovering1x(1200)
