@@ -158,8 +158,15 @@ namespace Satisvampory.Services
             if (string.IsNullOrWhiteSpace(s))
                 return false;
             var key = FoundItemConverter.Normalize(s);
-            if (ownerId != 0 && Core.PlayerSettings.TryCastleAlias(ownerId, key, out hash) && hash != 0)
-                return true;
+            if (ownerId != 0)
+            {
+                // 1.0.117: castle aliases are island-wide under ClanShare (owner first).
+                foreach (var o in Core.TerritoryService.GetIslandOwnerIds(ownerId))
+                {
+                    if (Core.PlayerSettings.TryCastleAlias(o, key, out hash) && hash != 0)
+                        return true;
+                }
+            }
             return TryExactItemAlias(s, out hash);
         }
 

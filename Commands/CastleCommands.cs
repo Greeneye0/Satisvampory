@@ -838,13 +838,24 @@ namespace Satisvampory.Commands
         {
             if (!TryGetStandingCastleSettingsOwner(ctx, out var steamId, out var ownerName))
                 return;
-            var rows = Core.PlayerSettings.ListCastleAliases(steamId);
+            var rows = new List<(string alias, string name)>();
+            var owners = Core.TerritoryService.GetIslandOwnerIds(steamId);
+            foreach (var o in owners)
+            {
+                foreach (var r in Core.PlayerSettings.ListCastleAliases(o))
+                {
+                    var dup = false;
+                    foreach (var have in rows) { if (have.alias == r.alias) { dup = true; break; } }
+                    if (!dup)
+                        rows.Add(o == steamId ? r : (r.alias, r.name + " (clan castle)"));
+                }
+            }
             if (rows.Count == 0)
             {
-                ctx.Reply($"No castle aliases on {ownerName}'s castle. <color=white>.s alias add sw Silkworm</color>. Server-wide ones: <color=white>.sg alias</color>.");
+                ctx.Reply($"No castle aliases on {ownerName}'s {(owners.Count > 1 ? "clan island" : "castle")}. <color=white>.s alias add sw Silkworm</color>. Server-wide ones: <color=white>.sg alias</color>.");
                 return;
             }
-            ctx.Reply($"Castle aliases on {ownerName}'s castle (chest plates, --exclusions, .fi, .pull):");
+            ctx.Reply($"Castle aliases on {ownerName}'s {(owners.Count > 1 ? "clan island" : "castle")} (chest plates, --exclusions, .fi, .pull):");
             var line = "";
             var n = 0;
             for (var i = 0; i < rows.Count; i++)

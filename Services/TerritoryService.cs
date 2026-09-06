@@ -171,6 +171,42 @@ internal class TerritoryService {
         public IReadOnlyList<int> GetServantStashPlotIds(int homePlot)
         { if (homePlot < 0) return new List<int>(); var heart = GetCastleHeart(homePlot); if (heart == Entity.Null) return new List<int> { homePlot }; if (IsHeartRaided(heart)) return new List<int>(); if (!TryGetHeartOwner(heart, out _, out var owner) || !IsClanShareOn(owner) || Core.PlayerSettings.IsTerritoryClanShareExcluded(homePlot)) return new List<int> { homePlot }; var ids = GetClanLogisticsTerritoryIds(owner); return ids == null || ids.Count == 0 ? new List<int> { homePlot } : ids; }
 
+        readonly Dictionary<ulong, (DateTime at, List<ulong> owners)> islandOwnerCache = new();
+
+        /// <summary>
+        /// 1.0.117: every castle owner on the logistics island that <paramref name="ownerId"/>'s
+        /// castle belongs to (ClanShare on), the owner first. Just the owner when ClanShare is off
+        /// or the owner has no castle. Cached 5 s: the name matcher asks per plate token.
+        /// </summary>
+        public IReadOnlyList<ulong> GetIslandOwnerIds(ulong ownerId)
+        {
+            if (ownerId == 0)
+                return Array.Empty<ulong>();
+            var now = DateTime.UtcNow;
+            if (islandOwnerCache.TryGetValue(ownerId, out var cached) && (now - cached.at).TotalSeconds < 5)
+                return cached.owners;
+            var owners = new List<ulong> { ownerId };
+            try
+            {
+                if (TryFindOwnedTerritory(ownerId, out var plot, out _) && plot >= 0)
+                {
+                    foreach (var id in GetLogisticsTerritoryIds(plot))
+                    {
+                        if (TryGetTerritoryOwnerPlatformId(id, out var o) && o != 0 && !owners.Contains(o))
+                            owners.Add(o);
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Core.LogException(e);
+            }
+            if (islandOwnerCache.Count > 256)
+                islandOwnerCache.Clear();
+            islandOwnerCache[ownerId] = (now, owners);
+            return owners;
+        }
+
         public bool TryFindOwnedTerritory(ulong platformId, out int territoryId, out User owner)
         {
             territoryId = -1;

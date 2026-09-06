@@ -42,7 +42,13 @@ class FoundItemConverter : CommandArgumentConverter<FoundItem>
                 return false;
             if (!Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out var owner) || owner == 0)
                 return false;
-            if (!Core.PlayerSettings.TryCastleAlias(owner, Normalize(input), out var hash) || hash == 0)
+            var hash = 0;
+            var hit = false;
+            foreach (var o in Core.TerritoryService.GetIslandOwnerIds(owner))
+            {
+                if (Core.PlayerSettings.TryCastleAlias(o, Normalize(input), out hash) && hash != 0) { hit = true; break; }
+            }
+            if (!hit)
                 return false;
             item = new FoundItem(new PrefabGUID(hash));
             return true;
