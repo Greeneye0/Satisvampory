@@ -177,9 +177,11 @@ namespace Satisvampory.Services
                         plot = FirstStandingPlot();
                     return PeekCovering(plot);
                 case "dest":
-                case "why":
                 case "sim":
                     return SimItem(plot, guid, name, apply);
+                case "why":
+                case "rank":
+                    return WhyItem(plot, guid, name, dest);
                 case "cover":
                 case "tick":
                     ClanTreasuryLend.DebugTick();
@@ -256,6 +258,69 @@ namespace Satisvampory.Services
             if (type.GuidHash == 0)
                 type = new PrefabGUID(ClanTreasuryLend.PlankHash);
             return ClanTreasuryLend.DebugSimulate(plot, type, apply);
+        }
+
+        /// <summary>Mailbox twin of `.s why`: {"op":"why","item":"Grave Dust","dest":"Bone Grave","plot":86}.</summary>
+        static string WhyItem(int plot, int guid, string name, string container)
+        {
+            var type = ResolveItem(guid, name);
+            if (type.GuidHash == 0)
+                return "{\"error\":\"unknown item\"}";
+            var character = Entity.Null;
+            foreach (var row in Connected())
+            {
+                if (plot >= 0 && row.plot != plot)
+                    continue;
+                var c = CharacterOf(row.steam);
+                if (c != Entity.Null)
+                {
+                    character = c;
+                    break;
+                }
+            }
+            if (character == Entity.Null)
+                return "{\"error\":\"no connected player" + (plot >= 0 ? " standing on plot " + plot : "") + "\"}";
+            var lines = WhyReport.Report(character, type, container);
+            var sb = new StringBuilder();
+            sb.Append("{\"item\":\"").Append(Esc(StashRouting.ItemLabel(type))).Append("\",\"lines\":[");
+            for (var i = 0; i < lines.Count; i++)
+            {
+                if (i > 0) sb.Append(',');
+                sb.Append('"').Append(Esc(System.Text.RegularExpressions.Regex.Replace(lines[i], "<[^>]+>", ""))).Append('"');
+            }
+            sb.Append("]}");
+            return sb.ToString();
+        }
+
+        static Entity CharacterOf(ulong steam)
+        {
+            var builder = new EntityQueryBuilder(Allocator.Temp)
+                .AddAll(new(Il2CppType.Of<User>(), ComponentType.AccessMode.ReadOnly));
+            var query = Core.EntityManager.CreateEntityQuery(ref builder);
+            builder.Dispose();
+            NativeArray<Entity> users = default;
+            try
+            {
+                users = query.ToEntityArray(Allocator.Temp);
+                for (var i = 0; i < users.Length; i++)
+                {
+                    var userEntity = users[i];
+                    if (userEntity == Entity.Null || !Core.EntityManager.Exists(userEntity) || !userEntity.Has<User>())
+                        continue;
+                    var user = userEntity.Read<User>();
+                    if (user.PlatformId != steam)
+                        continue;
+                    var character = user.LocalCharacter.GetEntityOnServer();
+                    return character != Entity.Null && Core.EntityManager.Exists(character) ? character : Entity.Null;
+                }
+            }
+            finally
+            {
+                if (users.IsCreated)
+                    users.Dispose();
+                query.Dispose();
+            }
+            return Entity.Null;
         }
 
         static string PeekNeed(int plot)
