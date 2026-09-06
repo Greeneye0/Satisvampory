@@ -526,7 +526,7 @@ namespace Satisvampory.Commands
             ctx.Reply("Usage: .s group create <name>, .s group delete <name>, or .s group restore [name].");
         }
 
-        [Command(name: "group", usage: ".s group <name> add|remove <item> [<item> ...]", description: "Add or remove one or more items on a group. Quote names with spaces. First edit of a built-in copies the default list.")]
+        [Command(name: "group", usage: ".s group <name> add|remove <item>[, <item> ...]", description: "Add or remove items on a group: comma-separated or space-separated, quote names with spaces. First edit of a built-in copies the default list.")]
         public static void ModifyGroup(ChatCommandContext ctx, string name, string action,
             string item1,
             string item2 = null,
@@ -593,8 +593,29 @@ namespace Satisvampory.Commands
             ApplyGroupItemTokens(ctx, name, action, tokens);
         }
 
+        /// <summary>1.0.105: "a, b,c" and "a" "b" both work; commas split inside or across tokens.</summary>
+        internal static List<string> SplitCommaTokens(IEnumerable<string> tokens)
+        {
+            var result = new List<string>();
+            if (tokens == null)
+                return result;
+            foreach (var token in tokens)
+            {
+                if (string.IsNullOrWhiteSpace(token))
+                    continue;
+                foreach (var part in token.Split(','))
+                {
+                    var t = part.Trim().Trim('"', '\'');
+                    if (t.Length > 0)
+                        result.Add(t);
+                }
+            }
+            return result;
+        }
+
         internal static void ApplyGroupItemTokens(ChatCommandContext ctx, string name, string action, List<string> tokens)
         {
+            tokens = SplitCommaTokens(tokens);
             if (!TryGetStandingCastleSettingsOwner(ctx, out var SteamID, out var ownerName))
                 return;
             if (!TryPrepareGroupEdit(ctx, SteamID, ownerName, name, out var normalized))

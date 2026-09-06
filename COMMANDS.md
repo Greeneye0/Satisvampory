@@ -92,6 +92,8 @@ Stand on the plot. Default reserve **10**. Default production cap **unlimited**.
 | `.s group create belts` / `.s group delete belts` | Custom group |
 | `.s group restore` / `.s group restore mushrooms` | Restore built-ins (Hell’s Clarion is mushrooms, not flowers) |
 | `.s group ore add "Iron Ore"` | First edit of a built-in copies the default list |
+| `.s group ore add "Iron Ore", "Copper Ore", Quartz` | Comma-separated lists work for add and remove (quotes optional around single words) |
+| `weapons` / `armor` | Built-in groups. `weapon` and `armour` are aliases. `armor` includes necklaces (Magic Source slot) |
 
 Quote names with spaces. If a name is ambiguous, pick with **`.s 2`** or **`.s pick 2`**.
 

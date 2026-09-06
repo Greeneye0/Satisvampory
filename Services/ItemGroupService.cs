@@ -707,6 +707,10 @@ namespace Satisvampory.Services
                 if (primary != GroupIngots)
                     yield return GroupIngots;
             }
+            // 1.0.105: necklaces (Magic Source slot) are also armor, so an "Armor" chest takes the
+            // whole equipment set. Soulshards were assigned before Magic and never reach here.
+            if (primary == GroupMagic)
+                yield return GroupArmor;
             // Seeds dest to a Seeds chest, but existing Herbs / Mushrooms / Cotton plates still match.
             if (primary == GroupSeeds)
             {
