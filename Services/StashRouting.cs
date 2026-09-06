@@ -564,7 +564,11 @@ namespace Satisvampory.Services
                 : itemName.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
             foreach (var v in variants)
             {
-                if (v.Length >= 3 && !string.IsNullOrEmpty(itemName) && itemName.IndexOf(v, StringComparison.Ordinal) >= 0)
+                // 1.0.101: a bare number or a 1-2 letter token is not a partial item name.
+                // "Alch 1" must not match every "... Tier 1 Shattered" weapon via the "1".
+                if (v.Length < 3 || IsAllDigits(v))
+                    continue;
+                if (!string.IsNullOrEmpty(itemName) && itemName.IndexOf(v, StringComparison.Ordinal) >= 0)
                 {
                     tier = TierPartial;
                     return true;
@@ -579,6 +583,18 @@ namespace Satisvampory.Services
                 }
             }
             return false;
+        }
+
+        static bool IsAllDigits(string s)
+        {
+            if (string.IsNullOrEmpty(s))
+                return false;
+            for (var i = 0; i < s.Length; i++)
+            {
+                if (s[i] < '0' || s[i] > '9')
+                    return false;
+            }
+            return true;
         }
 
         public static bool ExactItemNameMatch(string chestName, PrefabGUID item, out int specificity)

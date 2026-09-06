@@ -81,6 +81,7 @@ After stripping conveyor tokens and overflow/generic filler:
 - An unrecognised word on a plate (`Alch`) matches nothing. Before 1.0.99 such a chest was class 4 even when seeded and an empty generic chest won; now a seeded chest is class 3 (class 0 if `s#`) and beats empty generic. Check with `.s why <item> <container>`.
 - Exact item aliases match **that item only** (find / pull / dest names): `be` (Blood Essence), `gbe` / `pbe` / `abe` (Greater / Primal / Ancestral), `gss` (Greater Stygian Shard), `sgs` (Siege Golem Stone), `dsi` (Dark Silver Ingot), `ot` (Onyx Tear). Admin can add more with `.sg alias add <alias> <item>`. Cannot overwrite dest-group words (`blood`, `stone`, …) or built-ins. `blood` as a dest word stays the Blood Essence dest **group**; `BE` is the exact item.
 - Spelling fold: fiber/fibre, sulfur/sulphur, armor/armour, gray/grey, jewelry/jewellery, etc.
+- **Partial item-name tokens must be 3+ characters and not all digits** (1.0.101). `Alch 1 R1S1` must not match `Ancestral Whip Shards Tier 1 Shattered` through the `1`. Numbers on a plate are labels, not match words.
 
 ## Source pass (lend sources)
 
