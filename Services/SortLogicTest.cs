@@ -39,6 +39,21 @@ namespace Satisvampory.Services
                 Check(checks, "no bare-number match: 'Alch 1' vs Grave Dust", !StashRouting.CategoryMatch("Alch 1", graveDust, ownerId, out _) || Tier(SpecOf("Alch 1", graveDust, ownerId)) != StashRouting.TierPartial);
                 Check(checks, "alias unbound before test", !ItemGroupService.TryExactItemAlias(Alias, out _));
 
+                // ---- equipment never matches by name fragment ----
+                var copperIngot = new PrefabGUID(-1237019921);
+                Check(checks, "partial: 'Copper Iron' matches Copper Ingot (material)", StashRouting.CategoryMatch("Copper Iron", copperIngot, ownerId, out var ciSpec) && Tier(ciSpec) == StashRouting.TierPartial, "spec=" + ciSpec);
+                if (FoundItemConverter.TryGetExact("Copper Sword", out var swordFound) && swordFound.prefab.GuidHash != 0)
+                {
+                    var sword = swordFound.prefab;
+                    Check(checks, "equipment: 'Copper Iron' does not match Copper Sword", !StashRouting.CategoryMatch("Copper Iron", sword, ownerId, out _));
+                    Check(checks, "equipment: 'Copper Sword' exact still matches", StashRouting.ExactItemNameMatch("Copper Sword", sword, out _));
+                    Check(checks, "equipment: 'Weapons' group word matches Copper Sword", StashRouting.CategoryMatch("Weapons", sword, ownerId, out var wSpec) && Tier(wSpec) >= StashRouting.TierCategory, "spec=" + wSpec);
+                }
+                else
+                {
+                    checks.Add(("equipment: Copper Sword not resolvable, skipped", true, ""));
+                }
+
                 // ---- add alias -> Grave Dust (memory only) ----
                 ItemGroupService.RegisterAliasInMemory(Alias, graveDust);
                 aliasBound = true;

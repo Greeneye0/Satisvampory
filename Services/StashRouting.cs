@@ -565,6 +565,14 @@ namespace Satisvampory.Services
                 }
             }
 
+            // 1.0.104: equipment never matches by a fragment of its name. Materials are named
+            // for what they are ("Copper Ingot"); equipment is named for what it is made of
+            // ("Copper Sword", legendary "Merciless Iron Crossbow"), so "Copper Iron" must not
+            // take weapons. Equipment still matches exact name, group word, category word, or
+            // a custom group.
+            if (IsEquipmentCategory(itemCat))
+                return false;
+
             var itemTokens = string.IsNullOrEmpty(itemName)
                 ? Array.Empty<string>()
                 : itemName.Split((char[])null, StringSplitOptions.RemoveEmptyEntries);
@@ -590,6 +598,9 @@ namespace Satisvampory.Services
             }
             return false;
         }
+
+        internal static bool IsEquipmentCategory(ItemCategory cat)
+            => (cat & (ItemCategory.Weapon | ItemCategory.Armor | ItemCategory.Magic)) != 0;
 
         static bool IsAllDigits(string s)
         {
