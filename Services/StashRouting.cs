@@ -1220,6 +1220,45 @@ namespace Satisvampory.Services
             return 1;
         }
 
+        /// <summary>
+        /// `.pull` / craft-pull source order: the inverse of dest ranking for this item, so the
+        /// chests the item would be stashed INTO are drained LAST (overflow, empty generic, seeded
+        /// generic/custom, category, exact, then s#). Never castle hearts (heart fuel is not a
+        /// store), never stations, never NS / skip-quotes.
+        /// </summary>
+        public static List<Entity> OrderPullSources(IEnumerable<Entity> stashes, PrefabGUID item, ulong ownerId)
+        {
+            var ranked = new List<(DepositRank rank, int order, Entity stash)>();
+            var order = 0;
+            foreach (var stash in stashes)
+            {
+                if (stash == Entity.Null || !Core.EntityManager.Exists(stash))
+                    continue;
+                if (stash.Has<CastleHeart>() || stash.Has<Refinementstation>())
+                    continue;
+                if (!TryGetExternalInventory(stash, out var inv))
+                    continue;
+                var has = InventoryHasItem(inv, item);
+                var rank = RankDeposit(stash, item, ownerId, has);
+                if (rank.Class == 99)
+                    continue;
+                ranked.Add((rank, order++, stash));
+            }
+            // Worst dest first: higher class, then lower spec, then original scan order.
+            ranked.Sort((a, b) =>
+            {
+                var c = b.rank.Class.CompareTo(a.rank.Class);
+                if (c != 0) return c;
+                c = a.rank.Spec.CompareTo(b.rank.Spec);
+                if (c != 0) return c;
+                return a.order.CompareTo(b.order);
+            });
+            var result = new List<Entity>(ranked.Count);
+            foreach (var row in ranked)
+                result.Add(row.stash);
+            return result;
+        }
+
         public static int SourcePass(Entity stash)
         {
             var name = RawName(stash);

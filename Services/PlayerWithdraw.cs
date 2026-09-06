@@ -133,16 +133,16 @@ namespace Satisvampory.Services
             var slot = 0;
             var seen = new HashSet<Entity>();
             var sgm = Core.ServerGameManager;
-            for (var pass = 0; pass < 3 && remaining > 0 && !full; pass++)
+            ulong ownerId = 0;
+            if (ctx.StandingPlot >= 0)
+                Core.TerritoryService.TryGetTerritoryOwnerPlatformId(ctx.StandingPlot, out ownerId);
+            // 1.0.100: worst dest for this item first; the chest it would be stashed into is drained
+            // last. Castle hearts are never a pull source.
             {
-                foreach (var stash in Core.Stash.IslandChests(character))
+                foreach (var stash in StashRouting.OrderPullSources(Core.Stash.IslandChests(character), item, ownerId))
                 {
-                    if (remaining <= 0)
+                    if (remaining <= 0 || full)
                         break;
-                    if (stash.Has<Refinementstation>())
-                        continue;
-                    if (StashRouting.SourcePass(stash) != pass)
-                        continue;
                     if (!StashRouting.TryGetExternalInventory(stash, out var inv) || !seen.Add(inv))
                         continue;
                     found = true;
@@ -470,15 +470,17 @@ namespace Satisvampory.Services
             var slot = 0;
             var full = false;
             var seen = new HashSet<Entity>();
-            for (var pass = 0; pass < 3 && remaining > 0 && !full; pass++)
+            ulong ownerId = 0;
+            var standingPlot = Core.TerritoryService.GetStandingTerritoryId(character);
+            if (standingPlot >= 0)
+                Core.TerritoryService.TryGetTerritoryOwnerPlatformId(standingPlot, out ownerId);
+            // 1.0.100: same order as .pull - worst dest first, never castle hearts.
             {
-                foreach (var stash in Core.Stash.IslandChests(character))
+                foreach (var stash in StashRouting.OrderPullSources(Core.Stash.IslandChests(character), item, ownerId))
                 {
                     if (full || remaining <= 0)
                         break;
-                    if (stash.Has<Refinementstation>() || stash.Equals(workstation))
-                        continue;
-                    if (StashRouting.SourcePass(stash) != pass)
+                    if (stash.Equals(workstation))
                         continue;
                     if (BusyWith(stash, item))
                         continue;

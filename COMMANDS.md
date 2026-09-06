@@ -53,7 +53,7 @@ If ClanShare is **ON**, dest/source is the **clan island**. If **OFF**, standing
 | `.stash` | You; dest plot or clan | Dump inventory except hotbar into named/matching chests |
 | `.s tidy` | Plot, or clan island if `.s cs` on | Restack existing chests onto better dests (same rank as `.stash` / RR: matching `s#` first). Never drains `s#`/`r#`, `NS`, skip-quotes (`''`), salvage/trash, or castle hearts. Treasury-floor chests are sources. Overflow and spoils are sources only. Does not honor reserve. |
 | `.s ss` | You | Allow double-click sort / double-tap R to stash |
-| `.pull plank 50` | You; source plot or clan | Take items into your bags. **Does not honor reserve** |
+| `.pull plank 50` | You; source plot or clan | Take items into your bags. **Does not honor reserve.** Drains the worst dest for that item first, the chest it would be stashed into last. Never castle hearts |
 | `.pull seeds` | You; source plot or clan | One stack of each item in that group. `.pull seeds 20` = 20 of each |
 | `.s cr` | You | Right-click recipe craft-pull. **Honors reserve** |
 | `.s dpl` | You | Don’t pull the last stack (default **ON**) |

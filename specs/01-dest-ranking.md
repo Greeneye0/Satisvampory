@@ -82,9 +82,9 @@ After stripping conveyor tokens and overflow/generic filler:
 - Exact item aliases match **that item only** (find / pull / dest names): `be` (Blood Essence), `gbe` / `pbe` / `abe` (Greater / Primal / Ancestral), `gss` (Greater Stygian Shard), `sgs` (Siege Golem Stone), `dsi` (Dark Silver Ingot), `ot` (Onyx Tear). Admin can add more with `.sg alias add <alias> <item>`. Cannot overwrite dest-group words (`blood`, `stone`, …) or built-ins. `blood` as a dest word stays the Blood Essence dest **group**; `BE` is the exact item.
 - Spelling fold: fiber/fibre, sulfur/sulphur, armor/armour, gray/grey, jewelry/jewellery, etc.
 
-## Source pass (lend / `.pull` sources)
+## Source pass (lend sources)
 
-Used when **taking** from chests (covering, kit, heart fuel, `.pull`), not when ranking dests.
+Used when **taking** from chests for covering, kit, and heart fuel, not when ranking dests. `.pull` and craft-pull no longer use passes: they drain in the **inverse of dest ranking** for the item (`OrderPullSources`, see [04-stash-pull-find.md](04-stash-pull-find.md)) and never touch castle hearts.
 
 | Pass | Chests |
 | --- | --- |

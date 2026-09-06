@@ -27,7 +27,8 @@ See [05-tidy.md](05-tidy.md). Same dest rank as `.stash` / RR. Player-triggered 
 Take items into bags from dest chests on this plot or clan island.
 
 - **Does not honor reserve.**
-- Source pass: unnamed/generic/overflow first, then named, then `s#`/`r#` last-resort. Never `NS` / skip-quotes.
+- Source order (1.0.100): the **inverse of dest ranking** for that item, so the chest the item would be stashed **into** is drained **last**: overflow, then empty generic, then seeded generic/custom, then category, then exact name, then `s#`. Never `NS` / skip-quotes. **Never castle hearts** (heart fuel is not a store).
+- Craft-pull (`.s cr`) uses the same order.
 - `.s dpl` (default ON): do not pull the last stack from a container.
 - `.s sp` silent pull (no “from where” chat).
 - Needs `.sg p` allow and player pull toggle where that gate is used.
