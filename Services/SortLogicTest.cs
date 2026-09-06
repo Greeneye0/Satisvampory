@@ -94,6 +94,8 @@ namespace Satisvampory.Services
                     var shard = shardFound.prefab;
                     Check(checks, "shattered: 'Shattered' matches a shard at group tier", StashRouting.CategoryMatch("Shattered", shard, ownerId, out var shSpec) && Tier(shSpec) == StashRouting.TierGroup, "spec=" + shSpec);
                     Check(checks, "shattered: 'Weapons' does not match a shard", !StashRouting.CategoryMatch("Weapons", shard, ownerId, out _));
+                    Check(checks, "shattered: 'Shattered Weapons' (AND mode) matches a shard", StashRouting.CategoryMatch("Shattered Weapons", shard, ownerId, out _));
+                    Check(checks, "shattered: 'Shattered Weapons' does not match Copper Ingot", !StashRouting.CategoryMatch("Shattered Weapons", copperIngot, ownerId, out _));
                     Check(checks, "shattered: 'Shattered' does not match Copper Ingot", !StashRouting.CategoryMatch("Shattered", copperIngot, ownerId, out _));
                 }
                 else

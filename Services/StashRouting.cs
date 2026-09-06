@@ -595,6 +595,13 @@ namespace Satisvampory.Services
             => TokenMatchesItem(token, item, itemName, itemCat, ownerId, allowCategory, out _);
 
         static bool TokenMatchesItem(string token, PrefabGUID item, string itemName, ItemCategory itemCat, ulong ownerId, bool allowCategory, out int tier)
+            => TokenMatchesItem(token, item, itemName, itemCat, ownerId, allowCategory, false, out tier);
+
+        /// <param name="typeWordFlagFallback">AND mode only: a type word (weapon / armor / material) that is a
+        /// built-in group the item is NOT in still matches on the game's own ItemCategory flag. "Shattered Weapons"
+        /// = shattered group AND Weapon flag, even though shards left the weapons group in 1.0.107. A lone
+        /// "Weapons" plate never gets this fallback, so it still does not take shards.</param>
+        static bool TokenMatchesItem(string token, PrefabGUID item, string itemName, ItemCategory itemCat, ulong ownerId, bool allowCategory, bool typeWordFlagFallback, out int tier)
         {
             tier = 0;
             if (string.IsNullOrEmpty(token))
@@ -664,7 +671,21 @@ namespace Satisvampory.Services
             // "Blood" is the blood dest group, not a substring of "Blood Jewel".
             // "Stone" is stone dests, not Miststone. Membership already failed.
             if (tokenIsDestGroup)
+            {
+                // 1.0.124: AND-mode type word falls back to the ItemCategory flag.
+                if (typeWordFlagFallback && itemCat != ItemCategory.NONE && TokenIsAndCategory(token))
+                {
+                    foreach (var v in variants)
+                    {
+                        if (CategoryByToken.TryGetValue(v, out var f) && f != ItemCategory.NONE && (itemCat & f) != 0)
+                        {
+                            tier = TierCategory;
+                            return true;
+                        }
+                    }
+                }
                 return false;
+            }
 
             if (allowCategory && itemCat != ItemCategory.NONE)
             {
@@ -941,7 +962,7 @@ namespace Satisvampory.Services
                 var totalLen = 0;
                 foreach (var token in tokens)
                 {
-                    if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true, out var tier))
+                    if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true, typeWordFlagFallback: true, out var tier))
                         return false;
                     totalLen += token.Length;
                     matched?.Add((token, tier));
