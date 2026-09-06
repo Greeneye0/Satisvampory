@@ -115,6 +115,17 @@ namespace Satisvampory.Services
                 Check(checks, "alias: '--" + Alias + "' excludes Grave Dust", StashRouting.ExclusionMatches(Alias, graveDust, ownerId));
                 Check(checks, "alias: '--" + Alias + "' does not exclude Bone", !StashRouting.ExclusionMatches(Alias, bone, ownerId));
 
+                // ---- castle alias (owner row) ----
+                const string CAlias = "svtcalias";
+                var cErr = Core.PlayerSettings.SetCastleAlias(ownerId, CAlias, graveDust.GuidHash, gdName);
+                Check(checks, "castle alias: set", cErr == null, cErr ?? "");
+                Check(checks, "castle alias: exact match with owner", StashRouting.ExactItemNameMatch(CAlias, graveDust, out _, ownerId));
+                Check(checks, "castle alias: not visible without owner", !StashRouting.ExactItemNameMatch(CAlias, graveDust, out _, 0));
+                Check(checks, "castle alias: '--" + CAlias + "' excludes Grave Dust", StashRouting.ExclusionMatches(CAlias, graveDust, ownerId));
+                Check(checks, "castle alias: does not match Bone", !StashRouting.ExactItemNameMatch(CAlias, bone, out _, ownerId));
+                Check(checks, "castle alias: removed", Core.PlayerSettings.RemoveCastleAlias(ownerId, CAlias));
+                Check(checks, "castle alias: gone", !StashRouting.ExactItemNameMatch(CAlias, graveDust, out _, ownerId));
+
                 // ---- custom group containing Bone only ----
                 groupMade = Core.PlayerSettings.CreateItemGroup(ownerId, Group);
                 Check(checks, "custom group created", groupMade);

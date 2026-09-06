@@ -37,6 +37,11 @@ Conveyors stop feeding an item once the **island** has this many. Default unlimi
 
 Not scoop bagcap.
 
+## Item aliases
+
+- **Server** aliases (`.sg alias`, admin) and built-ins (`be`, `gbe`, …) apply everywhere.
+- **Castle** aliases (`.s alias add / del`, 1.0.116) live on the castle owner's row and apply on that owner's island: chest plates, `--exclusions`, and item arguments to `.fi` / `.pull` / group edits while standing there. Resolution: castle alias, then server alias, then built-in. Same guards as server aliases (2–16 chars, no spaces, no dest words, no belt tokens); a castle alias cannot shadow a built-in.
+
 ## Item groups (castle)
 
 Built-in groups (aliases in parentheses): ore, flowers (herb/herbs), seeds (seed), mushrooms, tailoring (thread), hides (leather), wood, gems, alchemy, blood, bones, ingots, planks, stone, coins, fish, knowledge (scroll/paper/book), minerals (material/tech), consumables (potion), weapons, armor, jewels, magic, soulshards, bags, saddles, relics.

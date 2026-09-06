@@ -130,6 +130,62 @@ namespace Satisvampory.Services;
             return null;
         }
 
+        // ---- castle-scoped aliases (1.0.116): stored on the castle owner's row ----
+        public bool TryCastleAlias(ulong ownerId, string alias, out int guidHash)
+        {
+            guidHash = 0;
+            if (ownerId == 0 || ownerId == WorldId || string.IsNullOrWhiteSpace(alias))
+                return false;
+            if (!TryRow(ownerId, out var row) || row.ItemAliases == null)
+                return false;
+            return row.ItemAliases.TryGetValue(alias, out guidHash) && guidHash != 0;
+        }
+
+        public string SetCastleAlias(ulong ownerId, string alias, int guidHash, string displayName)
+        {
+            if (ownerId == 0 || ownerId == WorldId)
+                return "Stand on a castle to set a castle alias.";
+            if (string.IsNullOrWhiteSpace(alias) || guidHash == 0)
+                return "Need an alias and an item.";
+            var row = Snapshot(ownerId, true);
+            row.ItemAliases ??= new Dictionary<string, int>();
+            row.ItemAliasNames ??= new Dictionary<string, string>();
+            row.ItemAliases[alias] = guidHash;
+            row.ItemAliasNames[alias] = string.IsNullOrWhiteSpace(displayName) ? alias : displayName;
+            playerSettings[ownerId] = row;
+            MarkDirty();
+            return null;
+        }
+
+        public bool RemoveCastleAlias(ulong ownerId, string alias)
+        {
+            if (ownerId == 0 || ownerId == WorldId)
+                return false;
+            var row = Snapshot(ownerId, true);
+            row.ItemAliases ??= new Dictionary<string, int>();
+            row.ItemAliasNames ??= new Dictionary<string, string>();
+            var removed = row.ItemAliases.Remove(alias);
+            row.ItemAliasNames.Remove(alias);
+            playerSettings[ownerId] = row;
+            if (removed)
+                MarkDirty();
+            return removed;
+        }
+
+        public List<(string alias, string name)> ListCastleAliases(ulong ownerId)
+        {
+            var list = new List<(string, string)>();
+            if (ownerId == 0 || ownerId == WorldId || !TryRow(ownerId, out var row) || row.ItemAliases == null)
+                return list;
+            foreach (var kv in row.ItemAliases)
+            {
+                var label = row.ItemAliasNames != null && row.ItemAliasNames.TryGetValue(kv.Key, out var n) ? n : kv.Key;
+                list.Add((kv.Key, label));
+            }
+            list.Sort((a, b) => string.Compare(a.Item1, b.Item1, StringComparison.OrdinalIgnoreCase));
+            return list;
+        }
+
         public bool RemoveItemAlias(string alias)
         {
             var row = Snapshot(WorldId, true);

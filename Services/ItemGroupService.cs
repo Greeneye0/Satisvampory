@@ -151,6 +151,30 @@ namespace Satisvampory.Services
 
         public static bool TryExactEssenceAlias(string s, out int hash) => TryExactItemAlias(s, out hash);
 
+        /// <summary>1.0.116: castle alias on <paramref name="ownerId"/> first, then server / built-in.</summary>
+        public static bool TryExactItemAlias(ulong ownerId, string s, out int hash)
+        {
+            hash = 0;
+            if (string.IsNullOrWhiteSpace(s))
+                return false;
+            var key = FoundItemConverter.Normalize(s);
+            if (ownerId != 0 && Core.PlayerSettings.TryCastleAlias(ownerId, key, out hash) && hash != 0)
+                return true;
+            return TryExactItemAlias(s, out hash);
+        }
+
+        public static string BindCastleAlias(ulong ownerId, string alias, PrefabGUID prefab, string displayName)
+        {
+            var key = FoundItemConverter.Normalize(alias);
+            if (IsReservedAlias(key))
+                return "Alias must be 2–16 letters/digits with no spaces, and cannot be a dest word (blood, stone, salvage, s1, …).";
+            if (builtInAliasKeys.Contains(key))
+                return "Cannot shadow built-in alias <color=white>" + key + "</color>.";
+            if (prefab.GuidHash == 0)
+                return "Unknown item.";
+            return Core.PlayerSettings.SetCastleAlias(ownerId, key, prefab.GuidHash, displayName);
+        }
+
         public static bool TryExactItemAlias(string s, out int hash)
         {
             hash = 0;

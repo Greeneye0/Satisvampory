@@ -833,6 +833,88 @@ namespace Satisvampory.Commands
                 ctx.Reply(line);
         }
 
+        [Command(name: "alias", usage: ".s alias", description: "List this castle's item aliases (server aliases: .sg alias).")]
+        public static void ListCastleAliases(ChatCommandContext ctx)
+        {
+            if (!TryGetStandingCastleSettingsOwner(ctx, out var steamId, out var ownerName))
+                return;
+            var rows = Core.PlayerSettings.ListCastleAliases(steamId);
+            if (rows.Count == 0)
+            {
+                ctx.Reply($"No castle aliases on {ownerName}'s castle. <color=white>.s alias add sw Silkworm</color>. Server-wide ones: <color=white>.sg alias</color>.");
+                return;
+            }
+            ctx.Reply($"Castle aliases on {ownerName}'s castle (chest plates, --exclusions, .fi, .pull):");
+            var line = "";
+            var n = 0;
+            for (var i = 0; i < rows.Count; i++)
+            {
+                var bit = "<color=white>" + rows[i].alias + "</color>=" + rows[i].name;
+                line = line.Length == 0 ? bit : line + "  " + bit;
+                n++;
+                if (n >= 3 || i == rows.Count - 1)
+                {
+                    ctx.Reply(line);
+                    line = "";
+                    n = 0;
+                }
+            }
+            ctx.Reply(".s alias add <alias> <item>   .s alias del <alias>");
+        }
+
+        [Command(name: "alias", usage: ".s alias add <alias> <item>", description: "Add a castle item alias (this castle's island only).")]
+        public static void AddCastleAlias(ChatCommandContext ctx, string action, string alias, FoundItem item)
+        {
+            if (!action.Equals("add", StringComparison.OrdinalIgnoreCase) && !action.Equals("set", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Reply(Tips.AliasForms());
+                return;
+            }
+            if (LogisticsCommands.HandleAmbiguousItem(ctx, item, PendingItemCommand.CastleAliasAdd, 0, alias))
+                return;
+            FinishCastleAliasAdd(ctx, alias, item);
+        }
+
+        internal static void FinishCastleAliasAdd(ChatCommandContext ctx, string alias, FoundItem item)
+        {
+            if (!TryGetStandingCastleSettingsOwner(ctx, out var steamId, out var ownerName))
+                return;
+            if (item.prefab.GuidHash == 0)
+            {
+                ctx.Reply("Unknown item.");
+                return;
+            }
+            var name = item.prefab.PrefabName() ?? alias;
+            var err = ItemGroupService.BindCastleAlias(steamId, alias, item.prefab, name);
+            if (!string.IsNullOrEmpty(err))
+            {
+                ctx.Reply(err);
+                return;
+            }
+            ctx.Reply($"Castle alias <color=white>{FoundItemConverter.Normalize(alias)}</color> → {name} on {ownerName}'s castle. Works on chest plates, --exclusions, .fi and .pull while standing on this island.");
+        }
+
+        [Command(name: "alias", usage: ".s alias del <alias>", description: "Remove a castle item alias.")]
+        public static void DelCastleAlias(ChatCommandContext ctx, string action, string alias)
+        {
+            if (!action.Equals("del", StringComparison.OrdinalIgnoreCase)
+                && !action.Equals("rm", StringComparison.OrdinalIgnoreCase)
+                && !action.Equals("remove", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Reply(Tips.AliasForms());
+                return;
+            }
+            if (!TryGetStandingCastleSettingsOwner(ctx, out var steamId, out var ownerName))
+                return;
+            var key = FoundItemConverter.Normalize(alias);
+            if (!Core.PlayerSettings.RemoveCastleAlias(steamId, key))
+            {
+                ctx.Reply($"No castle alias <color=white>{key}</color> on {ownerName}'s castle. Server aliases: <color=white>.sg alias del {key}</color> (admin).");
+                return;
+            }
+            ctx.Reply($"Removed castle alias <color=white>{key}</color>.");
+        }
+
         [Command(name: "why", usage: ".s why <item> [container]", description: "Why an item does or doesn't sort to a container: dest ranking with reasons, and belt links (mutual, loop, winner).")]
         public static void WhyCmd(ChatCommandContext ctx, FoundItem item, string container = null)
         {

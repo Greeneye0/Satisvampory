@@ -15,6 +15,9 @@ class FoundItemConverter : CommandArgumentConverter<FoundItem>
 {
     public override FoundItem Parse(ICommandContext ctx, string input)
     {
+        // 1.0.116: a castle alias on the standing castle wins before the catalogue.
+        if (ctx is ChatCommandContext cc && TryCastleAliasFor(cc, input, out var aliased))
+            return aliased;
         var status = TryResolve(input, out var result, out var candidates);
         if (status == ItemResolveStatus.Unique)
             return result;
@@ -26,6 +29,28 @@ class FoundItemConverter : CommandArgumentConverter<FoundItem>
         }
 
         throw ctx.Error($"No items found matching: {input}");
+    }
+
+    static bool TryCastleAliasFor(ChatCommandContext ctx, string input, out FoundItem item)
+    {
+        item = default;
+        try
+        {
+            var character = ctx.Event.SenderCharacterEntity;
+            var plot = Core.TerritoryService.GetStandingTerritoryId(character);
+            if (plot < 0)
+                return false;
+            if (!Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out var owner) || owner == 0)
+                return false;
+            if (!Core.PlayerSettings.TryCastleAlias(owner, Normalize(input), out var hash) || hash == 0)
+                return false;
+            item = new FoundItem(new PrefabGUID(hash));
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     public static ItemResolveStatus TryResolve(string input, out FoundItem item, out List<(PrefabGUID prefab, string name)> candidates)

@@ -147,7 +147,7 @@ namespace Satisvampory.Services
         {
             if (string.IsNullOrEmpty(word) || item.GuidHash == 0)
                 return false;
-            if (ItemGroupService.TryExactItemAlias(word, out var aliasHash))
+            if (ItemGroupService.TryExactItemAlias(ownerId, word, out var aliasHash))
                 return aliasHash == item.GuidHash;
             var itemName = Normalize(ItemLabel(item));
             if (!string.IsNullOrEmpty(itemName) && itemName == Normalize(word))
@@ -416,7 +416,7 @@ namespace Satisvampory.Services
                 return false;
             if (item.GuidHash == 0)
                 return false;
-            if (ExactItemNameMatch(name, item, out _))
+            if (ExactItemNameMatch(name, item, out _, ownerId))
                 return true;
             if (CategoryMatch(name, item, ownerId, out _))
                 return true;
@@ -601,7 +601,7 @@ namespace Satisvampory.Services
                 return false;
             if (IsDestClassToken(token))
                 return false;
-            if (ItemGroupService.TryExactEssenceAlias(token, out var essenceHash))
+            if (ItemGroupService.TryExactItemAlias(ownerId, token, out var essenceHash))
             {
                 tier = TierGroup;
                 return item.GuidHash == essenceHash;
@@ -740,6 +740,10 @@ namespace Satisvampory.Services
         }
 
         public static bool ExactItemNameMatch(string chestName, PrefabGUID item, out int specificity)
+            => ExactItemNameMatch(chestName, item, out specificity, 0);
+
+        /// <param name="ownerId">Castle owner whose castle aliases apply (0 = server aliases only).</param>
+        public static bool ExactItemNameMatch(string chestName, PrefabGUID item, out int specificity, ulong ownerId)
         {
             specificity = 0;
             if (string.IsNullOrWhiteSpace(chestName) || IsGenericName(chestName))
@@ -756,8 +760,8 @@ namespace Satisvampory.Services
             var tokens = RemainingNameTokens(chestName);
             if (tokens.Count == 0)
                 return false;
-            if (ItemGroupService.TryExactEssenceAlias(remaining, out var essenceHash)
-                || (tokens.Count == 1 && ItemGroupService.TryExactEssenceAlias(tokens[0], out essenceHash)))
+            if (ItemGroupService.TryExactItemAlias(ownerId, remaining, out var essenceHash)
+                || (tokens.Count == 1 && ItemGroupService.TryExactItemAlias(ownerId, tokens[0], out essenceHash)))
             {
                 if (item.GuidHash == essenceHash)
                 {
@@ -856,7 +860,7 @@ namespace Satisvampory.Services
             specificity = 0;
             if (string.IsNullOrWhiteSpace(chestName) || IsGenericName(chestName))
                 return false;
-            if (ExactItemNameMatch(chestName, item, out _))
+            if (ExactItemNameMatch(chestName, item, out _, ownerPlatformId))
                 return false;
 
             var remaining = RemainingNameText(chestName);
@@ -1020,7 +1024,7 @@ namespace Satisvampory.Services
                     return "overflow: last resort only";
             }
             var sender = IsSenderName(plate);
-            var exact = item.GuidHash != 0 && ExactItemNameMatch(matchName, item, out _);
+            var exact = item.GuidHash != 0 && ExactItemNameMatch(matchName, item, out _, ownerId);
             var matched = new List<(string token, int tier)>();
             var category = !exact && item.GuidHash != 0 && CategoryMatch(matchName, item, ownerId, out _, matched);
             var unnamed = IsUnnamedDest(plate, destName);
@@ -1284,7 +1288,7 @@ namespace Satisvampory.Services
 
             var specExact = 0;
             var specCat = 0;
-            var exact = !overflowDest && item.GuidHash != 0 && ExactItemNameMatch(matchName, item, out specExact);
+            var exact = !overflowDest && item.GuidHash != 0 && ExactItemNameMatch(matchName, item, out specExact, ownerId);
             var category = !overflowDest && !exact && item.GuidHash != 0 && CategoryMatch(matchName, item, ownerId, out specCat);
             var unnamed = !overflowDest && IsUnnamedDest(plate, name);
 
@@ -1386,7 +1390,7 @@ namespace Satisvampory.Services
                 r.Label = IsOverflowDestName(plate) ? LabelOverflow : (IsConveyorName(plate) ? LabelSender : LabelCustomLast);
                 return r;
             }
-            if (item.GuidHash != 0 && ExactItemNameMatch(matchName, item, out var specExact))
+            if (item.GuidHash != 0 && ExactItemNameMatch(matchName, item, out var specExact, ownerId))
             {
                 r.Class = 0;
                 r.Spec = specExact;

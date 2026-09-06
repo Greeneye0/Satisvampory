@@ -147,6 +147,7 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 | `.s item <item>` | Plot / island | Chests by plot, machines (moving / not), cap, reserve, total | `.s item "Iron Ore"` |
 | `.s conv <item>` | Plot / island | Why a belt is not moving that item | `.s conv plank` |
 | `.s why <item> [container]` | Plot / island | Dest ranking with reasons + belt links | `.s why "Grave Dust" "Bone Grave"` |
+| `.s alias` / `.s alias add <a> <item>` / `.s alias del <a>` | Castle | Castle-scoped item aliases for plates, `--exclusions`, `.fi`, `.pull` | `.s alias add sw Silkworm` |
 | `.s need` | Plot / island | Top 10 station inputs wanted | `.s need` |
 | `.s cs` / `.s gs` | Clan | Clan Share on or off | `.s cs` |
 | `.s cse` | Plot, owner | Exclude or include this plot | `.s cse` |

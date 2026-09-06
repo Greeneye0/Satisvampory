@@ -23,6 +23,7 @@ namespace Satisvampory.Services
         Conv,
         ItemStock,
         Why,
+        CastleAliasAdd,
         ExcludeToggle,
         BagCapShow,
         BagCapSet,

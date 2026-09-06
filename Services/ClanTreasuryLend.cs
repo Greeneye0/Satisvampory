@@ -1077,7 +1077,7 @@ namespace Satisvampory.Services
                 if (!StashRouting.TryGetExternalInventory(stash, out var inv))
                     continue;
                 var generic = StashRouting.IsUnnamedOrGeneric(name);
-                var named = item.GuidHash != 0 && (StashRouting.ExactItemNameMatch(name, item, out _)
+                var named = item.GuidHash != 0 && (StashRouting.ExactItemNameMatch(name, item, out _, ownerId)
                     || StashRouting.CategoryMatch(name, item, ownerId, out _));
                 if (!generic && !named)
                     continue;

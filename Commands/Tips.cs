@@ -42,6 +42,6 @@ namespace Satisvampory.Commands
             => $"No items found matching: {missing}. Tips: quote names with spaces ({W}\"Iron Ore\"{E}), separate items with commas, use {W}.fi <part of name>{E} to search, or an alias ({W}.sg alias{E}).";
 
         public static string AliasForms()
-            => $"Aliases: {W}.sg alias{E} lists them, {W}.sg alias add ci \"Copper Ingot\"{E} adds one, {W}.sg alias del ci{E} removes it. Aliases work in .fi, .pull, chest names, and --exclusions.";
+            => $"Castle aliases (yours): {W}.s alias{E} lists, {W}.s alias add ci \"Copper Ingot\"{E} adds, {W}.s alias del ci{E} removes. Server-wide (admin): {W}.sg alias add / del{E}. Aliases work in .fi, .pull, chest plates, and --exclusions.";
     }
 }
