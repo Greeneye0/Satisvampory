@@ -234,8 +234,8 @@ namespace Satisvampory.Services
                     var p = plot >= 0 ? plot : FirstStandingPlot();
                     if (p >= 0)
                         Core.TerritoryService.TryGetTerritoryOwnerPlatformId(p, out owner);
-                    if (owner == 0 && users > 0)
-                        owner = (ulong)users;
+                    if (owner == 0 && !string.IsNullOrEmpty(name) && ulong.TryParse(name, out var named))
+                        owner = named;
                     return owner == 0 ? "{\"error\":\"no owner: stand on a plot or pass plot\"}" : SortLogicTest.Run(owner);
                 }
                 case "selftest":

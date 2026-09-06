@@ -22,6 +22,9 @@ namespace Satisvampory.Services
             var checks = new List<(string name, bool ok, string detail)>();
             var graveDust = new PrefabGUID(-608131642);
             var bone = new PrefabGUID(1821405450);
+            // Fish Bone: in the built-in bones group but not literally named "Bone", so a plate
+            // "Bone" is a category (group-word) match for it, not an exact item-name match.
+            var fishBone = new PrefabGUID(424158416);
             var gdName = StashRouting.ItemLabel(graveDust);
             var boneName = StashRouting.ItemLabel(bone);
             if (string.IsNullOrEmpty(gdName) || string.IsNullOrEmpty(boneName))
@@ -78,9 +81,12 @@ namespace Satisvampory.Services
                     Check(checks, "custom group: '" + Group + " S1' matches Bone", StashRouting.CategoryMatch(Group + " S1", bone, ownerId, out _));
                     var bothOk = StashRouting.CategoryMatch(Group + " Alchemy", bone, ownerId, out var bothSpec);
                     Check(checks, "custom group beats built-in on same plate for Bone", bothOk && Tier(bothSpec) == StashRouting.TierCustomGroup, "spec=" + bothSpec);
-                    var builtOk = StashRouting.CategoryMatch("Bone", bone, ownerId, out var builtSpec);
-                    var customBetter = cgOk && builtOk && cgSpec > builtSpec;
-                    Check(checks, "custom group spec > built-in 'Bone' spec", customBetter, "custom=" + cgSpec + " builtin=" + builtSpec);
+                    Core.PlayerSettings.AddItemToGroup(ownerId, Group, fishBone, StashRouting.ItemLabel(fishBone));
+                    var fbCustom = StashRouting.CategoryMatch(Group, fishBone, ownerId, out var fbCustomSpec);
+                    var builtOk = StashRouting.CategoryMatch("Bone", fishBone, ownerId, out var builtSpec);
+                    Check(checks, "built-in 'Bone' plate matches Fish Bone at group tier", builtOk && Tier(builtSpec) == StashRouting.TierGroup, "spec=" + builtSpec);
+                    var customBetter = fbCustom && builtOk && fbCustomSpec > builtSpec;
+                    Check(checks, "custom group spec > built-in 'Bone' spec for Fish Bone", customBetter, "custom=" + fbCustomSpec + " builtin=" + builtSpec);
                     Check(checks, "custom group: alias still exact for Grave Dust", StashRouting.ExactItemNameMatch(Alias, graveDust, out _));
                     Check(checks, "custom group: 'Alchemy' unchanged for Grave Dust", StashRouting.CategoryMatch("Alchemy", graveDust, ownerId, out var a3) && a3 == alchSpec);
                 }
