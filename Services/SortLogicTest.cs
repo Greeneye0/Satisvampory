@@ -55,6 +55,13 @@ namespace Satisvampory.Services
                 if (FoundItemConverter.TryGetExact("Copper Sword", out var swordEx) && swordEx.prefab.GuidHash != 0)
                     Check(checks, "excl: '--copper' matches Copper Sword (equipment fragment allowed)", StashRouting.ExclusionMatches("copper", swordEx.prefab, ownerId));
 
+                // ---- belt tokens are whole tokens ----
+                Check(checks, "token: 'Tailor1 R6S3S6' receives only on 6", string.Join(",", StashRouting.ReceiverGroups("Tailor1 R6S3S6")) == "6");
+                Check(checks, "token: 'Tailor1 R6S3S6' sends on 3,6", string.Join(",", StashRouting.SenderGroups("Tailor1 R6S3S6")) == "3,6");
+                Check(checks, "token: 'Silver1' is not a belt", StashRouting.LineSignature("Silver1").Length == 0);
+                Check(checks, "token: 'Ore S2' sends on 2", string.Join(",", StashRouting.SenderGroups("Ore S2")) == "2");
+                Check(checks, "token: 's1r1' glued at start parses", string.Join(",", StashRouting.SenderGroups("s1r1")) == "1" && string.Join(",", StashRouting.ReceiverGroups("s1r1")) == "1");
+
                 // ---- same-line signature ----
                 Check(checks, "line: 'Misc Ingots R2S2' == 'Metal2 S2R2'", StashRouting.LineSignature("Misc Ingots R2S2") == StashRouting.LineSignature("Metal2 S2R2") && StashRouting.LineSignature("Misc Ingots R2S2").Length > 0);
                 Check(checks, "line: 'Metal1 R2S2S0' differs from 'Metal2 R2S2'", StashRouting.LineSignature("Metal1 R2S2S0") != StashRouting.LineSignature("Metal2 R2S2"));

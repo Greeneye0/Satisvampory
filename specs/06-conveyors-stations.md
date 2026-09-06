@@ -6,7 +6,7 @@ Player `.s co` + server `.sg co` to run conveyors.
 
 ## Belts (`s#` / `r#`)
 
-Nameplate tokens: `s(\d+)` sender, `r(\d+)` receiver. Group number is the digit.
+Nameplate tokens: `s(\d+)` sender, `r(\d+)` receiver, **not preceded by a letter** (1.0.115). Group number is the digit. `Tailor1` and `Silver1` are names, not `r1`; `R6S3S6`, `s1r1`, and `Ore S2` parse. Before 1.0.115 `Tailor1 R6S3S6` was read as receiver 1 with the match name `Tailo`, so its custom group never matched.
 
 - **Stations first.** Chest senders fill receiving stations (`r#`) that want the item, then chest receivers.
 - Honor **reserve** and **production cap** (`.s cap`) counted on the island.
