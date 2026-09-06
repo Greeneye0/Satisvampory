@@ -1798,13 +1798,15 @@ namespace Satisvampory.Services
                     continue;
                 }
                 var name = RawName(stash);
-                if (IsConveyorName(name))
-                    continue;
                 if (IsNoShareName(name) && loggedNs.Add(plot + ":" + name))
                     LogDestPick(SkipLabel(name), plot, item, name, "deposit-filter");
                 var has = InventoryHasItem(inv, item);
                 var rank = RankDeposit(stash, item, ownerId, has, plot);
                 if (!rank.IsDepositUsable || rank.Class > maxClass)
+                    continue;
+                // 1.0.127: a belt chest is a lend / park dest only when it is the item's home:
+                // class 0 (seeded or name-matched s#) or a '+' boost. Never a generic belt box.
+                if (IsConveyorName(name) && rank.Class > 0)
                     continue;
                 ranked.Add((rank, inv));
             }

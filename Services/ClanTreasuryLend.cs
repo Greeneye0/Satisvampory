@@ -1337,11 +1337,11 @@ namespace Satisvampory.Services
                     continue;
                 var stash = StashForInventory(destPlot, inv);
                 var name = StashRouting.RawName(stash);
-                if (StashRouting.IsConveyorName(name))
-                    continue;
+                // 1.0.127: belt chests are park candidates; OrderDepositInventories only lets one
+                // through when it is the item's home (class 0: seeded or name-matched s#, or '+').
                 if (IsTreasuryFloor(stash) || ClanTreasuryShare.IsTreasuryLinked(stash))
                     treasury.Add(inv);
-                else if (StashRouting.IsUnnamedOrGeneric(name))
+                else if (!StashRouting.IsConveyorName(name) && StashRouting.IsUnnamedOrGeneric(name))
                     unnamed.Add(inv);
             }
             return treasury.Count > 0 ? treasury : unnamed;
@@ -1359,9 +1359,7 @@ namespace Satisvampory.Services
                 if (InventoryIsOverflow(destPlot, inv))
                     continue;
                 var stash = StashForInventory(destPlot, inv);
-                if (StashRouting.IsConveyorName(StashRouting.RawName(stash)))
-                    continue;
-                list.Add(inv);
+                list.Add(inv); // 1.0.127: belt chests included; ranking gates them to class 0
             }
             return list;
         }
