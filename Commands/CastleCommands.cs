@@ -937,6 +937,9 @@ namespace Satisvampory.Commands
             ctx.Reply($"Removed castle alias <color=white>{key}</color>.");
         }
 
+        [Command(name: "why", usage: ".s why", description: "How to ask why an item sorts to a container.")]
+        public static void WhyHelpCmd(ChatCommandContext ctx) => ctx.Reply(Tips.WhyHelp());
+
         [Command(name: "why", usage: ".s why <item> [container]", description: "Why an item does or doesn't sort to a container: dest ranking with reasons, and belt links (mutual, loop, winner).")]
         public static void WhyCmd(ChatCommandContext ctx, FoundItem item, string container = null)
         {

@@ -41,6 +41,15 @@ namespace Satisvampory.Commands
         public static string ItemsNotFound(string missing)
             => $"No items found matching: {missing}. Tips: quote names with spaces ({W}\"Iron Ore\"{E}), separate items with commas, use {W}.fi <part of name>{E} to search, or an alias ({W}.sg alias{E}).";
 
+        public static string WhyHelp()
+            => "Why does an item sort where it does?
+"
+             + $"  one item, one container: {W}.s why \"Empty Glass Bottle\" \"EGB R2\"{E}   (aliases work: {W}.s why egb EGB{E})
+"
+             + $"  one item, every chest: {W}.s why \"Grave Dust\"{E}
+"
+             + "  Shows the chest's class and the reason (exact / group / category / partial / seeded / generic / restricted / excluded / NS), full, seeded, here, which chest stash and tidy would pick, and belt links.";
+
         public static string AliasForms()
             => $"Castle aliases (yours): {W}.s alias{E} lists, {W}.s alias add ci \"Copper Ingot\"{E} adds, {W}.s alias del ci{E} removes. Server-wide (admin): {W}.sg alias add / del{E}. Aliases work in .fi, .pull, chest plates, and --exclusions.";
     }

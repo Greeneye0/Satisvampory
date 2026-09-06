@@ -28,7 +28,7 @@ class FoundItemConverter : CommandArgumentConverter<FoundItem>
             throw MultipleResultsError(ctx, PrefabsFromCandidates(candidates), 60 + "\n...".Length);
         }
 
-        throw ctx.Error($"No items found matching: {input}");
+        throw ctx.Error($"No items found matching: {input}. Quote names with spaces (\"Iron Ore\"), try part of the name with .fi, or use an alias (.s alias).");
     }
 
     static bool TryCastleAliasFor(ChatCommandContext ctx, string input, out FoundItem item)
