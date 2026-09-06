@@ -56,11 +56,11 @@ A group word beats an ItemCategory word beats a partial name, regardless of toke
 
 | Class | Label | Meaning |
 | --- | --- | --- |
-| **0** | `s#` | Matching sender: nameplate is `s#` **and** (exact **or** category match on the remaining name, **or** unnamed/generic **and** the chest already has this item). A named `s#` does **not** need to be seeded: an empty `Blood Essence S5R5` beats a `Blood` chest. Overflow never class 0. Named `s#` MUST NOT take unmatched items. |
+| **0** | `s#` | Sender: nameplate is `s#` **and** (the chest **already holds this item**, **or** exact / category match on the remaining name). Seed **or** name, either is enough (1.0.99): `Alch S5` holding Grave Dust keeps taking Grave Dust; an empty `Blood Essence S5R5` beats a `Blood` chest. Overflow never class 0. |
 | **1** | name-match | Exact item-name match on the remaining name (after stripping `s#`/`r#`/overflow/generic filler). |
 | **2** | category | Dest-group / ItemCategory match (built-in dest words, custom groups, `+` AND / space OR). |
-| **3** | generic | Unnamed / generic plate. Treasury-floor generic slightly preferred (`Spec = 1`). |
-| **4** | custom-last | Named custom plate that already has this item but did not exact/category match. |
+| **3** | seeded | Any chest that **already holds this item** but did not exact/category match: generic plate or custom name. Seeded beats empty (1.0.99). Generic seeded slightly preferred over custom seeded, then treasury-floor. |
+| **4** | generic | Unnamed / generic plate, **empty** of this item. Treasury-floor generic slightly preferred (`Spec = 1`). |
 | **5** | overflow | Overflow last-resort. |
 | **6** | empty-custom | Named custom plate that does **not** have the item and did not match. **Not a usable dump dest** (`IsDepositUsable` is class ≤ 5). |
 | **90** | special | salvage/spoils/brazier/spawner/trash. |
@@ -78,7 +78,7 @@ After stripping conveyor tokens and overflow/generic filler:
   - **Blood Jewel** → jewels, not blood.
   - **Miststone** → not stone.
 - `blood` as a dest word is **Blood Essence**, not Greater/Primal/Ancestral. Ranks above Alchemy category.
-- `alch` / `alchemist` are aliases of the `alchemy` group word (1.0.98). An unrecognised word on an `s#` plate (`Alch` before 1.0.98) matches nothing, so the chest is **class 4** even when it holds the item and a generic chest (class 3) wins. Check with `.s why <item> <container>`.
+- An unrecognised word on a plate (`Alch`) matches nothing. Before 1.0.99 such a chest was class 4 even when seeded and an empty generic chest won; now a seeded chest is class 3 (class 0 if `s#`) and beats empty generic. Check with `.s why <item> <container>`.
 - Exact item aliases match **that item only** (find / pull / dest names): `be` (Blood Essence), `gbe` / `pbe` / `abe` (Greater / Primal / Ancestral), `gss` (Greater Stygian Shard), `sgs` (Siege Golem Stone), `dsi` (Dark Silver Ingot), `ot` (Onyx Tear). Admin can add more with `.sg alias add <alias> <item>`. Cannot overwrite dest-group words (`blood`, `stone`, …) or built-ins. `blood` as a dest word stays the Blood Essence dest **group**; `BE` is the exact item.
 - Spelling fold: fiber/fibre, sulfur/sulphur, armor/armour, gray/grey, jewelry/jewellery, etc.
 

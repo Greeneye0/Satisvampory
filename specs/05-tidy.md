@@ -29,7 +29,7 @@ Start from `RankDeposit` ([01-dest-ranking.md](01-dest-ranking.md)). Then:
 | --- | --- | --- |
 | Heart / skip plate | no | no |
 | Overflow or spoils | **yes** | **no** |
-| `s#` / `r#` | **no** | **yes** if dest class **≤ 2** (matching seeded s# / exact / category) |
+| `s#` / `r#` | **no** | **yes** if dest class **≤ 2** (seeded or matching s# / exact / category) |
 | Other (including **treasury floor**) | **yes** | **yes** if dest class **≤ 4** |
 
 So:

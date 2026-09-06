@@ -5,7 +5,7 @@
 Dump inventory **except hotbar** into dest chests on the standing plot, or the **clan island** if ClanShare is on.
 
 - Dest order: [01-dest-ranking.md](01-dest-ranking.md) (`OrderDepositDests` / `RankDeposit`).
-- Matching seeded `s#` first, then exact name, then category, then generic, then custom-seeded, then overflow.
+- `s#` (seeded or name-matched) first, then exact name, then category, then seeded (generic or custom), then empty generic, then overflow.
 - Skip `NS` / skip-quotes. Skip special salvage/trash/spawner/brazier as normal dump dests.
 - Off-plot (not on a clan island plot): also needs `.s rrglobal` and `.sg rrg`.
 - Bat form allowed. Downed / dead / PvP combat / unallied / raided: denied.

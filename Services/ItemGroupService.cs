@@ -69,8 +69,6 @@ namespace Satisvampory.Services
             [GroupGems] = GroupGems,
             ["gem"] = GroupGems,
             [GroupAlchemy] = GroupAlchemy,
-            ["alch"] = GroupAlchemy,
-            ["alchemist"] = GroupAlchemy,
             [GroupBlood] = GroupBlood,
             [GroupBones] = GroupBones,
             ["bone"] = GroupBones,

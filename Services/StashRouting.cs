@@ -853,15 +853,15 @@ namespace Satisvampory.Services
             switch (rank.Class)
             {
                 case 0:
-                    return $"s# sender: {detail}" + (unnamed && !exact && !category ? " (seeded)" : "");
+                    return $"s# sender: {detail}" + (!exact && !category ? " (seeded: holds the item)" : "");
                 case 1:
                     return "name-match: exact item name";
                 case 2:
                     return "category: " + detail;
                 case 3:
-                    return sender ? "generic s# but empty of this item (seed it to make it class 0)" : "generic plate";
+                    return unnamed ? "generic plate, already holds the item" : "custom name, no match, but already holds the item";
                 case 4:
-                    return "custom name, no match, but already holds the item";
+                    return sender ? "s# but empty of this item and no name match (seed it to make it class 0)" : "generic plate, empty of this item";
                 case 6:
                     return "custom name, no match, empty — not a dest";
             }
@@ -870,7 +870,7 @@ namespace Satisvampory.Services
 
         public struct DepositRank : IComparable<DepositRank>
         {
-            // Incoming dest: 0 s# (name-matches, or unnamed+seeded), 1 exact, 2 category, 3 unnamed/generic, 4 custom-seeded, 5 overflow last-resort, 6 empty-custom, 90 special, 99 NS
+            // Incoming dest: 0 s# (seeded or name-matches), 1 exact, 2 category, 3 seeded (generic or custom, no name match), 4 empty generic, 5 overflow last-resort, 6 empty-custom, 90 special, 99 NS
             public int Class;
             public int Spec;
             public bool Seeded;
@@ -967,7 +967,7 @@ namespace Satisvampory.Services
             var classOk = blankClass == 3 && emptyClass == 3 && leatherClass == 6;
             var generalClass = RankClassUnmatched("General", "Jewel Storage", false);
             var elseClass = RankClassUnmatched("Everything Else", "Jewel Storage", false);
-            var catchAll = IsGenericName("General") && IsGenericName("Everything Else") && generalClass == 3 && elseClass == 3;
+            var catchAll = IsGenericName("General") && IsGenericName("Everything Else") && generalClass == 4 && elseClass == 4;
             var passBlank = SourcePassFromName("", false);
             var passLeather = SourcePassFromName("Leather", false);
             var passBelt = SourcePassFromName("Planks R0S0", true);
@@ -1009,9 +1009,10 @@ namespace Satisvampory.Services
         {
             if (IsOverflowDestName(plate) || IsOverflowDestName(destName))
                 return 5;
+            // 1.0.99: a chest that already holds the item (3) beats an empty generic plate (4).
             if (IsUnnamedDest(plate, destName))
-                return 3;
-            return hasItem ? 4 : 6;
+                return hasItem ? 3 : 4;
+            return hasItem ? 3 : 6;
         }
 
         /// <summary>
@@ -1080,14 +1081,14 @@ namespace Satisvampory.Services
             var category = !overflowDest && !exact && item.GuidHash != 0 && CategoryMatch(matchName, item, ownerId, out specCat);
             var unnamed = !overflowDest && IsUnnamedDest(plate, name);
 
-            // 1.0.95: s# is class 0 when the plate name matches (exact or category) - no seed
-            // needed ("Blood Essence S5R5" beats "Blood" even while empty). Unnamed / generic s#
-            // still needs the item already inside. Overflow names never class 0. Named s# must
-            // not take unmatched items. s# lives on the nameplate only - never a prefab name.
-            if (!overflowDest && IsSenderName(plate) && ((unnamed && hasItem) || exact || category))
+            // 1.0.99: s# is class 0 when it already holds the item (seeded) OR the plate name
+            // matches (exact / category). "Alch S5" holding Grave Dust takes more Grave Dust;
+            // an empty "Blood Essence S5R5" still beats "Blood". Overflow names never class 0.
+            // s# lives on the nameplate only - never a prefab name.
+            if (!overflowDest && IsSenderName(plate) && (hasItem || exact || category))
             {
                 rank.Class = 0;
-                rank.Spec = exact ? specExact + 10 * TierStep : (category ? specCat + 10000 : 0);
+                rank.Spec = exact ? specExact + 10 * TierStep : (category ? specCat + 10000 : (hasItem ? 1 : 0));
                 rank.Label = LabelSender;
                 return rank;
             }
@@ -1108,6 +1109,13 @@ namespace Satisvampory.Services
             var unmatched = RankClassUnmatched(plate, destName, hasItem);
             rank.Class = unmatched;
             if (unmatched == 3)
+            {
+                // Seeded: generic seeded slightly prefers over custom seeded, then treasury.
+                rank.Spec = (unnamed ? 2 : 0) + (rank.Treasury ? 1 : 0);
+                rank.Label = unnamed ? LabelGeneric : LabelCustomLast;
+                return rank;
+            }
+            if (unmatched == 4)
             {
                 rank.Spec = rank.Treasury ? 1 : 0;
                 rank.Label = LabelGeneric;
