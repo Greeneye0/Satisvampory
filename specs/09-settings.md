@@ -44,6 +44,8 @@ Not scoop bagcap.
 
 ## Item groups (castle)
 
+Custom groups are stored per castle owner and edited from that castle. For **matching chest plates** they are island-wide under ClanShare (1.0.126): a plate named for a clan mate's group matches from any castle on the island, standing owner's groups first. `.s group` still lists and edits the standing castle's groups.
+
 Built-in groups (aliases in parentheses): ore, flowers (herb/herbs), seeds (seed), mushrooms, tailoring (thread), hides (leather), wood, gems, alchemy, blood, bones, ingots, planks, stone, coins, fish, knowledge (scroll/paper/book), minerals (material/tech), consumables (potion), weapons, armor, jewels, magic, soulshards, bags, saddles, relics.
 
 - Hell’s Clarion is **mushrooms**, not flowers. `.s group restore` puts that back.

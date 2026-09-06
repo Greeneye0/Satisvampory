@@ -78,7 +78,7 @@ Lower class wins. Then higher **specificity**, then **seeded** (already has the 
 
 | Tier | Token kind | Example |
 | --- | --- | --- |
-| 4 | **Custom group** name (`.s group create …`) | `AlchTest` for its members |
+| 4 | **Custom group** name (`.s group create …`) — any owner on the clan island (1.0.126; standing owner first) | `AlchTest` for its members |
 | 3 | **Built-in group word** (`alchemy`, `bone`, `blood`, …), essence alias | `Alchemy` for Grave Dust (alchemy group member) |
 | 2 | **ItemCategory word** (vanilla category flag) | `Consumable` |
 | 1 | **Partial item name** (3+ chars, not all digits) | `Grave` for Grave Dust |

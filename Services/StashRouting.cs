@@ -617,26 +617,31 @@ namespace Satisvampory.Services
 
             // 1.0.102: custom groups first and above built-ins. Exact normalized name only
             // (plural / spelling fold), never a substring.
-            foreach (var (name, _) in Core.PlayerSettings.ListCustomGroups(ownerId))
+            // 1.0.126: island-wide under ClanShare - a chest named for a clan mate's custom group
+            // matches from any castle on the island (standing owner first).
+            foreach (var groupOwner in Core.TerritoryService.GetIslandOwnerIds(ownerId))
             {
-                if (string.IsNullOrEmpty(name))
-                    continue;
-                var gNorm = ItemGroupService.NormalizeName(name);
-                if (gNorm.Length < 3)
-                    continue;
-                if (!VariantsOverlap(token, gNorm))
-                    continue;
-                foreach (var m in ItemGroupService.ResolveMembers(ownerId, name))
+                foreach (var (name, _) in Core.PlayerSettings.ListCustomGroups(groupOwner))
                 {
-                    if (m.GuidHash == item.GuidHash)
+                    if (string.IsNullOrEmpty(name))
+                        continue;
+                    var gNorm = ItemGroupService.NormalizeName(name);
+                    if (gNorm.Length < 3)
+                        continue;
+                    if (!VariantsOverlap(token, gNorm))
+                        continue;
+                    foreach (var m in ItemGroupService.ResolveMembers(groupOwner, name))
                     {
-                        tier = TierCustomGroup;
-                        return true;
+                        if (m.GuidHash == item.GuidHash)
+                        {
+                            tier = TierCustomGroup;
+                            return true;
+                        }
                     }
+                    // The token IS this custom group's name and the item is not in it: no fallback
+                    // to a built-in or partial-name match on the same word.
+                    return false;
                 }
-                // The token IS this custom group's name and the item is not in it: no fallback
-                // to a built-in or partial-name match on the same word.
-                return false;
             }
 
             var tokenIsDestGroup = false;
