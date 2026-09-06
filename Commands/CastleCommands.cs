@@ -1068,6 +1068,24 @@ namespace Satisvampory.Commands
                 ctx.Reply($"Salvage on this plot ({ownerName}) is {plotState}.");
         }
 
+        [Command(name: "cover", usage: ".s cover seeds", description: "Toggle whether covering brings seeds / saplings / spores to the plot you are standing on. Default OFF.")]
+        public static void CoverToggle(ChatCommandContext ctx, string what)
+        {
+            if (!what.Trim().Equals("seeds", StringComparison.OrdinalIgnoreCase) && !what.Trim().Equals("plants", StringComparison.OrdinalIgnoreCase))
+            {
+                ctx.Reply("Use <color=white>.s cover seeds</color> to toggle seeds / saplings / spores in covering for this plot (default OFF).");
+                return;
+            }
+            if (!TryGetStandingCastleSettingsOwner(ctx, out var ownerPlatformId, out var ownerName, replyIfMissing: false))
+            {
+                ctx.Reply("You must stand on a claimed castle plot.");
+                return;
+            }
+            var plot = Core.TerritoryService.GetStandingTerritoryId(ctx.Event.SenderCharacterEntity);
+            var on = Core.PlayerSettings.ToggleCoverSeeds(ownerPlatformId, plot);
+            ctx.Reply($"Covering seeds / saplings / spores on plot {plot} ({ownerName}'s castle): {(on ? "<color=green>ON</color> — the lend will bring them here for planting" : "<color=red>OFF</color> — seeds stay home; .pull them when you plant")}.");
+        }
+
         [Command(name: "heartfeed", shortHand: "hf", usage: ".s heartfeed", description: "Toggle castle-heart Blood Essence auto-feed on the plot you are standing on. ON by default.")]
         public static void ToggleHeartFeed(ChatCommandContext ctx)
         {

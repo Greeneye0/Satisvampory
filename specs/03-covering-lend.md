@@ -62,6 +62,10 @@ Enough to place **3 copies** of whichever **unlocked** castle blueprint is hungr
 - 3× = 1× × `BuildCoverCopies` (3), honor reserve (except chest BE stays 500).
 - Park into vanilla-visible dests (generic / matching), not overflow, class cap **4** during covering park (= empty generic; 1.0.99 renumbered seeded to 3 and empty generic to 4, and 1.0.100–1.0.122 wrongly kept cap 3 so only seeded chests could take park). Belt chests (`s#`/`r#`) are park dests **only when they are the item's home** (class 0: seeded or name-matched `s#`, or a `+` boost; 1.0.127) — Emery parks into `Metal2 R2S2`, planks into `Planks R0S0`; a generic belt box never takes park. Restricted furniture is never a dest (class 97). Skip castle hearts as dests and as covering stock.
 
+### Plants are not covering (1.0.128)
+
+Seeds, saplings, and spores are stored by the game as **plant blueprints** whose only cost is the seed, so the blueprint scan used to pull three of every unlocked seed to whichever castle a player stood on. You do not build a plant; you plant it. Covering now **skips plant blueprints** unless the plot opts in with **`.s cover seeds`** (per plot, default OFF). Stash / tidy / belts for seeds are unchanged.
+
 ### Covering order (`OrderedCoveringTargets`)
 
 Materials needed on the dest plot, compared to **stock already on that plot**:

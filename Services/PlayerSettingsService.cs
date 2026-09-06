@@ -372,6 +372,8 @@ namespace Satisvampory.Services;
         public bool GetPlotSalvageFlag(ulong heartOwnerId, int territoryId) => SettingsExtras.GetPlotSalvageFlag(heartOwnerId, territoryId);
         public bool TogglePlotSalvage(ulong heartOwnerId, int territoryId) => SettingsExtras.TogglePlotSalvage(heartOwnerId, territoryId);
         public bool IsHeartFeedEnabled(ulong heartOwnerId, int territoryId) => SettingsExtras.IsHeartFeedEnabled(heartOwnerId, territoryId);
+        public bool IsCoverSeedsOn(ulong heartOwnerId, int territoryId) => SettingsExtras.IsCoverSeedsOn(heartOwnerId, territoryId);
+        public bool ToggleCoverSeeds(ulong heartOwnerId, int territoryId) => SettingsExtras.ToggleCoverSeeds(heartOwnerId, territoryId);
         public bool ToggleHeartFeed(ulong heartOwnerId, int territoryId) => SettingsExtras.ToggleHeartFeed(heartOwnerId, territoryId);
         public bool IsHeartFuelSeeded(string heartKey) => SettingsExtras.IsHeartFuelSeeded(heartKey);
         public void MarkHeartFuelSeeded(params string[] heartKeys) => SettingsExtras.MarkHeartFuelSeeded(heartKeys);

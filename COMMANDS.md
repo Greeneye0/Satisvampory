@@ -79,6 +79,7 @@ Stand on the plot. Default reserve **10**. Default production cap **unlimited**.
 
 | Command | What |
 | --- | --- |
+| `.s cover seeds` | Toggle whether covering brings seeds / saplings / spores to this plot (default **OFF**; plants are not buildings) |
 | `.s reserve` | Show default reserve |
 | `.s reserve 10` | Set default for every item. `0` disables reserve |
 | `.s reserve plank` | Show one item or group |

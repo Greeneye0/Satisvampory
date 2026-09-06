@@ -74,6 +74,8 @@ namespace Satisvampory.Services
         public Dictionary<string, bool> PlotSalvage { get; set; }
         // Per-plot heart auto-feed. Missing key = ON by default.
         public Dictionary<string, bool> HeartFeed { get; set; }
+        /// <summary>1.0.128: per plot, covering includes plant blueprints (seeds / saplings / spores). Default OFF.</summary>
+        public Dictionary<string, bool> CoverSeeds { get; set; }
         // Persisted heart fuel seed/opt-out keys (heart NetworkId n{net} only; t{plot} ignored).
         public List<string> HeartFuelSeeded { get; set; }
         public List<string> HeartFuelOptOut { get; set; }

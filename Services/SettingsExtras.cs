@@ -227,6 +227,23 @@ namespace Satisvampory.Services
             !S.TryRow(heartOwnerId, out var settings) || settings.HeartFeed == null
             || !settings.HeartFeed.TryGetValue(HeartFeedKey(territoryId), out var on) || on;
 
+        internal static bool IsCoverSeedsOn(ulong heartOwnerId, int territoryId) =>
+            S.TryRow(heartOwnerId, out var settings) && settings.CoverSeeds != null
+            && settings.CoverSeeds.TryGetValue(HeartFeedKey(territoryId), out var on) && on;
+
+        internal static bool ToggleCoverSeeds(ulong heartOwnerId, int territoryId)
+        {
+            if (!S.Rows.TryGetValue(heartOwnerId, out var settings))
+                settings = new SettingsRow();
+            settings.CoverSeeds ??= new Dictionary<string, bool>();
+            var key = HeartFeedKey(territoryId);
+            var current = settings.CoverSeeds.TryGetValue(key, out var on) && on;
+            settings.CoverSeeds[key] = !current;
+            S.Rows[heartOwnerId] = settings;
+            S.MarkDirty();
+            return !current;
+        }
+
         internal static bool ToggleHeartFeed(ulong heartOwnerId, int territoryId)
         {
             if (!S.Rows.TryGetValue(heartOwnerId, out var settings))

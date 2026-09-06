@@ -2405,6 +2405,16 @@ namespace Satisvampory.Services
                         if (costs.Count == 0)
                             continue;
                         blueprintCosts.Add((bp, data.IsStartBlueprint, costs));
+                        // 1.0.128: plants are stored as blueprints (cost = the seed). Remember them so
+                        // covering can leave seeds / saplings / spores alone unless the plot opts in.
+                        foreach (var (g, _) in costs)
+                        {
+                            if (IsPlantCost(g))
+                            {
+                                plantBlueprints.Add(bp);
+                                break;
+                            }
+                        }
                     }
                 }
                 finally
@@ -2540,6 +2550,18 @@ namespace Satisvampory.Services
             return scaled < 1 ? 1 : scaled;
         }
 
+        static readonly HashSet<int> plantBlueprints = new();
+
+        static bool IsPlantCost(int guid)
+        {
+            if (guid == 0)
+                return false;
+            if (ItemGroupService.TryGetDestGroup(guid, out var group) && group == ItemGroupService.GroupSeeds)
+                return true;
+            var label = (StashRouting.ItemLabel(new PrefabGUID(guid)) ?? "").ToLowerInvariant();
+            return label.EndsWith(" seed") || label.EndsWith(" seeds") || label.Contains("sapling") || label.Contains("spore");
+        }
+
         static Dictionary<int, int> GetCovering1x(int destPlot)
         {
             if (destPlot >= 0
@@ -2554,8 +2576,13 @@ namespace Satisvampory.Services
                 return new Dictionary<int, int>();
             var unlocked = destPlot >= 0 ? CollectUnlocksOnPlot(destPlot) : new HashSet<int>();
             var max = new Dictionary<int, int>();
+            var coverSeeds = false;
+            if (destPlot >= 0 && Core.TerritoryService.TryGetTerritoryOwnerPlatformId(destPlot, out var plotOwner))
+                coverSeeds = Core.PlayerSettings.IsCoverSeedsOn(plotOwner, destPlot);
             foreach (var row in blueprintCosts)
             {
+                if (!coverSeeds && plantBlueprints.Contains(row.blueprint))
+                    continue;
                 if (unlocked.Count == 0)
                 {
                     if (!row.start)
