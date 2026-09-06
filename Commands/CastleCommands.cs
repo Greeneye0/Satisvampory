@@ -404,7 +404,9 @@ namespace Satisvampory.Commands
                     detail = true;
                 else
                 {
-                    ctx.Reply("Usage: .s group <name>   or   .s group <name> full");
+                    var norm = ItemGroupService.NormalizeName(name);
+                    var exists = ItemGroupService.IsBuiltInName(norm) || Core.PlayerSettings.HasItemGroup(SteamID, norm);
+                    ctx.Reply(Tips.GroupTwoWords(name.Trim(), option, exists));
                     return;
                 }
             }
@@ -523,7 +525,7 @@ namespace Satisvampory.Commands
                 ctx.Reply($"Restored default group <color=green>{normalized}</color> on {ownerName}'s castle ({members.Count} items).");
                 return;
             }
-            ctx.Reply("Usage: .s group create <name>, .s group delete <name>, or .s group restore [name].");
+            ctx.Reply(Tips.GroupVerbs());
         }
 
         [Command(name: "group", usage: ".s group <name> add|remove <item>[, <item> ...]", description: "Add or remove items on a group: comma-separated or space-separated, quote names with spaces. First edit of a built-in copies the default list.")]
@@ -548,7 +550,7 @@ namespace Satisvampory.Commands
             action = action.Trim().ToLowerInvariant();
             if (action is not ("add" or "remove"))
             {
-                ctx.Reply("Usage: .s group <name> add <item> [<item> ...] or .s group <name> remove <item> [<item> ...]. Quote names with spaces.");
+                ctx.Reply(Tips.GroupModify(name.Trim()));
                 return;
             }
 
@@ -586,7 +588,7 @@ namespace Satisvampory.Commands
             }
             if (tokens.Count == 0)
             {
-                ctx.Reply("Usage: .s group <name> add <item> [<item> ...] or .s group <name> remove <item> [<item> ...]. Quote names with spaces.");
+                ctx.Reply(Tips.GroupModify(name.Trim()));
                 return;
             }
 
@@ -658,7 +660,7 @@ namespace Satisvampory.Commands
             ApplyResolvedGroupItems(ctx, normalized, action, uniqueItems, ownerAlreadyChecked: true, steamId: SteamID, ownerName: ownerName);
 
             if (missing.Count > 0)
-                ctx.Reply("No items found matching: " + string.Join(", ", missing));
+                ctx.Reply(Tips.ItemsNotFound(string.Join(", ", missing)));
             if (extraAmbiguous.Count > 0)
                 ctx.Reply("Also ambiguous (be more specific): " + string.Join(", ", extraAmbiguous));
             if (ambiguousToken != null)

@@ -218,7 +218,7 @@ namespace Satisvampory.Commands;
         {
             if (!action.Equals("add", StringComparison.OrdinalIgnoreCase) && !action.Equals("set", StringComparison.OrdinalIgnoreCase))
             {
-                ctx.Reply("Use .sg alias add <alias> <item> or .sg alias del <alias>.");
+                ctx.Reply(Tips.AliasForms());
                 return;
             }
             if (LogisticsCommands.HandleAmbiguousItem(ctx, item, PendingItemCommand.AliasAdd, 0, alias))
@@ -233,7 +233,7 @@ namespace Satisvampory.Commands;
                 && !action.Equals("rm", StringComparison.OrdinalIgnoreCase)
                 && !action.Equals("remove", StringComparison.OrdinalIgnoreCase))
             {
-                ctx.Reply("Use .sg alias add <alias> <item> or .sg alias del <alias>.");
+                ctx.Reply(Tips.AliasForms());
                 return;
             }
             var err = ItemGroupService.UnbindAdminAlias(alias);
