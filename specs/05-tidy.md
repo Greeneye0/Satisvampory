@@ -29,13 +29,13 @@ Start from `RankDeposit` ([01-dest-ranking.md](01-dest-ranking.md)). Then:
 | --- | --- | --- |
 | Heart / skip plate | no | no |
 | Overflow or spoils | **yes** | **no** |
-| `s#` / `r#` | **no** | **yes** if dest class **≤ 2** (seeded or matching s# / exact / category) |
+| `s#` / `r#` | **only** toward a belt chest with **identical** `s#`/`r#` tokens (same line, 1.0.111) | **yes** if dest class **≤ 2** (seeded or matching s# / exact / category) |
 | Other (including **treasury floor**) | **yes** | **yes** if dest class **≤ 4** |
 
 So:
 
 - Matching `Crystal Stone S1` is a dest (class 0/1/2). Tidy MUST move Ghost Crystal out of a generic chest into it.
-- `s#` / `r#` are **never sources**. Tidy never drains a belt.
+- `s#` / `r#` are sources **only toward the same line** (identical tokens). Tidy never moves belt stock off its line.
 - Treasury-floor chests **are sources**.
 - Overflow/spoils empty toward better dests; nothing tidies **into** them.
 - Empty custom (class 6) is not a dest.

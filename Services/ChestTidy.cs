@@ -176,6 +176,10 @@ namespace Satisvampory.Services
                         continue;
                     if (!dst.rank.StrictlyBetterDestThan(src.rank))
                         continue;
+                    // 1.0.111: from a belt chest only to a belt chest with identical tokens.
+                    if (StashRouting.IsConveyorName(StashRouting.RawName(src.stash))
+                        && !StashRouting.SameLine(src.stash, dst.stash))
+                        continue;
                     if (ClanTreasuryLend.InEmptyHold(dst.plot, dst.inv))
                         continue;
 
@@ -255,7 +259,9 @@ namespace Satisvampory.Services
             rank.Seeded = dep.Seeded;
             rank.Label = dep.Label;
             var belt = StashRouting.IsConveyorName(plate);
-            rank.UsableSource = !belt;
+            // 1.0.111: a belt chest IS a source, but only toward a belt chest on the SAME line
+            // (identical s#/r# tokens) - enforced in TidyOne. Stock never leaves the line.
+            rank.UsableSource = true;
             rank.UsableDest = belt ? dep.Class <= 2 : dep.Class <= 4;
             return rank;
         }

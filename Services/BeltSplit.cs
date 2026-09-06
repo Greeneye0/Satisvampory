@@ -368,16 +368,28 @@ namespace Satisvampory.Services
                     if (sink.Inventory == Entity.Null || !Core.EntityManager.Exists(sink.Inventory) || sink.Inventory.Equals(inventory))
                         continue;
                     var destStash = StashFromInventory(sink.Inventory, sendingStash);
-                    if (!loops && destStash != Entity.Null && destStash != sendingStash
-                        && srcIsReceiver && StashHasToken(destStash, Core.Stash.SendToken, group))
-                        continue;
-                    // 1.0.96: cross-group two-cycle ("Alchemy S1R2" -> "Bone Grave R1S2" -> back).
-                    // When the dest can send this item back to us on ANY group, the pair is a
-                    // mutual link: move only toward the strictly better-ranked dest, never ping-pong.
-                    if (!loops && destStash != Entity.Null && destStash != sendingStash
-                        && MutualLink(sendingStash, destStash)
-                        && !DestRanksStrictlyBetter(sendingStash, inventory, destStash, sink.Inventory, item, ownerId))
-                        continue;
+                    var sameLine = destStash != Entity.Null && destStash != sendingStash
+                        && StashRouting.SameLine(sendingStash, destStash);
+                    if (sameLine)
+                    {
+                        // 1.0.111: identical token sets = same line. No convloop guard, no seed:
+                        // the item flows to whichever chest ranks strictly better, and stays on a tie.
+                        if (!DestRanksStrictlyBetter(sendingStash, inventory, destStash, sink.Inventory, item, ownerId))
+                            continue;
+                    }
+                    else
+                    {
+                        if (!loops && destStash != Entity.Null && destStash != sendingStash
+                            && srcIsReceiver && StashHasToken(destStash, Core.Stash.SendToken, group))
+                            continue;
+                        // 1.0.96: cross-group two-cycle ("Alchemy S1R2" -> "Bone Grave R1S2" -> back).
+                        // When the dest can send this item back to us on ANY group, the pair is a
+                        // mutual link: move only toward the strictly better-ranked dest, never ping-pong.
+                        if (!loops && destStash != Entity.Null && destStash != sendingStash
+                            && MutualLink(sendingStash, destStash)
+                            && !DestRanksStrictlyBetter(sendingStash, inventory, destStash, sink.Inventory, item, ownerId))
+                            continue;
+                    }
                     var take = sink.Unlimited ? left : (sink.Wanted < left ? sink.Wanted : left);
                     if (take <= 0)
                         continue;

@@ -55,6 +55,12 @@ namespace Satisvampory.Services
                 if (FoundItemConverter.TryGetExact("Copper Sword", out var swordEx) && swordEx.prefab.GuidHash != 0)
                     Check(checks, "excl: '--copper' matches Copper Sword (equipment fragment allowed)", StashRouting.ExclusionMatches("copper", swordEx.prefab, ownerId));
 
+                // ---- same-line signature ----
+                Check(checks, "line: 'Misc Ingots R2S2' == 'Metal2 S2R2'", StashRouting.LineSignature("Misc Ingots R2S2") == StashRouting.LineSignature("Metal2 S2R2") && StashRouting.LineSignature("Misc Ingots R2S2").Length > 0);
+                Check(checks, "line: 'Metal1 R2S2S0' differs from 'Metal2 R2S2'", StashRouting.LineSignature("Metal1 R2S2S0") != StashRouting.LineSignature("Metal2 R2S2"));
+                Check(checks, "line: plate without tokens has no line", StashRouting.LineSignature("Weapons").Length == 0);
+                Check(checks, "line: '+' and --word do not change the line", StashRouting.LineSignature(StashRouting.StripExclusions(StashRouting.StripTrailingPlus("Metal2 R2S2 --iron+"))) == StashRouting.LineSignature("Metal2 R2S2"));
+
                 // ---- priority '+' plate parsing ----
                 Check(checks, "plus: 'Stone Brick R1S1++' has 2", StashRouting.TrailingPlus("Stone Brick R1S1++") == 2);
                 Check(checks, "plus: 'Stone Brick R1S1 + ' has 1", StashRouting.TrailingPlus("Stone Brick R1S1 + ") == 1);

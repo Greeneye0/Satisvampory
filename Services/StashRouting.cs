@@ -1629,6 +1629,30 @@ namespace Satisvampory.Services
             return groups;
         }
 
+        /// <summary>
+        /// Belt line identity: sorted sender groups + sorted receiver groups ("s2|r2").
+        /// Empty when the plate has no s#/r# token. Two chests with the same signature are
+        /// "on the same line" (1.0.111): rank decides direction between them, no seed needed.
+        /// </summary>
+        public static string LineSignature(string plate)
+        {
+            var s = SenderGroups(plate);
+            var r = ReceiverGroups(plate);
+            if (s.Count == 0 && r.Count == 0)
+                return "";
+            s.Sort();
+            r.Sort();
+            return "s" + string.Join(",", s) + "|r" + string.Join(",", r);
+        }
+
+        public static bool SameLine(Entity a, Entity b)
+        {
+            if (a == Entity.Null || b == Entity.Null || a == b)
+                return false;
+            var sa = LineSignature(RawName(a));
+            return sa.Length > 0 && sa == LineSignature(RawName(b));
+        }
+
         public static List<string> PredictBeltReceivers(Entity destStash)
         {
             var names = new List<string>();

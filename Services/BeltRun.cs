@@ -256,6 +256,7 @@ namespace Satisvampory.Services
 
         static void CollectChestWants(IReadOnlyList<int> plots, ulong ownerId, Dictionary<PrefabGUID, int> counts, BeltBook book, ProjectM.Scripting.ServerGameManager sgm)
         {
+            CollectSameLineWants(plots, ownerId, counts, book);
             var seen = new HashSet<PrefabGUID>();
             foreach (var plot in plots)
             {
@@ -280,6 +281,79 @@ namespace Satisvampory.Services
                             continue;
                         }
                         book.Want(group, item, inv, -1, chest: true);
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 1.0.111: chests with identical s#/r# tokens are one line. A receiver on that line wants
+        /// every item any same-line chest holds when it outranks that holder for the item - no
+        /// seed needed, so a new higher-ranked chest on the line pulls the stock over.
+        /// </summary>
+        static void CollectSameLineWants(IReadOnlyList<int> plots, ulong ownerId, Dictionary<PrefabGUID, int> counts, BeltBook book)
+        {
+            var lines = new Dictionary<string, List<(int group, Entity stash, Entity inv)>>();
+            foreach (var plot in plots)
+            {
+                foreach (var (group, stash) in Core.Stash.ReceiveChests(plot))
+                {
+                    if (stash == Entity.Null || !Core.EntityManager.Exists(stash) || stash.Has<Refinementstation>())
+                        continue;
+                    var sig = StashRouting.LineSignature(StashRouting.RawName(stash));
+                    if (sig.Length == 0)
+                        continue;
+                    if (!StashRouting.TryGetExternalInventory(stash, out var inv))
+                        continue;
+                    if (!lines.TryGetValue(sig, out var list))
+                    {
+                        list = new List<(int, Entity, Entity)>();
+                        lines[sig] = list;
+                    }
+                    var dup = false;
+                    foreach (var row in list)
+                    {
+                        if (row.stash == stash) { dup = true; break; }
+                    }
+                    if (!dup)
+                        list.Add((group, stash, inv));
+                }
+            }
+            var booked = new HashSet<(Entity inv, PrefabGUID item)>();
+            foreach (var line in lines.Values)
+            {
+                if (line.Count < 2)
+                    continue;
+                var stocks = new Dictionary<Entity, Dictionary<PrefabGUID, int>>();
+                foreach (var row in line)
+                    stocks[row.stash] = BeltSplit.CountStackable(row.inv);
+                foreach (var c in line)
+                {
+                    foreach (var d in line)
+                    {
+                        if (d.stash == c.stash)
+                            continue;
+                        foreach (var (item, n) in stocks[d.stash])
+                        {
+                            if (n <= 0 || item.GuidHash == 0)
+                                continue;
+                            if (booked.Contains((c.inv, item)))
+                                continue;
+                            if (Core.PlayerSettings.TryGetItemCap(ownerId, item, out var cap))
+                            {
+                                counts.TryGetValue(item, out var have);
+                                if (have >= cap)
+                                    continue;
+                            }
+                            var rankC = StashRouting.RankDeposit(c.stash, item, ownerId, StashRouting.InventoryHasItem(c.inv, item));
+                            if (!rankC.IsDepositUsable)
+                                continue;
+                            var rankD = StashRouting.RankDeposit(d.stash, item, ownerId, true);
+                            if (rankC.CompareTo(rankD) >= 0)
+                                continue;
+                            booked.Add((c.inv, item));
+                            book.Want(c.group, item, c.inv, -1, chest: true);
+                        }
                     }
                 }
             }
