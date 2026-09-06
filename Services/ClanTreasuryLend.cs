@@ -408,7 +408,7 @@ namespace Satisvampory.Services
                 return sb.ToString();
             }
 
-            depositMaxClass = 3;
+            depositMaxClass = 4; // 1.0.123: 4 = empty generic since the 1.0.99 renumbering (3 is now "seeded")
             try
             {
             var destInvs = GetDestInventories(destPlot, out var destMode);
@@ -421,7 +421,7 @@ namespace Satisvampory.Services
             var local = CountVanillaOnPlot(destPlot, type);
             var sticky = stickyFailed.Contains(FailKey(destPlot, type.GuidHash));
             var room = DestHasRoomFor(park, type);
-            var ranked = StashRouting.OrderDepositInventories(destPlot, park, type, 3);
+            var ranked = StashRouting.OrderDepositInventories(destPlot, park, type, 4);
             var clanIds = Core.TerritoryService.GetLogisticsTerritoryIds(destPlot);
             var occupiedLive = new List<int>();
             foreach (var id in occupiedPlots)
@@ -1096,7 +1096,7 @@ namespace Satisvampory.Services
             // Plot is all treasury-floor dests: still park into ranked Blood/Alchemy/generic
             // from the covering dest list. Live 1.0.26 skipped those and HUD stayed 0/200.
             if (defaultDests != null && defaultDests.Count > 0)
-                return StashRouting.OrderDepositInventories(plot, defaultDests, type, 3);
+                return StashRouting.OrderDepositInventories(plot, defaultDests, type, 4);
             return new List<Entity>();
         }
 
@@ -2156,7 +2156,7 @@ namespace Satisvampory.Services
             var bypass1x = occupiedInClan == null || occupiedInClan.Count <= 1;
             if (parkInvs.Count > 0)
             {
-                depositMaxClass = 3;
+                depositMaxClass = 4; // 1.0.123: 4 = empty generic since the 1.0.99 renumbering (3 is now "seeded")
                 try
                 {
                     var cover1 = LendTargetAmounts(destPlot, parkInvs, covering1, clanIds, occupiedInClan, destMode, ignoreLeftoverNamed: bypass1x, stockOnPlot: true);
@@ -2176,7 +2176,7 @@ namespace Satisvampory.Services
             }
             if (parkInvs.Count > 0)
             {
-                depositMaxClass = 3;
+                depositMaxClass = 4; // 1.0.123: 4 = empty generic since the 1.0.99 renumbering (3 is now "seeded")
                 try
                 {
                     var cover3 = LendTargetAmounts(destPlot, parkInvs, covering3, clanIds, occupiedInClan, destMode, ignoreLeftoverNamed: false, stockOnPlot: true);
