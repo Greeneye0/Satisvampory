@@ -46,7 +46,7 @@ Lower class wins. Then higher **specificity**, then **seeded** (already has the 
 
 | Class | Label | Meaning |
 | --- | --- | --- |
-| **0** | `s#` | Seeded matching sender: nameplate is `s#` **and** the chest already has this item **and** (unnamed/generic **or** exact **or** category match). Overflow never class 0. Named `s#` MUST NOT take unmatched items. |
+| **0** | `s#` | Matching sender: nameplate is `s#` **and** (exact **or** category match on the remaining name, **or** unnamed/generic **and** the chest already has this item). A named `s#` does **not** need to be seeded: an empty `Blood Essence S5R5` beats a `Blood` chest. Overflow never class 0. Named `s#` MUST NOT take unmatched items. |
 | **1** | name-match | Exact item-name match on the remaining name (after stripping `s#`/`r#`/overflow/generic filler). |
 | **2** | category | Dest-group / ItemCategory match (built-in dest words, custom groups, `+` AND / space OR). |
 | **3** | generic | Unnamed / generic plate. Treasury-floor generic slightly preferred (`Spec = 1`). |

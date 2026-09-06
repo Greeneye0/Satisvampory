@@ -759,7 +759,7 @@ namespace Satisvampory.Services
 
         public struct DepositRank : IComparable<DepositRank>
         {
-            // Incoming dest: 0 seeded s# (unnamed or name-matches), 1 exact, 2 category, 3 unnamed/generic, 4 custom-seeded, 5 overflow last-resort, 6 empty-custom, 90 special, 99 NS
+            // Incoming dest: 0 s# (name-matches, or unnamed+seeded), 1 exact, 2 category, 3 unnamed/generic, 4 custom-seeded, 5 overflow last-resort, 6 empty-custom, 90 special, 99 NS
             public int Class;
             public int Spec;
             public bool Seeded;
@@ -969,11 +969,11 @@ namespace Satisvampory.Services
             var category = !overflowDest && !exact && item.GuidHash != 0 && CategoryMatch(matchName, item, ownerId, out specCat);
             var unnamed = !overflowDest && IsUnnamedDest(plate, name);
 
-            // 1.6.1.38: seeded s# (has this item) first only if unnamed/generic OR name matches.
-            // Overflow names never seed as class 0. Named s# must not take unmatched items.
-            // Empty s# / unnamed treasury do not beat exact item-name.
-            // s# lives on the nameplate only - never treat a vanilla prefab name as a sender.
-            if (!overflowDest && IsSenderName(plate) && hasItem && (unnamed || exact || category))
+            // 1.0.95: s# is class 0 when the plate name matches (exact or category) - no seed
+            // needed ("Blood Essence S5R5" beats "Blood" even while empty). Unnamed / generic s#
+            // still needs the item already inside. Overflow names never class 0. Named s# must
+            // not take unmatched items. s# lives on the nameplate only - never a prefab name.
+            if (!overflowDest && IsSenderName(plate) && ((unnamed && hasItem) || exact || category))
             {
                 rank.Class = 0;
                 rank.Spec = exact ? specExact + 20000 : (category ? specCat + 10000 : 0);
