@@ -129,6 +129,13 @@ namespace Satisvampory.Services
                 break;
             }
 
+            // 1.0.121: one item, one container -> a direct yes/no answer with the reason and what beats it.
+            if (filter != null)
+            {
+                FocusedReport(lines, all, shown, winner, winnerName, item, itemName, ownerId, standing, plotIds.Count > 1);
+                return lines;
+            }
+
             var where = standing >= 0 ? $"plot {standing} (here)" : "no plot";
             lines.Add($"<color=green>{itemName}</color> — why. {where}{(csOn ? $", island {plotIds.Count} castles" : "")}");
             lines.Add(winner == Entity.Null
@@ -175,6 +182,100 @@ namespace Satisvampory.Services
             var copy = new List<Row>(rows);
             copy.Sort((a, b) => a.Rank.CompareTo(b.Rank));
             return copy;
+        }
+
+        static string ClassWord(StashRouting.DepositRank r)
+        {
+            if (r.Class < 0) return $"priority +{-r.Class}";
+            switch (r.Class)
+            {
+                case 0: return "s# belt match";
+                case 1: return "exact item name";
+                case 2: return "category match";
+                case 3: return "already holds the item";
+                case 4: return "empty generic chest";
+                case 5: return "overflow";
+                case 6: return "custom name, no match, empty";
+                case StashRouting.ClassRestricted: return "restricted furniture";
+                case StashRouting.ClassExcluded: return "excluded by --word";
+                case 99: return "skipped (NS / '')";
+            }
+            return "class " + r.Class;
+        }
+
+        static string LoseReason(Row r, Row w)
+        {
+            if (r.Rank.Class != w.Rank.Class)
+                return $"{ClassWord(w.Rank)} beats {ClassWord(r.Rank)} (class {w.Rank.Class} vs {r.Rank.Class})";
+            if (r.Rank.Spec != w.Rank.Spec)
+                return "same class, but the winner's name is a more specific match";
+            if (r.Rank.Seeded != w.Rank.Seeded)
+                return "same rank, but the winner already holds the item";
+            if (r.Rank.Treasury != w.Rank.Treasury)
+                return "same rank, but the winner is on a treasury floor";
+            if (r.Rank.Local != w.Rank.Local)
+                return "same rank, but the winner is on the plot you are standing on";
+            if (r.Count != w.Count)
+                return "twins: the winner holds less of it right now";
+            return "tie broken by scan order";
+        }
+
+        static void FocusedReport(List<string> lines, List<Row> all, List<Row> shown, Entity winner, string winnerName,
+            PrefabGUID item, string itemName, ulong ownerId, int standing, bool multiPlot)
+        {
+            var total = all.Count;
+            Row w = default;
+            var haveWinner = false;
+            foreach (var r in all)
+            {
+                if (r.Stash == winner) { w = r; haveWinner = true; break; }
+            }
+            var shownSorted = Sorted(shown);
+            var limit = shownSorted.Count > 3 ? 3 : shownSorted.Count;
+            for (var i = 0; i < limit; i++)
+            {
+                var r = shownSorted[i];
+                var pos = all.IndexOf(r) + 1;
+                var usable = r.Rank.IsDepositUsable;
+                string verdict;
+                if (haveWinner && r.Stash == winner)
+                    verdict = $"<color=green>YES</color> — stash and tidy put <color=green>{itemName}</color> in <color=white>{r.Name}</color> (rank 1 of {total}).";
+                else if (!usable)
+                    verdict = $"<color=red>NEVER</color> — <color=white>{r.Name}</color> cannot take <color=green>{itemName}</color>: {r.Why}.";
+                else if (!r.Room)
+                    verdict = $"<color=red>NOT NOW</color> — <color=white>{r.Name}</color> is full. It ranks {pos} of {total} for <color=green>{itemName}</color>" + (haveWinner ? $"; with room it would still lose to <color=white>{w.Name}</color>." : ".");
+                else if (haveWinner)
+                    verdict = $"<color=red>NO</color> — <color=green>{itemName}</color> goes to <color=white>{w.Name}</color>, not <color=white>{r.Name}</color> (rank {pos} of {total}).";
+                else
+                    verdict = $"<color=red>NO</color> — no usable dest at all; <color=white>{r.Name}</color> ranks {pos} of {total}.";
+                lines.Add(verdict);
+
+                var flags = new List<string>();
+                flags.Add(r.Has ? $"holds {r.Count}" : "holds none");
+                flags.Add(r.Room ? "has room" : "full");
+                if (r.Rank.Treasury) flags.Add("treasury floor");
+                if (multiPlot) flags.Add(r.Plot == standing ? "this plot" : $"plot {r.Plot}");
+                lines.Add($"  <color=white>{r.Name}</color>: {ClassWord(r.Rank)} (c{r.Rank.Class}) — {r.Why}. {string.Join(", ", flags)}.");
+
+                if (haveWinner && r.Stash != winner && usable)
+                {
+                    lines.Add($"  <color=white>{w.Name}</color>: {ClassWord(w.Rank)} (c{w.Rank.Class}) — {w.Why}. {(w.Has ? $"holds {w.Count}" : "holds none")}.");
+                    lines.Add($"  Why it loses: {LoseReason(r, w)}.");
+                    if (r.Rank.Class > 1)
+                        lines.Add($"  To make <color=white>{r.Name}</color> win: add a trailing <color=white>+</color> to its plate, or name it exactly <color=white>{itemName}</color> (or an alias).");
+                    else
+                        lines.Add($"  To make <color=white>{r.Name}</color> win: add a trailing <color=white>+</color> to its plate (more + than the winner).");
+                }
+            }
+            if (shownSorted.Count > limit)
+                lines.Add($"  … {shownSorted.Count - limit} more containers match that name; be more specific.");
+
+            var beltLines = BeltLines(all, shown, true, item, ownerId, standing);
+            if (beltLines.Count > 0)
+            {
+                lines.Add("Belts:");
+                lines.AddRange(beltLines);
+            }
         }
 
         static string RankLine(int n, Row r, int standing, bool multiPlot)
