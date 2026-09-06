@@ -42,12 +42,9 @@ namespace Satisvampory.Commands
             => $"No items found matching: {missing}. Tips: quote names with spaces ({W}\"Iron Ore\"{E}), separate items with commas, use {W}.fi <part of name>{E} to search, or an alias ({W}.sg alias{E}).";
 
         public static string WhyHelp()
-            => "Why does an item sort where it does?
-"
-             + $"  one item, one container: {W}.s why \"Empty Glass Bottle\" \"EGB R2\"{E}   (aliases work: {W}.s why egb EGB{E})
-"
-             + $"  one item, every chest: {W}.s why \"Grave Dust\"{E}
-"
+            => "Why does an item sort where it does?\n"
+             + $"  one item, one container: {W}.s why \"Empty Glass Bottle\" \"EGB R2\"{E}   (aliases work: {W}.s why egb EGB{E})\n"
+             + $"  one item, every chest: {W}.s why \"Grave Dust\"{E}\n"
              + "  Shows the chest's class and the reason (exact / group / category / partial / seeded / generic / restricted / excluded / NS), full, seeded, here, which chest stash and tidy would pick, and belt links.";
 
         public static string AliasForms()
