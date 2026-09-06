@@ -2410,10 +2410,10 @@ namespace Satisvampory.Services
                         foreach (var (g, _) in costs)
                         {
                             if (IsPlantCost(g))
-                            {
                                 plantBlueprints.Add(bp);
-                                break;
-                            }
+                            // 1.0.129: the soul shard pedestal "costs" the shard. Never covering.
+                            if (IsSoulshardCost(g))
+                                soulshardBlueprints.Add(bp);
                         }
                     }
                 }
@@ -2552,6 +2552,11 @@ namespace Satisvampory.Services
 
         static readonly HashSet<int> plantBlueprints = new();
 
+        static readonly HashSet<int> soulshardBlueprints = new();
+
+        static bool IsSoulshardCost(int guid)
+            => guid != 0 && ItemGroupService.TryGetDestGroup(guid, out var group) && group == ItemGroupService.GroupSoulshards;
+
         static bool IsPlantCost(int guid)
         {
             if (guid == 0)
@@ -2582,6 +2587,8 @@ namespace Satisvampory.Services
             foreach (var row in blueprintCosts)
             {
                 if (!coverSeeds && plantBlueprints.Contains(row.blueprint))
+                    continue;
+                if (soulshardBlueprints.Contains(row.blueprint))
                     continue;
                 if (unlocked.Count == 0)
                 {

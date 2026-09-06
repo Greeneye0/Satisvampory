@@ -66,6 +66,10 @@ Enough to place **3 copies** of whichever **unlocked** castle blueprint is hungr
 
 Seeds, saplings, and spores are stored by the game as **plant blueprints** whose only cost is the seed, so the blueprint scan used to pull three of every unlocked seed to whichever castle a player stood on. You do not build a plant; you plant it. Covering now **skips plant blueprints** unless the plot opts in with **`.s cover seeds`** (per plot, default OFF). Stash / tidy / belts for seeds are unchanged.
 
+### Soul shards are never covering (1.0.129)
+
+The soul shard pedestal is a blueprint whose cost is the shard. Covering never pulls soul shards; they are never a chest dest either (class 97 for every ordinary chest — only a soul-shard container accepts them).
+
 ### Covering order (`OrderedCoveringTargets`)
 
 Materials needed on the dest plot, compared to **stock already on that plot**:

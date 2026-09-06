@@ -160,7 +160,7 @@ namespace Satisvampory.Services
             ItemData data = default;
             if (Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(item, out var prefab))
                 data = prefab.Read<ItemData>();
-            var soulshard = data.ItemCategory == ItemCategory.Soulshard;
+            var soulshard = (data.ItemCategory & ItemCategory.Soulshard) != 0; // 1.0.129: flag test
             var sgm = Core.ServerGameManager;
             for (var o = 0; o < overflow.Length; o++)
             {
@@ -292,7 +292,7 @@ namespace Satisvampory.Services
             ItemData data = default;
             if (Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(item, out var prefab))
                 data = prefab.Read<ItemData>();
-            var soulshard = data.ItemCategory == ItemCategory.Soulshard;
+            var soulshard = (data.ItemCategory & ItemCategory.Soulshard) != 0; // 1.0.129: flag test
             var sgm = Core.ServerGameManager;
             for (var o = 0; o < overflow.Length && row.Amount > 0; o++)
             {
