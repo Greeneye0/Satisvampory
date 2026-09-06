@@ -1294,12 +1294,21 @@ namespace Satisvampory.Services
             try
             {
                 var sgm = Core.ServerGameManager;
-                if (!sgm.TryGetBuffer<InventoryInstanceElement>(stash, out var instances) || instances.Length == 0)
-                    return true;
                 ItemData data = default;
                 if (Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(item, out var prefab))
                     data = prefab.Read<ItemData>();
-                var soulshard = data.ItemCategory == ItemCategory.Soulshard;
+                // 1.0.129: flag test, not equality - shards are "BloodBound, Soulshard".
+                var soulshard = (data.ItemCategory & ItemCategory.Soulshard) != 0;
+                if (!sgm.TryGetBuffer<InventoryInstanceElement>(stash, out var instances) || instances.Length == 0)
+                {
+                    // A plain chest has no restriction rows. Soul shards only live in a soul-shard container (pedestal).
+                    if (soulshard)
+                    {
+                        reason = "soul shards only go in a soul shard container";
+                        return false;
+                    }
+                    return true;
+                }
                 string why = null;
                 foreach (var inst in instances)
                 {
