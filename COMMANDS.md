@@ -64,6 +64,8 @@ If ClanShare is **ON**, dest/source is the **clan island**. If **OFF**, standing
 | `.s rrglobal` | You | Allow **off-plot** stash/RR. Default **OFF**. Does not shrink on-plot ClanShare dest |
 | `.s item "Iron Ore"` | Plot / clan island | Per-chest counts by plot, machines using it (moving / not moving), cap, reserve, total |
 | `.s conv plank` | Plot / clan island | Why a conveyor is not moving that product |
+| `.s why "Grave Dust"` | Plot / clan island | Why the item sorts where it does: every chest's dest class with the reason (exact / group word / item category / partial name / generic / overflow / NS), full, seeded, here; which chest stash/tidy would pick; belt links (s# → r#, mutual link winner, same-group loop) |
+| `.s why "Grave Dust" "Bone Grave"` | Plot / clan island | Same, narrowed to one container |
 | `.s need` | Plot / clan island | Top 10 station inputs the conveyor wants. Shows demand, total, reserve. Higher tier first, then lowest stock after reserve |
 
 Chest **names**: `s#` sender, `r#` receiver, `overflow`, `salvage`, `spoils`, `trash`, `NS` or trailing `''` skip, braziers `night` / `prox`. Built-in dest words (`blood`, `stone`, `jewel`, …) match that dest group, not a substring of the item name (Blood Jewel → jewel, not blood). Blank-plate dest furniture (Jewel Storage) still counts as that dest; blank Small Chest / cabinet / bureau do not.

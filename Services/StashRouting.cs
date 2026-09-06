@@ -690,6 +690,10 @@ namespace Satisvampory.Services
         /// Specificity: matching clause/token count, then matched length. Exact still ranks above this.
         /// </summary>
         public static bool CategoryMatch(string chestName, PrefabGUID item, ulong ownerPlatformId, out int specificity)
+            => CategoryMatch(chestName, item, ownerPlatformId, out specificity, null);
+
+        /// <param name="matched">When non-null, receives every matching token with its tier (for `.s why`).</param>
+        public static bool CategoryMatch(string chestName, PrefabGUID item, ulong ownerPlatformId, out int specificity, List<(string token, int tier)> matched)
         {
             specificity = 0;
             if (string.IsNullOrWhiteSpace(chestName) || IsGenericName(chestName))
@@ -745,6 +749,7 @@ namespace Satisvampory.Services
                             continue;
                         clauseHit = true;
                         clauseLen += token.Length;
+                        matched?.Add((token, tier));
                         if (tier > bestTier)
                             bestTier = tier;
                     }
@@ -777,6 +782,7 @@ namespace Satisvampory.Services
                     if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true, out var tier))
                         return false;
                     totalLen += token.Length;
+                    matched?.Add((token, tier));
                     if (tier > bestTier)
                         bestTier = tier;
                 }
@@ -784,21 +790,82 @@ namespace Satisvampory.Services
                 return true;
             }
 
-            var matched = 0;
+            var matchedCount = 0;
             var matchedLenOr = 0;
             foreach (var token in tokens)
             {
                 if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true, out var tier))
                     continue;
-                matched++;
+                matchedCount++;
                 matchedLenOr += token.Length;
+                matched?.Add((token, tier));
                 if (tier > bestTier)
                     bestTier = tier;
             }
-            if (matched == 0)
+            if (matchedCount == 0)
                 return false;
-            specificity = bestTier * TierStep + matched * 1000 + matchedLenOr;
+            specificity = bestTier * TierStep + matchedCount * 1000 + matchedLenOr;
             return true;
+        }
+
+        static string TierWord(int tier) => tier switch
+        {
+            TierGroup => "group word",
+            TierCategory => "item category",
+            TierPartial => "partial name",
+            _ => "match"
+        };
+
+        static string DescribeMatches(List<(string token, int tier)> matched)
+        {
+            if (matched == null || matched.Count == 0)
+                return "";
+            var parts = new List<string>();
+            foreach (var (token, tier) in matched)
+                parts.Add($"'{token}' {TierWord(tier)}");
+            return string.Join(" + ", parts);
+        }
+
+        /// <summary>
+        /// `.s why`: RankDeposit plus a one-line human reason for the class it landed in.
+        /// </summary>
+        public static string ExplainRank(Entity stash, PrefabGUID item, ulong ownerId, bool hasItem, int standingPlot, out DepositRank rank)
+        {
+            rank = RankDeposit(stash, item, ownerId, hasItem, standingPlot);
+            var plate = RawName(stash);
+            var destName = DestName(stash);
+            var matchName = RankMatchName(plate, destName);
+            switch (rank.Class)
+            {
+                case 99:
+                    return IsSkipQuotesName(plate) ? "skip: trailing '' on the name" : "skip: NS on the name";
+                case 90:
+                    return "special chest (salvage/spoils/brazier/spawner/trash), not a dump dest";
+                case 5:
+                    return "overflow: last resort only";
+            }
+            var sender = IsSenderName(plate);
+            var exact = item.GuidHash != 0 && ExactItemNameMatch(matchName, item, out _);
+            var matched = new List<(string token, int tier)>();
+            var category = !exact && item.GuidHash != 0 && CategoryMatch(matchName, item, ownerId, out _, matched);
+            var unnamed = IsUnnamedDest(plate, destName);
+            var detail = exact ? "exact item name" : category ? DescribeMatches(matched) : unnamed ? "generic plate" : "no name match";
+            switch (rank.Class)
+            {
+                case 0:
+                    return $"s# sender: {detail}" + (unnamed && !exact && !category ? " (seeded)" : "");
+                case 1:
+                    return "name-match: exact item name";
+                case 2:
+                    return "category: " + detail;
+                case 3:
+                    return sender ? "generic s# but empty of this item (seed it to make it class 0)" : "generic plate";
+                case 4:
+                    return "custom name, no match, but already holds the item";
+                case 6:
+                    return "custom name, no match, empty — not a dest";
+            }
+            return detail;
         }
 
         public struct DepositRank : IComparable<DepositRank>

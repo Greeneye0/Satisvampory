@@ -33,6 +33,7 @@ Type **.s help** in game. Player commands use the **.s** prefix, admin toggles u
 
 - `.s item <item>` - Per-plot chest counts, machines using it (moving / not moving), cap, reserve, and total.
 - `.s conv <item>` - Why a conveyor is not moving that item (station, line, reason).
+- `.s why <item> [container]` - Why an item does or doesn't sort to a container: dest class with the reason, and belt links.
 - **.s need** - Station demand, total stock, and reserve for the top 10 inputs.
 - **.s diag** - Drops a marker in the server's rolling log for dupes, missing items, or lag. Tell your admin the time.
 - **.s settings** - Your toggles plus the reserve on the castle you're standing on.
@@ -145,6 +146,7 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 | `.s co` | You | Toggle conveyors | `.s co` |
 | `.s item <item>` | Plot / island | Chests by plot, machines (moving / not), cap, reserve, total | `.s item "Iron Ore"` |
 | `.s conv <item>` | Plot / island | Why a belt is not moving that item | `.s conv plank` |
+| `.s why <item> [container]` | Plot / island | Dest ranking with reasons + belt links | `.s why "Grave Dust" "Bone Grave"` |
 | `.s need` | Plot / island | Top 10 station inputs wanted | `.s need` |
 | `.s cs` / `.s gs` | Clan | Clan Share on or off | `.s cs` |
 | `.s cse` | Plot, owner | Exclude or include this plot | `.s cse` |
@@ -169,6 +171,7 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 | --- | --- | --- |
 | `.s item <item>` | Chest counts, machines, cap, reserve, total | `.s item "Iron Ore"` |
 | `.s conv <item>` | Belt troubleshooting | `.s conv "Iron Ingot"` |
+| `.s why <item> [container]` | Sorting troubleshooting | `.s why "Grave Dust" "Bone Grave"` |
 | `.s need` | Station demand, stock, reserve | `.s need` |
 | `.s diag` | Mark the server log for dupes, missing items, or lag | `.s diag` |
 | `.s settings` | Your toggles and the castle reserve | `.s settings` |

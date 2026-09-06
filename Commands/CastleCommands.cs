@@ -379,7 +379,7 @@ namespace Satisvampory.Commands
             ShowGroup(ctx, name, null);
         }
 
-        [Command(name: "group", usage: ".s group <name> full", description: "Same as .s group <name>, plus each item's reserve and production cap.")]
+        [Command(name: "group", usage: ".s group <name> full | .s group create|delete|restore <name>", description: "Group members with reserve and cap, or create / delete / restore a group.")]
         public static void ShowGroup(ChatCommandContext ctx, string name, string option)
         {
             if (!TryGetStandingCastleSettingsOwner(ctx, out var SteamID, out var ownerName))
@@ -459,7 +459,8 @@ namespace Satisvampory.Commands
             ctx.Reply($"total: <color=white>{total}</color> ({rows.Count} kinds)");
         }
 
-        [Command(name: "group", usage: ".s group create|delete|restore <name>", description: "Create a custom group, delete a group, or restore a built-in default.")]
+        // Not a [Command]: registered twice with (string, string) it collided with ".s group <name> full"
+        // and VCF asked the player to pick. ShowGroup(name, option) dispatches here on the verb.
         public static void CreateOrDeleteGroup(ChatCommandContext ctx, string action, string name)
         {
             if (!TryGetStandingCastleSettingsOwner(ctx, out var SteamID, out var ownerName))
@@ -806,6 +807,15 @@ namespace Satisvampory.Commands
             if (LogisticsCommands.HandleAmbiguousItem(ctx, item, PendingItemCommand.ItemStock))
                 return;
             foreach (var line in ItemStock.Report(ctx.Event.SenderCharacterEntity, item.prefab))
+                ctx.Reply(line);
+        }
+
+        [Command(name: "why", usage: ".s why <item> [container]", description: "Why an item does or doesn't sort to a container: dest ranking with reasons, and belt links (mutual, loop, winner).")]
+        public static void WhyCmd(ChatCommandContext ctx, FoundItem item, string container = null)
+        {
+            if (LogisticsCommands.HandleAmbiguousItem(ctx, item, PendingItemCommand.Why, 0, container))
+                return;
+            foreach (var line in WhyReport.Report(ctx.Event.SenderCharacterEntity, item.prefab, container))
                 ctx.Reply(line);
         }
 
