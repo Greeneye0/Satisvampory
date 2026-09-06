@@ -89,7 +89,7 @@ Stand on the plot. Default reserve **10**. Default production cap **unlimited**.
 | `.s group` | List built-in and custom groups on this castle |
 | `.s group ore` | Each member's island total, then **total** of those totals |
 | `.s group ore full` | Same, plus each item's **reserve** and **cap** |
-| `.s group create belts` / `.s group delete belts` | Custom group |
+| `.s group create belts` / `.s group add belts` / `.s group delete belts` | Custom group (`add` with just a name creates it) |
 | `.s group restore` / `.s group restore mushrooms` | Restore built-ins (Hell’s Clarion is mushrooms, not flowers) |
 | `.s group ore add "Iron Ore"` | First edit of a built-in copies the default list |
 | `.s group ore add "Iron Ore", "Copper Ore", Quartz` | Comma-separated lists work for add and remove (quotes optional around single words) |

@@ -394,7 +394,7 @@ namespace Satisvampory.Commands
             if (!string.IsNullOrWhiteSpace(option))
             {
                 var act = name.Trim().ToLowerInvariant();
-                if (act is "create" or "addgroup" or "new" or "delete" or "remove" or "del" or "restore")
+                if (act is "create" or "add" or "addgroup" or "new" or "delete" or "remove" or "del" or "restore")
                 {
                     CreateOrDeleteGroup(ctx, name, option);
                     return;
@@ -467,7 +467,7 @@ namespace Satisvampory.Commands
                 return;
             action = action.Trim().ToLowerInvariant();
             var normalized = ItemGroupService.NormalizeName(name);
-            if (action is "create" or "addgroup" or "new")
+            if (action is "create" or "add" or "addgroup" or "new")
             {
                 if (ItemGroupService.IsBuiltInName(normalized))
                 {
