@@ -49,6 +49,14 @@ One or more `+` at the **end** of the nameplate is a priority boost, not part of
 - `+` on an empty generic, unmatched custom, overflow, special, or NS chest does nothing.
 - Applies wherever `RankDeposit` is used: stash, RR, tidy, servant auto-stash, covering park, belt mutual links, `.pull` order (a `+` chest is drained last).
 
+## Exclusions `--word` (1.0.110)
+
+A token starting with `--` on the nameplate is an **exclusion**, not part of the name. `Weapons --copper --iron+` is the name `Weapons`, priority 1, and never takes anything `copper` or `iron` matches.
+
+- An exclusion word matches **broadly**: admin / essence alias (`--gd`), exact item name, built-in or custom group word (`--alchemy`), ItemCategory word, or a 3+ letter name fragment. The fragment rule applies to **equipment too** here (`--copper` catches Copper Sword), unlike dest matching.
+- A matching exclusion makes the chest class **98 `excluded`** for that item: never a dest for stash, RR, tidy, servant stash, covering, push-back, or belt links. Sources are unaffected.
+- Exclusions are stripped before every other rule, so `s#`/`r#`, `+`, group and exact matching see the clean name. Plates are 20 characters: use aliases (`.sg alias add`) to keep exclusions short.
+
 ## Deposit classes (`RankDeposit`)
 
 Lower class wins. Then higher **specificity**, then **seeded** (already has the item), then **treasury-floor**, then **local** (standing plot).

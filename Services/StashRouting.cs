@@ -92,7 +92,93 @@ namespace Satisvampory.Services
             if (stash == Entity.Null || !Core.EntityManager.Exists(stash) || !stash.Has<NameableInteractable>())
                 return "";
             // 1.0.108: trailing '+' signs are a priority boost, not part of the name.
-            return StripTrailingPlus(stash.Read<NameableInteractable>().Name.ToString() ?? "");
+            // 1.0.110: "--word" tokens are exclusions, not part of the name.
+            return StripExclusions(StripTrailingPlus(stash.Read<NameableInteractable>().Name.ToString() ?? ""));
+        }
+
+        /// <summary>
+        /// "--word" tokens on a plate: never deposit an item that word matches (alias, exact item,
+        /// group word, category word, or name fragment - equipment included). Returns the words
+        /// (lowercase, without the dashes); <paramref name="clean"/> is the plate without them.
+        /// "Weapons --copper --iron+" -> clean "Weapons", exclusions [copper, iron].
+        /// </summary>
+        public static List<string> ParseExclusions(string plate, out string clean)
+        {
+            var words = new List<string>();
+            clean = plate ?? "";
+            if (string.IsNullOrWhiteSpace(plate) || plate.IndexOf("--", StringComparison.Ordinal) < 0)
+                return words;
+            var keep = new List<string>();
+            foreach (var raw in plate.Split((char[])null, StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (raw.StartsWith("--", StringComparison.Ordinal))
+                {
+                    var w = raw.Substring(2).Trim('+', '-', '_', '/', '|', '.', ':', ',').ToLowerInvariant();
+                    if (w.Length > 0)
+                        words.Add(w);
+                    continue;
+                }
+                keep.Add(raw);
+            }
+            clean = string.Join(" ", keep);
+            return words;
+        }
+
+        public static string StripExclusions(string plate)
+        {
+            ParseExclusions(plate, out var clean);
+            return clean;
+        }
+
+        public static List<string> ExclusionsOf(Entity stash)
+        {
+            if (stash == Entity.Null || !Core.EntityManager.Exists(stash) || !stash.Has<NameableInteractable>())
+                return new List<string>();
+            return ParseExclusions(StripTrailingPlus(stash.Read<NameableInteractable>().Name.ToString() ?? ""), out _);
+        }
+
+        /// <summary>
+        /// Broad match for an exclusion word: admin/essence alias, exact item name, built-in or
+        /// custom group word, ItemCategory word, or a 3+ letter name fragment. Unlike dest
+        /// matching this applies the fragment rule to equipment too, so "--copper" catches
+        /// Copper Sword.
+        /// </summary>
+        public static bool ExclusionMatches(string word, PrefabGUID item, ulong ownerId)
+        {
+            if (string.IsNullOrEmpty(word) || item.GuidHash == 0)
+                return false;
+            if (ItemGroupService.TryExactItemAlias(word, out var aliasHash))
+                return aliasHash == item.GuidHash;
+            var itemName = Normalize(ItemLabel(item));
+            if (!string.IsNullOrEmpty(itemName) && itemName == Normalize(word))
+                return true;
+            TryGetItemCategory(item, out var cat);
+            if (TokenMatchesItem(word, item, itemName, cat, ownerId, allowCategory: true, out _))
+                return true;
+            if (word.Length >= 3 && !IsAllDigits(word) && !string.IsNullOrEmpty(itemName))
+            {
+                foreach (var v in TokenVariants(word))
+                {
+                    if (v.Length >= 3 && itemName.IndexOf(v, StringComparison.Ordinal) >= 0)
+                        return true;
+                    foreach (var it in itemName.Split((char[])null, StringSplitOptions.RemoveEmptyEntries))
+                    {
+                        if (VariantsOverlap(v, it))
+                            return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        public static string ExcludedBy(Entity stash, PrefabGUID item, ulong ownerId)
+        {
+            foreach (var w in ExclusionsOf(stash))
+            {
+                if (ExclusionMatches(w, item, ownerId))
+                    return w;
+            }
+            return null;
         }
 
         /// <summary>Count of '+' at the end of the plate (whitespace ignored). "Stone Brick R1S1++" = 2.</summary>
@@ -908,6 +994,11 @@ namespace Satisvampory.Services
             var plate = RawName(stash);
             var destName = DestName(stash);
             var matchName = RankMatchName(plate, destName);
+            if (rank.Class == ClassExcluded)
+            {
+                var word = ExcludedBy(stash, item, ownerId);
+                return $"excluded: plate has --{word} and it matches this item";
+            }
             if (rank.Class < 0)
             {
                 var core = RankDepositCore(stash, item, ownerId, hasItem, standingPlot);
@@ -1148,9 +1239,20 @@ namespace Satisvampory.Services
         /// item it matches or already holds (base class 0-3). More '+' = higher. Class becomes
         /// -N. A '+' on an empty generic / unmatched / overflow chest does nothing.
         /// </summary>
+        public const int ClassExcluded = 98;
+        public const string LabelExcluded = "excluded";
+
         public static DepositRank RankDeposit(Entity stash, PrefabGUID item, ulong ownerId, bool hasItem, int standingPlot = -1)
         {
             var rank = RankDepositCore(stash, item, ownerId, hasItem, standingPlot);
+            // 1.0.110: "--word" on the plate: never a dest for items that word matches.
+            if (rank.Class < 90 && ExcludedBy(stash, item, ownerId) != null)
+            {
+                rank.Class = ClassExcluded;
+                rank.Spec = 0;
+                rank.Label = LabelExcluded;
+                return rank;
+            }
             var boost = PriorityOf(stash);
             if (boost <= 0 || rank.Class < 0 || rank.Class > 3)
                 return rank;

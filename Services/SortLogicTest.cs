@@ -25,6 +25,7 @@ namespace Satisvampory.Services
             // Fish Bone: in the built-in bones group but not literally named "Bone", so a plate
             // "Bone" is a category (group-word) match for it, not an exact item-name match.
             var fishBone = new PrefabGUID(424158416);
+            var copperIngot = new PrefabGUID(-1237019921);
             var gdName = StashRouting.ItemLabel(graveDust);
             var boneName = StashRouting.ItemLabel(bone);
             if (string.IsNullOrEmpty(gdName) || string.IsNullOrEmpty(boneName))
@@ -42,6 +43,18 @@ namespace Satisvampory.Services
                 Check(checks, "no bare-number match: 'Alch 1' vs Grave Dust", !StashRouting.CategoryMatch("Alch 1", graveDust, ownerId, out _) || Tier(SpecOf("Alch 1", graveDust, ownerId)) != StashRouting.TierPartial);
                 Check(checks, "alias unbound before test", !ItemGroupService.TryExactItemAlias(Alias, out _));
 
+                // ---- "--word" exclusions ----
+                var exWords = StashRouting.ParseExclusions("Weapons --copper --iron", out var exClean);
+                Check(checks, "excl: parse 'Weapons --copper --iron' -> clean 'Weapons'", exClean == "Weapons", "clean=" + exClean);
+                Check(checks, "excl: words are copper, iron", exWords.Count == 2 && exWords[0] == "copper" && exWords[1] == "iron");
+                Check(checks, "excl: plus then exclusions: 'Weapons --iron+' -> 1 plus, clean 'Weapons'",
+                    StashRouting.TrailingPlus("Weapons --iron+") == 1 && StashRouting.StripExclusions(StashRouting.StripTrailingPlus("Weapons --iron+")) == "Weapons");
+                Check(checks, "excl: '--copper' matches Copper Ingot", StashRouting.ExclusionMatches("copper", copperIngot, ownerId));
+                Check(checks, "excl: '--copper' does not match Grave Dust", !StashRouting.ExclusionMatches("copper", graveDust, ownerId));
+                Check(checks, "excl: '--alchemy' (group word) matches Grave Dust", StashRouting.ExclusionMatches("alchemy", graveDust, ownerId));
+                if (FoundItemConverter.TryGetExact("Copper Sword", out var swordEx) && swordEx.prefab.GuidHash != 0)
+                    Check(checks, "excl: '--copper' matches Copper Sword (equipment fragment allowed)", StashRouting.ExclusionMatches("copper", swordEx.prefab, ownerId));
+
                 // ---- priority '+' plate parsing ----
                 Check(checks, "plus: 'Stone Brick R1S1++' has 2", StashRouting.TrailingPlus("Stone Brick R1S1++") == 2);
                 Check(checks, "plus: 'Stone Brick R1S1 + ' has 1", StashRouting.TrailingPlus("Stone Brick R1S1 + ") == 1);
@@ -51,7 +64,6 @@ namespace Satisvampory.Services
                 Check(checks, "plus: skip-quotes still seen behind '+'", StashRouting.IsSkipQuotesName("Lock Box''+"));
 
                 // ---- equipment never matches by name fragment ----
-                var copperIngot = new PrefabGUID(-1237019921);
                 Check(checks, "partial: 'Copper Iron' matches Copper Ingot (material)", StashRouting.CategoryMatch("Copper Iron", copperIngot, ownerId, out var ciSpec) && Tier(ciSpec) == StashRouting.TierPartial, "spec=" + ciSpec);
                 if (FoundItemConverter.TryGetExact("Copper Sword", out var swordFound) && swordFound.prefab.GuidHash != 0)
                 {
@@ -87,6 +99,8 @@ namespace Satisvampory.Services
                 var alchOk2 = StashRouting.CategoryMatch("Alchemy", graveDust, ownerId, out var alchSpec2);
                 Check(checks, "alias: 'Alchemy' still built-in group tier for Grave Dust", alchOk2 && alchSpec2 == alchSpec, "spec=" + alchSpec2);
                 Check(checks, "alias: 'Bone " + Alias + "' category-matches Grave Dust via alias token", StashRouting.CategoryMatch("Bone " + Alias, graveDust, ownerId, out _));
+                Check(checks, "alias: '--" + Alias + "' excludes Grave Dust", StashRouting.ExclusionMatches(Alias, graveDust, ownerId));
+                Check(checks, "alias: '--" + Alias + "' does not exclude Bone", !StashRouting.ExclusionMatches(Alias, bone, ownerId));
 
                 // ---- custom group containing Bone only ----
                 groupMade = Core.PlayerSettings.CreateItemGroup(ownerId, Group);
