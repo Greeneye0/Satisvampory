@@ -24,6 +24,8 @@ Chest senders fill **stations first**. Chest → chest is a **second pass**.
 - Chest → `r#` that is **not** also `s#` on the same group: allowed even when convloop is off.
 - Chest → `r#` that **is** also `s#` on the same group (a loop): requires **`.sg convloop` / `.sg cloop`**, default **OFF**.
 
+- **Mutual links sort, never ping-pong** (1.0.96). If the dest chest sends on **any** group the source chest receives (cross-group two-cycle: `Alchemy S1R2` → `Bone Grave R1S2` → back), the move happens only when the dest **strictly outranks** the source under dest ranking for that item. A tie stays put. 279 Grave Dust bouncing between two chests every 30 ms (1.0.95) must not happen.
+
 Do not turn convloop on by default. Loops will vacuum a castle.
 
 `.s conv <item>`: why that product is not moving (station, line, cap, reserve).

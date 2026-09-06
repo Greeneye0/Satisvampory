@@ -44,6 +44,16 @@ Furniture-only names (`Small Chest`, size + `chest`/`storage` with no dest word)
 
 Lower class wins. Then higher **specificity**, then **seeded** (already has the item), then **treasury-floor**, then **local** (standing plot).
 
+**Category specificity is tiered** (1.0.96): the best matching token decides the tier, then matched token count, then matched length.
+
+| Tier | Token kind | Example |
+| --- | --- | --- |
+| 3 | **Group word**: built-in dest group (`alchemy`, `bone`, `blood`, …), custom group name, essence alias | `Alchemy` for Grave Dust (alchemy group member) |
+| 2 | **ItemCategory word** (vanilla category flag) | `Consumable` |
+| 1 | **Partial item name** | `Grave` for Grave Dust |
+
+A group word beats an ItemCategory word beats a partial name, regardless of token count. Exact item name is still its own class above all of these. To make a chest win by group, put the item in that group (`.s group bone add "Grave Dust"`); to win outright, name the chest the exact item (`Grave Dust R1S1`).
+
 | Class | Label | Meaning |
 | --- | --- | --- |
 | **0** | `s#` | Matching sender: nameplate is `s#` **and** (exact **or** category match on the remaining name, **or** unnamed/generic **and** the chest already has this item). A named `s#` does **not** need to be seeded: an empty `Blood Essence S5R5` beats a `Blood` chest. Overflow never class 0. Named `s#` MUST NOT take unmatched items. |

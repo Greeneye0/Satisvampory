@@ -459,14 +459,27 @@ namespace Satisvampory.Services
             return hasSmall && hasMat;
         }
 
+        /// <summary>Match tier for CategoryMatch specificity: 3 dest/custom group word, 2 ItemCategory word, 1 partial item name.</summary>
+        public const int TierGroup = 3;
+        public const int TierCategory = 2;
+        public const int TierPartial = 1;
+        public const int TierStep = 100000;
+
         static bool TokenMatchesItem(string token, PrefabGUID item, string itemName, ItemCategory itemCat, ulong ownerId, bool allowCategory)
+            => TokenMatchesItem(token, item, itemName, itemCat, ownerId, allowCategory, out _);
+
+        static bool TokenMatchesItem(string token, PrefabGUID item, string itemName, ItemCategory itemCat, ulong ownerId, bool allowCategory, out int tier)
         {
+            tier = 0;
             if (string.IsNullOrEmpty(token))
                 return false;
             if (IsDestClassToken(token))
                 return false;
             if (ItemGroupService.TryExactEssenceAlias(token, out var essenceHash))
+            {
+                tier = TierGroup;
                 return item.GuidHash == essenceHash;
+            }
             var variants = TokenVariants(token);
 
             var tokenIsDestGroup = false;
@@ -480,7 +493,10 @@ namespace Satisvampory.Services
                 foreach (var m in ItemGroupService.ResolveMembers(ownerId, canonical))
                 {
                     if (m.GuidHash == item.GuidHash)
+                    {
+                        tier = TierGroup;
                         return true;
+                    }
                 }
                 // "Wood Stone Bone" should take planks, not only raw logs.
                 if (canonical == ItemGroupService.GroupWood)
@@ -488,7 +504,10 @@ namespace Satisvampory.Services
                     foreach (var m in ItemGroupService.ResolveMembers(ownerId, ItemGroupService.GroupPlanks))
                     {
                         if (m.GuidHash == item.GuidHash)
+                        {
+                            tier = TierGroup;
                             return true;
+                        }
                     }
                 }
             }
@@ -509,7 +528,10 @@ namespace Satisvampory.Services
                 foreach (var m in ItemGroupService.ResolveMembers(ownerId, name))
                 {
                     if (m.GuidHash == item.GuidHash)
+                    {
+                        tier = TierGroup;
                         return true;
+                    }
                 }
             }
 
@@ -522,12 +544,18 @@ namespace Satisvampory.Services
                     if (v == "wood" || v == "woods" || v == "wooden")
                     {
                         if ((itemCat & ItemCategory.Lumber) != 0 || (itemCat & ItemCategory.Woodworking) != 0)
+                        {
+                            tier = TierCategory;
                             return true;
+                        }
                     }
                     if (!CategoryByToken.TryGetValue(v, out var flag))
                         continue;
                     if (flag != ItemCategory.NONE && (itemCat & flag) != 0)
+                    {
+                        tier = TierCategory;
                         return true;
+                    }
                 }
             }
 
@@ -537,11 +565,17 @@ namespace Satisvampory.Services
             foreach (var v in variants)
             {
                 if (v.Length >= 3 && !string.IsNullOrEmpty(itemName) && itemName.IndexOf(v, StringComparison.Ordinal) >= 0)
+                {
+                    tier = TierPartial;
                     return true;
+                }
                 foreach (var it in itemTokens)
                 {
                     if (VariantsOverlap(v, it))
+                    {
+                        tier = TierPartial;
                         return true;
+                    }
                 }
             }
             return false;
@@ -693,6 +727,10 @@ namespace Satisvampory.Services
             if (clauses.Count == 0)
                 return false;
 
+            // 1.0.96: a group word (built-in dest group, custom group, essence alias) outranks an
+            // ItemCategory word, which outranks a partial item-name hit. Tier is the best matching
+            // token's tier; token count and length break ties inside a tier.
+            var bestTier = 0;
             if (hasPlus)
             {
                 // '+' is the only AND. Each clause is OR of space-separated names.
@@ -703,16 +741,18 @@ namespace Satisvampory.Services
                     var clauseLen = 0;
                     foreach (var token in clause)
                     {
-                        if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true))
+                        if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true, out var tier))
                             continue;
                         clauseHit = true;
                         clauseLen += token.Length;
+                        if (tier > bestTier)
+                            bestTier = tier;
                     }
                     if (!clauseHit)
                         return false;
                     matchedLen += clauseLen;
                 }
-                specificity = clauses.Count * 1000 + matchedLen;
+                specificity = bestTier * TierStep + clauses.Count * 1000 + matchedLen;
                 return true;
             }
 
@@ -734,11 +774,13 @@ namespace Satisvampory.Services
                 var totalLen = 0;
                 foreach (var token in tokens)
                 {
-                    if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true))
+                    if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true, out var tier))
                         return false;
                     totalLen += token.Length;
+                    if (tier > bestTier)
+                        bestTier = tier;
                 }
-                specificity = tokens.Count * 1000 + totalLen;
+                specificity = bestTier * TierStep + tokens.Count * 1000 + totalLen;
                 return true;
             }
 
@@ -746,14 +788,16 @@ namespace Satisvampory.Services
             var matchedLenOr = 0;
             foreach (var token in tokens)
             {
-                if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true))
+                if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true, out var tier))
                     continue;
                 matched++;
                 matchedLenOr += token.Length;
+                if (tier > bestTier)
+                    bestTier = tier;
             }
             if (matched == 0)
                 return false;
-            specificity = matched * 1000 + matchedLenOr;
+            specificity = bestTier * TierStep + matched * 1000 + matchedLenOr;
             return true;
         }
 
@@ -976,7 +1020,7 @@ namespace Satisvampory.Services
             if (!overflowDest && IsSenderName(plate) && ((unnamed && hasItem) || exact || category))
             {
                 rank.Class = 0;
-                rank.Spec = exact ? specExact + 20000 : (category ? specCat + 10000 : 0);
+                rank.Spec = exact ? specExact + 10 * TierStep : (category ? specCat + 10000 : 0);
                 rank.Label = LabelSender;
                 return rank;
             }
@@ -1240,6 +1284,21 @@ namespace Satisvampory.Services
             if (string.IsNullOrWhiteSpace(name))
                 return groups;
             foreach (Match match in SendRx.Matches(name.ToLowerInvariant()))
+            {
+                if (!int.TryParse(match.Groups[1].Value, out var g))
+                    continue;
+                if (!groups.Contains(g))
+                    groups.Add(g);
+            }
+            return groups;
+        }
+
+        public static List<int> ReceiverGroups(string name)
+        {
+            var groups = new List<int>();
+            if (string.IsNullOrWhiteSpace(name))
+                return groups;
+            foreach (Match match in ReceiveRx.Matches(name.ToLowerInvariant()))
             {
                 if (!int.TryParse(match.Groups[1].Value, out var g))
                     continue;

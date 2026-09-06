@@ -324,6 +324,13 @@ namespace Satisvampory.Services
                     if (!loops && destStash != Entity.Null && destStash != sendingStash
                         && srcIsReceiver && StashHasToken(destStash, Core.Stash.SendToken, group))
                         continue;
+                    // 1.0.96: cross-group two-cycle ("Alchemy S1R2" -> "Bone Grave R1S2" -> back).
+                    // When the dest can send this item back to us on ANY group, the pair is a
+                    // mutual link: move only toward the strictly better-ranked dest, never ping-pong.
+                    if (!loops && destStash != Entity.Null && destStash != sendingStash
+                        && MutualLink(sendingStash, destStash)
+                        && !DestRanksStrictlyBetter(sendingStash, inventory, destStash, sink.Inventory, item, ownerId))
+                        continue;
                     var take = sink.Unlimited ? left : (sink.Wanted < left ? sink.Wanted : left);
                     if (take <= 0)
                         continue;
@@ -358,6 +365,33 @@ namespace Satisvampory.Services
                     return stash;
             }
             return Entity.Null;
+        }
+
+        /// <summary>dest sends on a group src receives (or src sends on a group dest receives).</summary>
+        static bool MutualLink(Entity src, Entity dest)
+        {
+            if (src == Entity.Null || dest == Entity.Null)
+                return false;
+            var srcName = StashRouting.RawName(src);
+            var destName = StashRouting.RawName(dest);
+            if (string.IsNullOrEmpty(srcName) || string.IsNullOrEmpty(destName))
+                return false;
+            var srcRecv = StashRouting.ReceiverGroups(srcName);
+            var destSend = StashRouting.SenderGroups(destName);
+            for (var i = 0; i < destSend.Count; i++)
+            {
+                if (srcRecv.Contains(destSend[i]))
+                    return true;
+            }
+            return false;
+        }
+
+        static bool DestRanksStrictlyBetter(Entity src, Entity srcInv, Entity dest, Entity destInv, PrefabGUID item, ulong ownerId)
+        {
+            var srcRank = StashRouting.RankDeposit(src, item, ownerId, StashRouting.InventoryHasItem(srcInv, item));
+            var destRank = StashRouting.RankDeposit(dest, item, ownerId, StashRouting.InventoryHasItem(destInv, item));
+            // CompareTo: negative = this ranks better. Dest must beat src outright; a tie stays put.
+            return destRank.CompareTo(srcRank) < 0;
         }
 
         static bool StashHasToken(Entity stash, Regex regex, int group)
