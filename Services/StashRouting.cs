@@ -91,7 +91,43 @@ namespace Satisvampory.Services
         {
             if (stash == Entity.Null || !Core.EntityManager.Exists(stash) || !stash.Has<NameableInteractable>())
                 return "";
-            return stash.Read<NameableInteractable>().Name.ToString() ?? "";
+            // 1.0.108: trailing '+' signs are a priority boost, not part of the name.
+            return StripTrailingPlus(stash.Read<NameableInteractable>().Name.ToString() ?? "");
+        }
+
+        /// <summary>Count of '+' at the end of the plate (whitespace ignored). "Stone Brick R1S1++" = 2.</summary>
+        public static int TrailingPlus(string plate)
+        {
+            if (string.IsNullOrEmpty(plate))
+                return 0;
+            var i = plate.Length - 1;
+            var n = 0;
+            while (i >= 0)
+            {
+                var c = plate[i];
+                if (c == '+') { n++; i--; continue; }
+                if (char.IsWhiteSpace(c)) { i--; continue; }
+                break;
+            }
+            return n;
+        }
+
+        public static string StripTrailingPlus(string plate)
+        {
+            if (string.IsNullOrEmpty(plate))
+                return plate ?? "";
+            var n = TrailingPlus(plate);
+            if (n == 0)
+                return plate;
+            return plate.TrimEnd().TrimEnd('+').TrimEnd();
+        }
+
+        /// <summary>Priority boost on the plate: number of trailing '+'.</summary>
+        public static int PriorityOf(Entity stash)
+        {
+            if (stash == Entity.Null || !Core.EntityManager.Exists(stash) || !stash.Has<NameableInteractable>())
+                return 0;
+            return TrailingPlus(stash.Read<NameableInteractable>().Name.ToString() ?? "");
         }
 
         /// <summary>
@@ -129,7 +165,7 @@ namespace Satisvampory.Services
             // optional space between them: "Lock Box''", "''Lock Box", "' ' Lock Box" (1.0.107).
             if (string.IsNullOrWhiteSpace(name))
                 return false;
-            return SkipQuotesRx.IsMatch(name);
+            return SkipQuotesRx.IsMatch(StripTrailingPlus(name));
         }
 
         public static string SkipLabel(string name)
@@ -872,6 +908,17 @@ namespace Satisvampory.Services
             var plate = RawName(stash);
             var destName = DestName(stash);
             var matchName = RankMatchName(plate, destName);
+            if (rank.Class < 0)
+            {
+                var core = RankDepositCore(stash, item, ownerId, hasItem, standingPlot);
+                var baseWhy = ExplainCore(core, plate, destName, matchName, item, ownerId);
+                return $"priority +{-rank.Class} (trailing '+'), base c{core.Class} {baseWhy}";
+            }
+            return ExplainCore(rank, plate, destName, matchName, item, ownerId);
+        }
+
+        static string ExplainCore(DepositRank rank, string plate, string destName, string matchName, PrefabGUID item, ulong ownerId)
+        {
             switch (rank.Class)
             {
                 case 99:
@@ -1092,7 +1139,28 @@ namespace Satisvampory.Services
             return true;
         }
 
+        // Priority '+' encodes the base class inside Spec so boosted chests still order by
+        // their underlying match quality. Base Spec never reaches 1e7 (exact bonus is 1e6).
+        const int PriorityClassStep = 10000000;
+
+        /// <summary>
+        /// 1.0.108: a plate ending in one or more '+' outranks everything, s# included, for any
+        /// item it matches or already holds (base class 0-3). More '+' = higher. Class becomes
+        /// -N. A '+' on an empty generic / unmatched / overflow chest does nothing.
+        /// </summary>
         public static DepositRank RankDeposit(Entity stash, PrefabGUID item, ulong ownerId, bool hasItem, int standingPlot = -1)
+        {
+            var rank = RankDepositCore(stash, item, ownerId, hasItem, standingPlot);
+            var boost = PriorityOf(stash);
+            if (boost <= 0 || rank.Class < 0 || rank.Class > 3)
+                return rank;
+            rank.Spec = (9 - rank.Class) * PriorityClassStep + rank.Spec;
+            rank.Class = -boost;
+            rank.Label = rank.Label + "+" + boost;
+            return rank;
+        }
+
+        static DepositRank RankDepositCore(Entity stash, PrefabGUID item, ulong ownerId, bool hasItem, int standingPlot = -1)
         {
             var plate = RawName(stash);
             var destName = DestName(stash);

@@ -68,7 +68,7 @@ If ClanShare is **ON**, dest/source is the **clan island**. If **OFF**, standing
 | `.s why "Grave Dust" "Bone Grave"` | Plot / clan island | Same, narrowed to one container |
 | `.s need` | Plot / clan island | Top 10 station inputs the conveyor wants. Shows demand, total, reserve. Higher tier first, then lowest stock after reserve |
 
-Chest **names**: `s#` sender, `r#` receiver, `overflow`, `salvage`, `spoils`, `trash`, `NS` or `''` at the start or end (`' '` with a space works) skip, braziers `night` / `prox`. Built-in dest words (`blood`, `stone`, `jewel`, …) match that dest group, not a substring of the item name (Blood Jewel → jewel, not blood). Blank-plate dest furniture (Jewel Storage) still counts as that dest; blank Small Chest / cabinet / bureau do not.
+Chest **names**: trailing `+` = priority (more `+` = higher, beats `s#`; only for items the chest matches or holds), `s#` sender, `r#` receiver, `overflow`, `salvage`, `spoils`, `trash`, `NS` or `''` at the start or end (`' '` with a space works) skip, braziers `night` / `prox`. Built-in dest words (`blood`, `stone`, `jewel`, …) match that dest group, not a substring of the item name (Blood Jewel → jewel, not blood). Blank-plate dest furniture (Jewel Storage) still counts as that dest; blank Small Chest / cabinet / bureau do not.
 
 ---
 

@@ -40,6 +40,15 @@ Furniture-only names (`Small Chest`, size + `chest`/`storage` with no dest word)
 - **Overflow**: name contains `overflow`. Dest class **5** last-resort. Never seeds as class 0.
 - **Special**: nameplate contains `salvage`, `spoils`, `brazier`, `spawner`, or `trash`. Dest class **90** (not a normal dump dest). Overflow names are not special for ranking.
 
+## Priority `+` (1.0.108)
+
+One or more `+` at the **end** of the nameplate is a priority boost, not part of the name (`Stone Brick R1S1++` is the name `Stone Brick R1S1` with priority 2). A `+` **inside** the name is still the AND separator (`Wood + Stone`).
+
+- A boosted chest outranks **everything**, `s#` included, for any item it **matches or already holds** (base class 0-3). More `+` = higher: class becomes `-N`.
+- Among equal boosts the base class and specificity still decide.
+- `+` on an empty generic, unmatched custom, overflow, special, or NS chest does nothing.
+- Applies wherever `RankDeposit` is used: stash, RR, tidy, servant auto-stash, covering park, belt mutual links, `.pull` order (a `+` chest is drained last).
+
 ## Deposit classes (`RankDeposit`)
 
 Lower class wins. Then higher **specificity**, then **seeded** (already has the item), then **treasury-floor**, then **local** (standing plot).

@@ -42,6 +42,14 @@ namespace Satisvampory.Services
                 Check(checks, "no bare-number match: 'Alch 1' vs Grave Dust", !StashRouting.CategoryMatch("Alch 1", graveDust, ownerId, out _) || Tier(SpecOf("Alch 1", graveDust, ownerId)) != StashRouting.TierPartial);
                 Check(checks, "alias unbound before test", !ItemGroupService.TryExactItemAlias(Alias, out _));
 
+                // ---- priority '+' plate parsing ----
+                Check(checks, "plus: 'Stone Brick R1S1++' has 2", StashRouting.TrailingPlus("Stone Brick R1S1++") == 2);
+                Check(checks, "plus: 'Stone Brick R1S1 + ' has 1", StashRouting.TrailingPlus("Stone Brick R1S1 + ") == 1);
+                Check(checks, "plus: 'Wood + Stone' has 0 (inner + is AND)", StashRouting.TrailingPlus("Wood + Stone") == 0);
+                Check(checks, "plus: strip leaves 'Stone Brick R1S1'", StashRouting.StripTrailingPlus("Stone Brick R1S1++") == "Stone Brick R1S1");
+                Check(checks, "plus: stripped name still exact-matches", StashRouting.ExactItemNameMatch(StashRouting.StripTrailingPlus("Grave Dust S1+"), graveDust, out _));
+                Check(checks, "plus: skip-quotes still seen behind '+'", StashRouting.IsSkipQuotesName("Lock Box''+"));
+
                 // ---- equipment never matches by name fragment ----
                 var copperIngot = new PrefabGUID(-1237019921);
                 Check(checks, "partial: 'Copper Iron' matches Copper Ingot (material)", StashRouting.CategoryMatch("Copper Iron", copperIngot, ownerId, out var ciSpec) && Tier(ciSpec) == StashRouting.TierPartial, "spec=" + ciSpec);
