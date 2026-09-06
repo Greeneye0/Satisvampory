@@ -56,6 +56,17 @@ namespace Satisvampory.Services
                 {
                     checks.Add(("equipment: Copper Sword not resolvable, skipped", true, ""));
                 }
+                if (FoundItemConverter.TryGetExact("Ancestral Sword Shards Tier 1 Shattered", out var shardFound) && shardFound.prefab.GuidHash != 0)
+                {
+                    var shard = shardFound.prefab;
+                    Check(checks, "shattered: 'Shattered' matches a shard at group tier", StashRouting.CategoryMatch("Shattered", shard, ownerId, out var shSpec) && Tier(shSpec) == StashRouting.TierGroup, "spec=" + shSpec);
+                    Check(checks, "shattered: 'Weapons' does not match a shard", !StashRouting.CategoryMatch("Weapons", shard, ownerId, out _));
+                    Check(checks, "shattered: 'Shattered' does not match Copper Ingot", !StashRouting.CategoryMatch("Shattered", copperIngot, ownerId, out _));
+                }
+                else
+                {
+                    checks.Add(("shattered: shard item not resolvable, skipped", true, ""));
+                }
 
                 // ---- add alias -> Grave Dust (memory only) ----
                 ItemGroupService.RegisterAliasInMemory(Alias, graveDust);

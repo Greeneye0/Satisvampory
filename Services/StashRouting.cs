@@ -121,12 +121,15 @@ namespace Satisvampory.Services
             }
         }
 
+        static readonly Regex SkipQuotesRx = new(@"^\s*'\s*'|'\s*'\s*$", RegexOptions.Compiled);
+
         public static bool IsSkipQuotesName(string name)
         {
-            // Empty name is not skip. Only a trailing two-apostrophe suffix.
-            if (string.IsNullOrEmpty(name))
+            // Empty name is not skip. Two apostrophes at the START or END of the plate, with
+            // optional space between them: "Lock Box''", "''Lock Box", "' ' Lock Box" (1.0.107).
+            if (string.IsNullOrWhiteSpace(name))
                 return false;
-            return name.EndsWith(SkipSuffix, StringComparison.Ordinal);
+            return SkipQuotesRx.IsMatch(name);
         }
 
         public static string SkipLabel(string name)

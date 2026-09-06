@@ -63,7 +63,7 @@ namespace Satisvampory.Services
                 if (chest == Entity.Null || !Core.EntityManager.Exists(chest) || !chest.Has<NameableInteractable>())
                     continue;
                 var plate = chest.Read<NameableInteractable>().Name.ToString();
-                if (!string.IsNullOrEmpty(plate) && plate.EndsWith("''", StringComparison.Ordinal))
+                if (StashRouting.IsSkipQuotesName(plate))
                     continue;
                 if (StashRouting.IsNoShareName(plate))
                     continue;
@@ -102,7 +102,7 @@ namespace Satisvampory.Services
             foreach (var chest in OnPlot(plot))
             {
                 var plate = StashRouting.RawName(chest).ToLowerInvariant();
-                if (string.IsNullOrEmpty(plate) || plate.EndsWith("''", StringComparison.Ordinal))
+                if (string.IsNullOrEmpty(plate) || StashRouting.IsSkipQuotesName(plate))
                     continue;
                 if (StashRouting.IsNoShareName(plate))
                     continue;

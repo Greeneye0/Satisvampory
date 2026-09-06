@@ -68,7 +68,7 @@ If ClanShare is **ON**, dest/source is the **clan island**. If **OFF**, standing
 | `.s why "Grave Dust" "Bone Grave"` | Plot / clan island | Same, narrowed to one container |
 | `.s need` | Plot / clan island | Top 10 station inputs the conveyor wants. Shows demand, total, reserve. Higher tier first, then lowest stock after reserve |
 
-Chest **names**: `s#` sender, `r#` receiver, `overflow`, `salvage`, `spoils`, `trash`, `NS` or trailing `''` skip, braziers `night` / `prox`. Built-in dest words (`blood`, `stone`, `jewel`, …) match that dest group, not a substring of the item name (Blood Jewel → jewel, not blood). Blank-plate dest furniture (Jewel Storage) still counts as that dest; blank Small Chest / cabinet / bureau do not.
+Chest **names**: `s#` sender, `r#` receiver, `overflow`, `salvage`, `spoils`, `trash`, `NS` or `''` at the start or end (`' '` with a space works) skip, braziers `night` / `prox`. Built-in dest words (`blood`, `stone`, `jewel`, …) match that dest group, not a substring of the item name (Blood Jewel → jewel, not blood). Blank-plate dest furniture (Jewel Storage) still counts as that dest; blank Small Chest / cabinet / bureau do not.
 
 ---
 
@@ -93,7 +93,7 @@ Stand on the plot. Default reserve **10**. Default production cap **unlimited**.
 | `.s group restore` / `.s group restore mushrooms` | Restore built-ins (Hell’s Clarion is mushrooms, not flowers) |
 | `.s group ore add "Iron Ore"` | First edit of a built-in copies the default list |
 | `.s group ore add "Iron Ore", "Copper Ore", Quartz` | Comma-separated lists work for add and remove (quotes optional around single words) |
-| `weapons` / `armor` | Built-in groups. `weapon` and `armour` are aliases. `armor` includes necklaces (Magic Source slot) |
+| `weapons` / `armor` / `shattered` | Built-in groups. `weapon`, `armour`, `shatter` are aliases. `armor` includes necklaces (Magic Source slot). Shattered legendary shards are in `shattered` only, not `weapons`: name the shard chest `Shattered`, not `Shattered Weapons` (the second word would also take real weapons) |
 
 Quote names with spaces. If a name is ambiguous, pick with **`.s 2`** or **`.s pick 2`**.
 

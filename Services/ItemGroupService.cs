@@ -37,6 +37,7 @@ namespace Satisvampory.Services
         public const string GroupMinerals = "minerals";
         public const string GroupConsumables = "consumables";
         public const string GroupWeapons = "weapons";
+        public const string GroupShattered = "shattered";
         public const string GroupArmor = "armor";
         public const string GroupJewels = "jewels";
         public const string GroupMagic = "magic";
@@ -98,6 +99,8 @@ namespace Satisvampory.Services
             ["potions"] = GroupConsumables,
             [GroupWeapons] = GroupWeapons,
             ["weapon"] = GroupWeapons,
+            [GroupShattered] = GroupShattered,
+            ["shatter"] = GroupShattered,
             [GroupArmor] = GroupArmor,
             ["armour"] = GroupArmor,
             [GroupJewels] = GroupJewels,
@@ -137,7 +140,7 @@ namespace Satisvampory.Services
         {
             GroupOre, GroupFlowers, GroupSeeds, GroupMushrooms, GroupTailoring, GroupHides, GroupWood, GroupPlanks,
             GroupGems, GroupAlchemy, GroupBlood, GroupBones, GroupIngots, GroupStone, GroupCoins,
-            GroupFish, GroupKnowledge, GroupMinerals, GroupConsumables, GroupWeapons, GroupArmor,
+            GroupFish, GroupKnowledge, GroupMinerals, GroupConsumables, GroupWeapons, GroupShattered, GroupArmor,
             GroupJewels, GroupMagic, GroupSoulshards, GroupBags, GroupSaddles, GroupRelics
         };
 
@@ -226,7 +229,7 @@ namespace Satisvampory.Services
         {
             if (guidHash == 0 || !TryGetDestGroup(guidHash, out var group))
                 return false;
-            return group != GroupWeapons && group != GroupArmor && group != GroupJewels
+            return group != GroupWeapons && group != GroupShattered && group != GroupArmor && group != GroupJewels
                 && group != GroupMagic && group != GroupBags && group != GroupSaddles
                 && group != GroupRelics && group != GroupSoulshards;
         }
@@ -815,6 +818,10 @@ namespace Satisvampory.Services
             var pl = p.ToLowerInvariant();
             var nl = n.ToLowerInvariant();
 
+            // 1.0.107: shattered legendary shards are their own group, NOT weapons, so a
+            // "Shattered" chest and a "Weapons" chest never compete for them.
+            if (pl.Contains("shatter") || nl.Contains("shattered"))
+                return GroupShattered;
             if ((cat & ItemCategory.Weapon) != 0 || pl.StartsWith("item_weapon_"))
                 return GroupWeapons;
 

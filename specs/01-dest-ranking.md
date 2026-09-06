@@ -21,7 +21,7 @@ Special identity (`salvage`, `spoils`, `brazier`, `spawner`, `trash`) is the **n
 | Token | Rule |
 | --- | --- |
 | `NS` as a word (`\bns\b`) | No-share. Class **99**. |
-| Trailing `''` (two apostrophes) | Skip-quotes. Treated like NS **everywhere**. Empty name is not skip. |
+| `''` (two apostrophes) at the **start or end** of the plate, space between them allowed (`Lock Box''`, `' ' Lock Box`) | Skip-quotes. Treated like NS **everywhere**. Empty name is not skip. (1.0.107: leading and spaced forms; before, only a trailing `''` counted and `' ' Lock Box` was tidied.) |
 
 ## Generic nameplates
 
@@ -83,6 +83,7 @@ After stripping conveyor tokens and overflow/generic filler:
 - Exact item aliases match **that item only** (find / pull / dest names): `be` (Blood Essence), `gbe` / `pbe` / `abe` (Greater / Primal / Ancestral), `gss` (Greater Stygian Shard), `sgs` (Siege Golem Stone), `dsi` (Dark Silver Ingot), `ot` (Onyx Tear). Admin can add more with `.sg alias add <alias> <item>`. Cannot overwrite dest-group words (`blood`, `stone`, …) or built-ins. `blood` as a dest word stays the Blood Essence dest **group**; `BE` is the exact item.
 - Spelling fold: fiber/fibre, sulfur/sulphur, armor/armour, gray/grey, jewelry/jewellery, etc.
 - **Partial item-name tokens must be 3+ characters and not all digits** (1.0.101). `Alch 1 R1S1` must not match `Ancestral Whip Shards Tier 1 Shattered` through the `1`. Numbers on a plate are labels, not match words.
+- **Shattered shards are the `shattered` group, not `weapons`** (1.0.107). A `Shattered` plate takes shards by group word; a `Weapons` plate never does. A plate `Shattered Weapons` is OR and takes both — use `Shattered` alone.
 - **Equipment never matches by a name fragment** (1.0.104). Items whose ItemCategory has Weapon, Armor, or Magic skip the partial rule entirely: `Copper Iron` takes Copper Ingot (partial) but never Copper Sword or a legendary whose prefab label is `Merciless Iron Crossbow`. Equipment matches only by exact name, group word (`Weapons`, `Armor`), ItemCategory word, or a custom group. Legendaries carry their base prefab label, not the display name.
 
 ## Source pass (lend sources)
