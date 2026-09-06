@@ -101,11 +101,29 @@ namespace Satisvampory.Services
                     $"Stashed <color=white>{amount}</color>x <color=green>{item.PrefabName()}</color> to <color=#FFC0CB>{stash.EntityName()}</color>{StashRouting.FormatBeltChat(stash, item)}");
                 StashRouting.LogBeltTo(stash, item, plot, "stash");
             }
-            foreach (var type in movedTypes)
+            // 1.0.130: report every leftover type (not only partially moved ones) and say why:
+            // no chest accepts it (soul shard, restricted furniture, exclusions) vs. no space.
+            foreach (var kv in leftover)
             {
-                if (leftover.TryGetValue(type, out var amount))
+                var type = kv.Key;
+                var amount = kv.Value;
+                if (amount <= 0)
+                    continue;
+                var anyDest = StashRouting.OrderDepositDests(dests, type, ownerId, plot).Count > 0;
+                if (anyDest)
+                {
                     Utilities.SendSystemMessageToClient(Core.EntityManager, user,
                         $"Unable to stash <color=white>{amount}</color>x <color=green>{type.PrefabName()}</color> due to insufficient space in stashes!");
+                    continue;
+                }
+                var why = "no chest on this island accepts it";
+                ItemData data = default;
+                if (Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(type, out var prefab))
+                    data = prefab.Read<ItemData>();
+                if ((data.ItemCategory & ItemCategory.Soulshard) != 0)
+                    why = "soul shards only go in a soul shard pedestal";
+                Utilities.SendSystemMessageToClient(Core.EntityManager, user,
+                    $"Kept <color=white>{amount}</color>x <color=green>{type.PrefabName()}</color> in your bag — {why}. <color=white>.s why \"{StashRouting.ItemLabel(type)}\"</color> for details.");
             }
         }
 
