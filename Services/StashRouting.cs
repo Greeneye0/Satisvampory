@@ -962,7 +962,8 @@ namespace Satisvampory.Services
                 var totalLen = 0;
                 foreach (var token in tokens)
                 {
-                    if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true, typeWordFlagFallback: true, out var tier))
+                    // 1.0.125: the flag fallback needs a second word ("Shattered Weapons"); a lone "Weapons" stays group-only.
+                    if (!TokenMatchesItem(token, item, itemName, cat, ownerPlatformId, allowCategory: true, typeWordFlagFallback: tokens.Count > 1, out var tier))
                         return false;
                     totalLen += token.Length;
                     matched?.Add((token, tier));
