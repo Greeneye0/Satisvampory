@@ -365,6 +365,8 @@ namespace Satisvampory.Services;
         public IEnumerable<(string name, int amount)> ListItemCaps(ulong playerId) => SettingsExtras.ListItemCaps(playerId);
         public int GetItemCapOverrideCount(ulong playerId) => SettingsExtras.GetItemCapOverrideCount(playerId);
         public bool IsConveyorLoopsAllowed() => SettingsExtras.IsConveyorLoopsAllowed();
+        public bool IsRepeatHuntOnlineRequired() => SettingsExtras.IsRepeatHuntOnlineRequired();
+        public bool ToggleRepeatHuntOnlineRequired() => SettingsExtras.ToggleRepeatHuntOnlineRequired();
         public bool ToggleConveyorLoops() => SettingsExtras.ToggleConveyorLoops();
         public bool IsGlobalSalvageEnabled() => SettingsExtras.IsGlobalSalvageEnabled();
         public bool GetPlotSalvageFlag(ulong heartOwnerId, int territoryId) => SettingsExtras.GetPlotSalvageFlag(heartOwnerId, territoryId);

@@ -442,6 +442,12 @@ namespace Satisvampory.Services
                 yield return new WaitForSeconds(attempt == 0 ? 3f : 1f);
                 if (!IsOn(hunt.Plot))
                     yield break;
+                // 1.0.122: admin ".sg rhonline" - resend only while the owner or a clan member is online.
+                if (Core.PlayerSettings.IsRepeatHuntOnlineRequired() && !ClanMemberOnline(heart))
+                {
+                    DestDebugLog.Note("throne", hunt.Plot, 0, "repeat skipped: no castle owner / clan member online (.sg rhonline)");
+                    yield break;
+                }
                 if (!ServantsReady(ref hunt))
                 {
                     lastFail = "servants not ready";
@@ -1455,6 +1461,24 @@ namespace Satisvampory.Services
                 return false;
             character = userEnt.Read<User>().LocalCharacter.GetEntityOnServer();
             return character != Entity.Null && Core.EntityManager.Exists(character);
+        }
+
+        /// <summary>Any connected player who is the heart owner or in the owner's clan.</summary>
+        internal static bool ClanMemberOnline(Entity heart)
+        {
+            if (heart == Entity.Null || !Core.EntityManager.Exists(heart))
+                return false;
+            var online = false;
+            Core.TerritoryService.EachUser((uent, user) =>
+            {
+                if (online || !user.IsConnected)
+                    return;
+                var ch = user.LocalCharacter.GetEntityOnServer();
+                if (Core.TerritoryService.IsSameClanAsHeartOwner(user, heart)
+                    || (ch != Entity.Null && Core.EntityManager.Exists(ch) && Core.TerritoryService.IsSameClanAsHeart(ch, heart)))
+                    online = true;
+            });
+            return online;
         }
 
         static bool TryFromSend(Entity heart, Entity throne, out Entity userEnt, out Entity character)

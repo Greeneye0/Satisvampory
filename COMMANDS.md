@@ -138,6 +138,7 @@ Needs `save-data\Settings\adminlist.txt` SteamID64 **and** console `adminauth`.
 | `.sg alias add <alias> <item>` | Admin extra alias for find / pull / dest. Persists. Cannot steal dest words (`blood`) or built-ins |
 | `.sg alias del <alias>` | Remove an admin alias. Built-ins stay |
 | `.sg co` | Allow conveyors |
+| `.sg rhonline` | Repeat hunts resend only while the castle owner or a clan member is online. Default **OFF** |
 | `.sg convloop` / `.sg cloop` | Allow s# chest → r# chest **loops** (dest is also s# on the same group). Default **OFF**. Chest→chest without a cycle works even when this is off |
 | `.sg sal` | Allow devourer salvage |
 | `.sg us` | Allow `spawner` chests |

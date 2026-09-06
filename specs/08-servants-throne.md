@@ -16,6 +16,8 @@ Do not give servant loot a different dest order than stash.
 
 Admin **`.sg rh` / `.sg repeathunt`**. Default **OFF**. Server-wide allow. Not turned on by `SgAllOn`.
 
+**`.sg rhonline`** (1.0.122, default **OFF**): when ON, a repeat resend happens only while the castle owner or a member of the owner's clan is connected. With nobody online the returned hunt is not resent (debug note `repeat skipped: no castle owner / clan member online`); the next manual send re-arms it as usual.
+
 Per castle (needs server ON): **`.s rh`** lists every ClanShare / standing castle and ON/OFF. Missing plot = **ON**. **`.s rh all`** enables all listed. **`.s rh off`** / **`.s rh on`** this standing castle. **`.s rh 2`** toggles that row (list TTL 2 minutes).
 
 When a plot is ON: each time a hunt **returns**, surviving (not dead, not injured) servants are sent again on the **same** zone / mission / throne after they are idle. Dead or injured servants are skipped. If vanilla does not accept the send, chat **could not send** with the real reason (missing zone, servants not ready, vanilla rejected) — do not claim they left. Raided hearts do not resend. Auto-send bypasses “must be sitting the throne”.

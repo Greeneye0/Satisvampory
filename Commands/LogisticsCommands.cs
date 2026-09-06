@@ -140,6 +140,10 @@ namespace Satisvampory.Commands;
         public static void GlobalRepeatHunt(ChatCommandContext ctx)
             => LogisticsCommands.ReplyOnOff(ctx, "Repeat hunts", Core.PlayerSettings.ToggleRepeatHunt());
 
+        [Command(name: "rhonline", usage: ".sg rhonline", description: "Repeat hunts resend only while the castle owner or a clan member is online. Default OFF.", adminOnly: true)]
+        public static void RepeatHuntOnline(ChatCommandContext ctx)
+            => LogisticsCommands.ReplyOnOff(ctx, "Repeat hunts require a castle owner / clan member online", Core.PlayerSettings.ToggleRepeatHuntOnlineRequired());
+
         [Command(name: "rhmax", usage: ".sg rhmax [1-100]", description: "Max success % for repeat hunts only (first send is vanilla). Default 99.", adminOnly: true)]
         public static void RepeatHuntMax(ChatCommandContext ctx, int? percent = null)
         {
@@ -181,7 +185,7 @@ namespace Satisvampory.Commands;
             => LogisticsCommands.ReplyOnOff(ctx, "Global Trash", Core.PlayerSettings.ToggleTrash());
 
         [Command(name: "settings", shortHand: "s", usage: ".sg s", description: "Displays current settings.", adminOnly: true)]
-        public static void ShowGlobal(ChatCommandContext ctx) { var g = Core.PlayerSettings.GetGlobalSettings(); ctx.Reply("Satisvampory server flags:\nSortStash " + LogisticsCommands.OnOff(g.SortStash) + "\nPull " + LogisticsCommands.OnOff(g.Pull) + "\nCraftPull " + LogisticsCommands.OnOff(g.CraftPull) + "\nAutoStashMissions " + LogisticsCommands.OnOff(g.AutoStashMissions) + "\nRepeatHunt " + LogisticsCommands.OnOff(g.RepeatHunt) + " (default OFF; .sg rh) max " + Core.PlayerSettings.GetRepeatHuntMaxSuccess() + "% (.sg rhmax)\nConveyor " + LogisticsCommands.OnOff(g.Conveyor) + "\nConveyorLoops " + LogisticsCommands.OnOff(g.ConveyorLoops) + " (default OFF; .sg convloop)\nSalvage " + LogisticsCommands.OnOff(g.Salvage) + "\nUnitSpawner " + LogisticsCommands.OnOff(g.UnitSpawner) + "\nBrazier " + LogisticsCommands.OnOff(g.Brazier) + "\nNamed " + LogisticsCommands.OnOff(g.Named) + "\nTrash " + LogisticsCommands.OnOff(g.Trash)); }
+        public static void ShowGlobal(ChatCommandContext ctx) { var g = Core.PlayerSettings.GetGlobalSettings(); ctx.Reply("Satisvampory server flags:\nSortStash " + LogisticsCommands.OnOff(g.SortStash) + "\nPull " + LogisticsCommands.OnOff(g.Pull) + "\nCraftPull " + LogisticsCommands.OnOff(g.CraftPull) + "\nAutoStashMissions " + LogisticsCommands.OnOff(g.AutoStashMissions) + "\nRepeatHunt " + LogisticsCommands.OnOff(g.RepeatHunt) + " (default OFF; .sg rh) max " + Core.PlayerSettings.GetRepeatHuntMaxSuccess() + "% (.sg rhmax)" + (g.RepeatHuntRequireOnline ? " requires owner/clan online (.sg rhonline)" : " resends while offline too (.sg rhonline to require online)") + "\nConveyor " + LogisticsCommands.OnOff(g.Conveyor) + "\nConveyorLoops " + LogisticsCommands.OnOff(g.ConveyorLoops) + " (default OFF; .sg convloop)\nSalvage " + LogisticsCommands.OnOff(g.Salvage) + "\nUnitSpawner " + LogisticsCommands.OnOff(g.UnitSpawner) + "\nBrazier " + LogisticsCommands.OnOff(g.Brazier) + "\nNamed " + LogisticsCommands.OnOff(g.Named) + "\nTrash " + LogisticsCommands.OnOff(g.Trash)); }
 
         [Command(name: "alias", usage: ".sg alias", description: "List item aliases (BE, GBE, PBE, GSS, …).", adminOnly: true)]
         public static void ListAliases(ChatCommandContext ctx)

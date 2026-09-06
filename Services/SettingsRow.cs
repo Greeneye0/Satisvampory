@@ -57,6 +57,8 @@ namespace Satisvampory.Services
         public bool Conveyor { get; set; }
         // Admin: s# chest may fill r# chest that is also s# on the same group. Default OFF.
         public bool ConveyorLoops { get; set; }
+        /// <summary>1.0.122: repeat hunts resend only while a castle owner / clan member is online. Default OFF.</summary>
+        public bool RepeatHuntRequireOnline { get; set; }
         public bool Salvage { get; set; }
         public bool UnitSpawner { get; set; }
         public bool Brazier { get; set; }

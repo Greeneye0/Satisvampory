@@ -177,6 +177,18 @@ namespace Satisvampory.Services
 
         internal static bool IsConveyorLoopsAllowed() => S.TryRow(0, out var settings) && settings.ConveyorLoops;
 
+        internal static bool IsRepeatHuntOnlineRequired() => S.TryRow(0, out var settings) && settings.RepeatHuntRequireOnline;
+
+        internal static bool ToggleRepeatHuntOnlineRequired()
+        {
+            if (!S.TryRow(0, out var settings))
+                settings = new SettingsRow();
+            settings.RepeatHuntRequireOnline = !settings.RepeatHuntRequireOnline;
+            S.Put(0, settings);
+            S.MarkDirty();
+            return settings.RepeatHuntRequireOnline;
+        }
+
         internal static bool ToggleConveyorLoops()
         {
             if (!S.TryRow(0, out var settings))
