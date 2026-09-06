@@ -138,7 +138,33 @@ namespace Satisvampory.Services;
                 return false;
             if (!TryRow(ownerId, out var row) || row.ItemAliases == null)
                 return false;
-            return row.ItemAliases.TryGetValue(alias, out guidHash) && guidHash != 0;
+            // 1.0.118: case-insensitive (rows saved before 1.0.118 may hold mixed-case keys).
+            foreach (var kv in row.ItemAliases)
+            {
+                if (string.Equals(kv.Key, alias, StringComparison.OrdinalIgnoreCase) && kv.Value != 0)
+                {
+                    guidHash = kv.Value;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static string CastleAliasKey(string alias) => (alias ?? "").Trim().ToLowerInvariant();
+
+        static void RemoveCastleAliasVariants(SettingsRow row, string key)
+        {
+            var drop = new List<string>();
+            foreach (var k in row.ItemAliases.Keys)
+            {
+                if (string.Equals(k, key, StringComparison.OrdinalIgnoreCase))
+                    drop.Add(k);
+            }
+            foreach (var k in drop)
+            {
+                row.ItemAliases.Remove(k);
+                row.ItemAliasNames?.Remove(k);
+            }
         }
 
         public string SetCastleAlias(ulong ownerId, string alias, int guidHash, string displayName)
@@ -150,8 +176,10 @@ namespace Satisvampory.Services;
             var row = Snapshot(ownerId, true);
             row.ItemAliases ??= new Dictionary<string, int>();
             row.ItemAliasNames ??= new Dictionary<string, string>();
-            row.ItemAliases[alias] = guidHash;
-            row.ItemAliasNames[alias] = string.IsNullOrWhiteSpace(displayName) ? alias : displayName;
+            var key = CastleAliasKey(alias);
+            RemoveCastleAliasVariants(row, key);
+            row.ItemAliases[key] = guidHash;
+            row.ItemAliasNames[key] = string.IsNullOrWhiteSpace(displayName) ? key : displayName;
             playerSettings[ownerId] = row;
             MarkDirty();
             return null;
@@ -164,8 +192,10 @@ namespace Satisvampory.Services;
             var row = Snapshot(ownerId, true);
             row.ItemAliases ??= new Dictionary<string, int>();
             row.ItemAliasNames ??= new Dictionary<string, string>();
-            var removed = row.ItemAliases.Remove(alias);
-            row.ItemAliasNames.Remove(alias);
+            var key = CastleAliasKey(alias);
+            var before = row.ItemAliases.Count;
+            RemoveCastleAliasVariants(row, key);
+            var removed = row.ItemAliases.Count < before;
             playerSettings[ownerId] = row;
             if (removed)
                 MarkDirty();

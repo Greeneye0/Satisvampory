@@ -632,6 +632,17 @@ namespace Satisvampory.Commands
 
             foreach (var token in tokens)
             {
+                // 1.0.118: castle / island aliases resolve here too (".s group EGB add egb").
+                if (ItemGroupService.TryExactItemAlias(SteamID, token, out var aliasHash) && aliasHash != 0)
+                {
+                    if (seen.Add(aliasHash))
+                    {
+                        var aliased = new PrefabGUID(aliasHash);
+                        var aliasedName = aliased.PrefabName();
+                        uniqueItems.Add((aliased, string.IsNullOrEmpty(aliasedName) ? token : aliasedName));
+                    }
+                    continue;
+                }
                 var status = FoundItemConverter.TryResolve(token, out var found, out var candidates);
                 if (status == ItemResolveStatus.None)
                 {

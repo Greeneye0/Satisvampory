@@ -120,6 +120,7 @@ namespace Satisvampory.Services
                 var cErr = Core.PlayerSettings.SetCastleAlias(ownerId, CAlias, graveDust.GuidHash, gdName);
                 Check(checks, "castle alias: set", cErr == null, cErr ?? "");
                 Check(checks, "castle alias: exact match with owner", StashRouting.ExactItemNameMatch(CAlias, graveDust, out _, ownerId));
+                Check(checks, "castle alias: case-insensitive lookup", StashRouting.ExactItemNameMatch(CAlias.ToUpperInvariant(), graveDust, out _, ownerId) && ItemGroupService.TryExactItemAlias(ownerId, "SVTCALIAS", out var upHash) && upHash == graveDust.GuidHash);
                 Check(checks, "castle alias: not visible without owner", !StashRouting.ExactItemNameMatch(CAlias, graveDust, out _, 0));
                 Check(checks, "castle alias: '--" + CAlias + "' excludes Grave Dust", StashRouting.ExclusionMatches(CAlias, graveDust, ownerId));
                 Check(checks, "castle alias: does not match Bone", !StashRouting.ExactItemNameMatch(CAlias, bone, out _, ownerId));
