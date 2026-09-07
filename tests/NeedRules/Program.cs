@@ -84,4 +84,12 @@ Check(emitted.Single().action == "Unverified", "Recipe cycles stop with an hones
 emitted.Clear();
 NeedRules.Expand(100, 1, new(), id => recipes.GetValueOrDefault(id), Emit, true, new() { [101] = 2, [102] = 3 });
 Check(emitted.Single().action == "Craft", "Carried upstream ingredients reduce farming demand");
+var observed = new Dictionary<string,(int required,int missing)>();
+NeedRules.Expand(100, 2, new() { [101] = 1, [102] = 6 }, id => recipes.GetValueOrDefault(id), (_,_,_,_)=>{},
+    observe: (id,required,missing,path)=>observed[string.Join("/",path.Append(id))]=(required,missing));
+Check(observed["100"] == (2,2), "Chain retains finished product goal");
+Check(observed["100/101"] == (4,3), "Intermediate shortage distinguishes existing stock from amount required");
+Check(observed["100/101/103"] == (12,12), "Terminal shortage retains its complete route and quantity");
+Check(observed["100/102"] == (6,0), "Covered sibling branch remains available to detail explanation");
+Check(observed.Count == 4, "Observing covered branches does not invent extra recursive demand");
 Console.WriteLine($"{checks} need-rule regression checks passed.");

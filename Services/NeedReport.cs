@@ -22,7 +22,13 @@ namespace Satisvampory.Services
         public class Station { public int plot; public string name, status, inputInventory, outputInventory; public bool disabled; public float floorScale; public List<int> receiverGroups = new(), senderGroups = new(); public List<Amount> input = new(), output = new(); public List<RecipeRow> recipes = new(); }
         public class Snapshot { public bool serverConveyorEnabled, plannerOwnerConveyorEnabled; public List<Source> sources = new(); public List<Station> stations = new(); }
         #pragma warning restore CS0649
-        sealed class Entry { public int Id, Have, Target, Priority; public string Action, Purpose, Reason, Color = "yellow"; public List<string> Details = new(), Reasons = new(); public HashSet<int> Goals = new(); }
+        sealed class Entry { public int Id, Have, Target, Priority; public string Action, Purpose, Reason, QuantityLine, Color = "yellow"; public List<string> Details = new(), Reasons = new(); public HashSet<int> Goals = new(); public List<int> Chain; public ChainGoal Goal; }
+        sealed class ChainGoal
+        {
+            public int Root, Required, ToMake;
+            public HashSet<string> Items = new();
+            public Dictionary<string, NeedRules.MaterialDemand> Nodes = new();
+        }
         sealed class Saved { public DateTime At; public List<int> Plots; public List<Entry> Rows; public NeedRules.NumberWindow Number = new(); public int Selected; }
         sealed class Context
         {
@@ -30,6 +36,7 @@ namespace Satisvampory.Services
             public Dictionary<int, int> Local = new(), Island = new();
             public Dictionary<int, int> Remaining;
             public HashSet<int> GearProducts = new();
+            public Dictionary<(int root, string purpose), ChainGoal> ChainGoals = new();
             public HashSet<int> Unlocked = new(), BuiltRecipes = new(), Blueprints = new();
             public Dictionary<int, string> CraftStations = new();
             public Dictionary<int, Dictionary<int, int>> CraftCosts = new();
@@ -207,7 +214,24 @@ namespace Satisvampory.Services
         }
         static void Explain(Context c, Entry e)
         {
-            if (e.Action != null)
+            if (e.Chain != null)
+            {
+                var goal = e.Goal;
+                e.Details.Add(C($"{e.Purpose} needs {goal.Required} {L(goal.Root)}" + (goal.Items.Count > 0 ? $" to complete {goal.Items.Count} gear items." : " for its stock goal."), "white"));
+                e.Details.Add(C(e.QuantityLine + ".", e.Color));
+                var recipe = ChainRecipe(c, goal.Root);
+                if (recipe != null)
+                foreach (var input in recipe.Inputs.Where(a => e.Chain.Count < 2 || a.Key != e.Chain[1]))
+                {
+                    var usable = Reach(c, null, input.Key);
+                    var supported = input.Value > 0 ? NeedRules.Cost(usable / input.Value, recipe.Yield) : 0;
+                    var node = goal.Nodes.GetValueOrDefault($"{goal.Root}/{input.Key}");
+                    e.Details.Add($"Also uses {L(input.Key)}: stock {N(c.Island, input.Key)} ({usable} usable in sources), enough for {supported} {L(goal.Root)} on this ingredient alone." +
+                        (node != null ? $" Plan still needs {node.Missing} {L(input.Key)} after allocations." : ""));
+                }
+                e.Details.Add("Quantities preserve reserves and include station inputs and planned batch surplus. Players receive supplies first.");
+            }
+            else if (e.Action != null)
             {
                 e.Details.Add(C($"Next: {e.Action} {e.Target} {L(e.Id)} for {e.Purpose}.", e.Color));
                 e.Details.AddRange(e.Reasons.Take(1));
@@ -350,14 +374,20 @@ namespace Satisvampory.Services
             return stock;
         }
         static void AddChain(Context c, List<Entry> rows, int root, int amount, string purpose, int priority,
-            Dictionary<int, int> stock, Dictionary<int, int> personal = null, string beneficiary = null)
+            Dictionary<int, int> stock, Dictionary<int, int> personal = null, string beneficiary = null, int? required = null)
         {
+            if (!c.ChainGoals.TryGetValue((root, purpose), out var goal))
+                c.ChainGoals[(root, purpose)] = goal = new ChainGoal { Root = root };
+            goal.Required = (int)Math.Min(int.MaxValue, (long)goal.Required + (required ?? amount));
+            goal.ToMake = (int)Math.Min(int.MaxValue, (long)goal.ToMake + amount);
+            if (beneficiary != null) goal.Items.Add(beneficiary);
             NeedRules.Expand(root, amount, stock, id => ChainRecipe(c, id), (id, missing, action, path) => {
                 if (action == "Supply") action = NeedCatalog.Products.ContainsKey(id) ? "Setup" : "Collect";
-                var entry = rows.FirstOrDefault(e => e.Id == id && e.Purpose == purpose && e.Action == action);
+                var route = path.Concat(new[] { id }).ToList();
+                var entry = rows.FirstOrDefault(e => e.Id == id && e.Purpose == purpose && e.Action == action && e.Chain != null && e.Chain.SequenceEqual(route));
                 if (entry == null)
                 {
-                    entry = new Entry { Id = id, Purpose = purpose, Action = action, Priority = priority,
+                    entry = new Entry { Id = id, Purpose = purpose, Action = action, Priority = priority, Chain = route, Goal = goal,
                         Color = action is "Setup" or "Unverified" ? "yellow" : purpose == "Servant gear" ? "#87CEFA" : "#90EE90" };
                     rows.Add(entry);
                 }
@@ -369,7 +399,27 @@ namespace Satisvampory.Services
                 entry.Reasons.Add(reason);
                 entry.Goals.Add(root);
                 entry.Reason = $"{action} {entry.Target} {L(id)} — {purpose}" + (id != root ? $" • {L(entry.Goals.First())}" : "") + (entry.Goals.Count > 1 ? " + other goals" : "");
-            }, false, personal);
+            }, false, personal, (id, requested, missing, path) => {
+                var key = string.Join("/", path.Concat(new[] { id }));
+                if (!goal.Nodes.TryGetValue(key, out var node)) goal.Nodes[key] = node = new();
+                node.Required = (int)Math.Min(int.MaxValue, (long)node.Required + requested);
+                node.Covered = (int)Math.Min(int.MaxValue, (long)node.Covered + requested - missing);
+            });
+        }
+        static void FormatChains(List<Entry> rows)
+        {
+            foreach (var e in rows.Where(e => e.Chain != null))
+            {
+                e.Reason = string.Join(" → ", e.Chain.AsEnumerable().Reverse().Select(L)) + $" — {e.Purpose}";
+                var amounts = new List<string>();
+                for (var i = e.Chain.Count - 1; i >= 0; i--)
+                {
+                    var key = string.Join("/", e.Chain.Take(i + 1));
+                    var amount = i == e.Chain.Count - 1 ? e.Target : i == 0 ? e.Goal.Required : e.Goal.Nodes.GetValueOrDefault(key)?.Missing ?? 0;
+                    amounts.Add($"{amount} {L(e.Chain[i])}");
+                }
+                e.QuantityLine = (e.Action == "Collect" ? "Need " : e.Action + " ") + string.Join(" for ", amounts);
+            }
         }
         static void ExpandStock(Context c, List<Entry> rows)
         {
@@ -458,7 +508,7 @@ namespace Satisvampory.Services
                         }
                         c.GearProducts.Add(material);
                         AddChain(c, rows, material, shortage, servant ? "Servant gear" : "Player gear",
-                            NeedRules.GearPriority(servant, NeedCatalog.Depth(material)), stored, bag, why);
+                            NeedRules.GearPriority(servant, NeedCatalog.Depth(material)), stored, bag, why, amount);
 
                     }
                     foreach (var input in c.CraftCosts.GetValueOrDefault(recipe.Id, recipe.Inputs))
@@ -472,6 +522,7 @@ namespace Satisvampory.Services
         }
         static void SaveAndPrint(ChatCommandContext ctx, Context c, List<Entry> entries, string title, bool focused = false)
         {
+            FormatChains(entries);
             var top = NeedRules.BottomFirst(entries, e => e.Priority, e => e.Target > 0 ? NeedRules.Short(e.Target, e.Have) / (double)e.Target : 0, e => e.Id);
             // Save #1 at index zero while displaying it last.
             var ranked = top.AsEnumerable().Reverse().ToList();
@@ -485,7 +536,11 @@ namespace Satisvampory.Services
             if (focused) { Detail(ctx, 1); return; }
             ctx.Reply(C($"Needs • {title} • castle {c.Plot}" + (c.Plots.Count > 1 ? " + clan supplies" : "") + $" • #1 highest" + (entries.Count > 5 ? $" • {entries.Count - 5} more" : ""), "white"));
             if (ranked.Count == 0) ctx.Reply(C("No verified unmet goals. Use .s needgoal or .s needtarget to choose goals.", "green"));
-            for (var i = ranked.Count - 1; i >= 0; i--) ctx.Reply(C($"{i + 1}. {ranked[i].Reason}", ranked[i].Color));
+            for (var i = ranked.Count - 1; i >= 0; i--)
+            {
+                ctx.Reply(C($"{i + 1}. {ranked[i].Reason}", ranked[i].Color));
+                if (ranked[i].QuantityLine != null) ctx.Reply(C(ranked[i].QuantityLine, "white"));
+            }
             if (ranked.Count > 0) ctx.Reply("Details: <color=white>.s #</color> (e.g. <color=white>.s 1</color>) — use as your next command.");
         }
         internal static void Detail(ChatCommandContext ctx, int number, int page = 1)
@@ -527,11 +582,12 @@ namespace Satisvampory.Services
             foreach (var id in c.Local.Keys.Where(id => IsStockMaterial(id, default)))
             { var entry = Stock(c, id, default, false); if (entry != null && !c.GearProducts.Contains(id) && !rows.Any(x => x.Id == id)) rows.Add(entry); }
             ExpandStock(c, rows);
+            FormatChains(rows);
             var ranked = NeedRules.BottomFirst(rows, x => x.Priority, x => x.Target > 0 ? NeedRules.Short(x.Target, x.Have) / (double)x.Target : 0, x => x.Id).AsEnumerable().Reverse().ToList();
             foreach (var e in ranked) Explain(c, e);
             return JsonSerializer.Serialize(new { plot, unknownGear = unknown, catalogRecipes = NeedCatalog.Recipes.Count, catalogGear = NeedCatalog.Gear.Count,
                 craftStations = c.CraftStations.Count, unlockedRecipes = c.Unlocked.Count,
-                rows = ranked.Select((e, index) => new { rank = index + 1, item = L(e.Id), purpose = e.Purpose ?? "Stock", totalStock = N(c.Island, e.Id), localStock = N(c.Local, e.Id), usableBeforeGear = Reach(c, null, e.Id), allocatedForGear = e.Purpose == null ? (int?)null : e.Have, have = e.Have, target = e.Target, reason = e.Reason, details = e.Details }) });
+                rows = ranked.Select((e, index) => new { rank = index + 1, item = L(e.Id), purpose = e.Purpose ?? "Stock", totalStock = N(c.Island, e.Id), localStock = N(c.Local, e.Id), usableBeforeGear = Reach(c, null, e.Id), allocatedForGear = e.Purpose == null ? (int?)null : e.Have, have = e.Have, target = e.Target, reason = e.Reason, quantityLine = e.QuantityLine, gearItems = e.Goal?.Items.Count, goalRequired = e.Goal?.Required, details = e.Details }) });
         }
     }
 }

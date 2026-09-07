@@ -36,13 +36,15 @@ namespace Satisvampory.Services
         // A null recipe is a terminal material or an explicitly unresolved production step.
         internal static void Expand(int item, int amount, Dictionary<int, int> stock,
             Func<int, ChainRecipe> recipeFor, Action<int, int, string, IReadOnlyList<int>> emit,
-            bool claimRoot = true, Dictionary<int, int> personal = null)
+            bool claimRoot = true, Dictionary<int, int> personal = null,
+            Action<int, int, int, IReadOnlyList<int>> observe = null)
         {
             var emissions = 0;
             void Visit(int id, int required, List<int> path, bool claim)
             {
                 var carried = claim && personal != null ? Draw(personal, id, required) : 0;
                 var missing = Short(required, carried + (claim ? Draw(stock, id, required - carried) : 0));
+                observe?.Invoke(id, required, missing, path);
                 if (missing == 0) return;
                 if (path.Contains(id) || path.Count >= 12)
                 { emit(id, missing, "Unverified", path); return; }
