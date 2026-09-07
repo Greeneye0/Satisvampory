@@ -17,9 +17,10 @@ namespace Satisvampory.Services
         static readonly EquipmentType[] Slots = { EquipmentType.Chest, EquipmentType.Gloves,
             EquipmentType.Legs, EquipmentType.Footgear, EquipmentType.Weapon, EquipmentType.MagicSource };
 
-        internal static List<Entity> Entities(ComponentType type)
+        internal static List<Entity> Entities(ComponentType type, bool prefabs = false)
         {
             var builder = new EntityQueryBuilder(Allocator.Temp).AddAll(type);
+            if (prefabs) builder = builder.WithOptions(EntityQueryOptions.IncludePrefab | EntityQueryOptions.IncludeDisabledEntities);
             var query = Core.EntityManager.CreateEntityQuery(ref builder);
             builder.Dispose();
             NativeArray<Entity> array = default;
@@ -35,7 +36,7 @@ namespace Satisvampory.Services
 
         internal static float? Level(PrefabGUID guid, Entity instance = default)
         {
-            Core.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(guid, out var prefab);
+            var prefab = NeedCatalog.Prefab(guid.GuidHash);
             foreach (var ent in new[] { instance, prefab })
             {
                 if (!Core.EntityManager.Exists(ent)) continue;
@@ -58,7 +59,7 @@ namespace Satisvampory.Services
 
         static object Item(PrefabGUID guid, Entity instance)
         {
-            Core.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(guid, out var prefab);
+            var prefab = NeedCatalog.Prefab(guid.GuidHash);
             var ent = Core.EntityManager.Exists(instance) ? instance : prefab;
             float? armor = null, weapon = null, magic = null;
             if (Core.EntityManager.Exists(ent))

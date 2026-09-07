@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Unity.Entities;
+using Il2CppInterop.Runtime;
 
 namespace Satisvampory.Services
 {
@@ -25,13 +26,16 @@ namespace Satisvampory.Services
         static readonly Dictionary<int, int> depths = new();
         static object world;
         internal static string Label(int id) => StashRouting.ItemLabel(new PrefabGUID(id));
-        internal static Entity Prefab(int id) => Core.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(new PrefabGUID(id), out var ent) ? ent : Entity.Null;
+        internal static Entity Prefab(int id) => id != 0 && Core.PrefabCollectionSystem._PrefabLookupMap.TryGetValue(new PrefabGUID(id), out var ent) ? ent : Entity.Null;
         internal static void Ensure()
         {
             if (ReferenceEquals(world, Core.PrefabCollectionSystem) && Recipes.Count > 0) return;
-            world = Core.PrefabCollectionSystem;
+            world = null; // publish only after the entire catalog succeeds
             Recipes.Clear(); Products.Clear(); Gear.Clear(); Ingredients.Clear(); StationUnlocks.Clear(); depths.Clear();
-            foreach (var kv in Core.PrefabCollectionSystem._PrefabGuidToEntityMap)
+            var prefabs = new Dictionary<PrefabGUID, Entity>();
+            foreach (var ent in GearDebug.Entities(new(Il2CppType.Of<Prefab>(), ComponentType.AccessMode.ReadOnly), true))
+                if (ent.Has<PrefabGUID>()) prefabs[ent.Read<PrefabGUID>()] = ent;
+            foreach (var kv in prefabs)
             {
                 var ent = kv.Value;
                 if (!Core.EntityManager.Exists(ent)) continue;
@@ -56,7 +60,7 @@ namespace Satisvampory.Services
                 list.Add(r);
             }
             var techRecipes = new Dictionary<int, List<int>>();
-            foreach (var kv in Core.PrefabCollectionSystem._PrefabGuidToEntityMap)
+            foreach (var kv in prefabs)
             {
                 var ent = kv.Value;
                 if (!Core.EntityManager.Exists(ent)) continue;
@@ -74,7 +78,7 @@ namespace Satisvampory.Services
                 }
             }
             var bossTech = new HashSet<int>();
-            foreach (var kv in Core.PrefabCollectionSystem._PrefabGuidToEntityMap)
+            foreach (var kv in prefabs)
             {
                 var ent = kv.Value;
                 if (!Core.EntityManager.Exists(ent) || !ent.Has<VBloodUnlockTechBuffer>()) continue;
@@ -94,6 +98,7 @@ namespace Satisvampory.Services
             }
             foreach (var kv in techRecipes.Where(x => !bossTech.Contains(x.Key)))
                 foreach (var id in kv.Value) if (Recipes.TryGetValue(id, out var r)) r.Unlocks.Add("Research " + Prefab(kv.Key).EntityName() + " (random discovery is not guaranteed)");
+            world = Core.PrefabCollectionSystem;
         }
         internal static int Depth(int id) => Depth(id, new HashSet<int>());
         static int Depth(int id, HashSet<int> path)
