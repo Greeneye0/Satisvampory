@@ -37,6 +37,8 @@ Local debug mailbox `needraw` (optional `plot`, otherwise first connected player
 
 Station feed is **one complete craft**. Clan island item counts are snapshotted per drain generation.
 
+Local debug mailbox `gearraw` accepts the same optional `plot` as `needraw`. It exposes clan character equipment and carried items, servant equipment on logistics plots (including mission status), progression/research buffers where present, and candidate crafting-station recipes with floor-adjusted costs and equipment levels. Missing equipment components or level fields are unknown, not zero; candidate recipes alone do not establish unlock eligibility. Empty/converting coffins do not count as servants needing gear. This is read-only evidence for equipment-driven need analysis, not an automatic crafting or equipping feature. Analysis should trace endgame targets such as Shadow Weave and Onyx Tears through their prerequisites instead of ranking products solely by low stock. Player/servant upgrade eligibility and existing equipment must be checked before calculating material demand.
+
 ## Salvage (`.s sal`)
 
 Feed chests named **`salvage`** into the Devourer on **this plot**.
