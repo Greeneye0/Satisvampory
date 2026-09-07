@@ -290,8 +290,9 @@ internal static class ScoopRootCommands
     [Command(name: "sc", usage: ".sc", description: "Scoop nearby world drops into your bags.")]
     public static void ScNow(ChatCommandContext ctx) => RunScoop(ctx);
 
-    [Command(name: "s", usage: ".s <number>", description: "Pick a numbered item from the last ambiguous search.")]
-    public static void SPick(ChatCommandContext ctx, int number) => LogisticsCommands.ReplayPendingPick(ctx, number);
+    [Command(name: "s", usage: ".s <number>", description: "Use a number once after a list: needs, item choices, or thrones.")]
+    public static void SPick(ChatCommandContext ctx, int number)
+    { if (!NeedReport.TryNumber(ctx, number)) LogisticsCommands.ReplayPendingPick(ctx, number); }
 
     [Command(name: "scoop", usage: ".scoop <number>", description: "Pick a numbered item from the last ambiguous search.")]
     public static void ScoopPick(ChatCommandContext ctx, int number) => LogisticsCommands.ReplayPendingPick(ctx, number);

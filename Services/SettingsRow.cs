@@ -45,6 +45,8 @@ namespace Satisvampory.Services
         public bool CraftPull { get; set; }
         public bool DontPullLast { get; set; }
         public int PullReserve { get; set; }
+        public string NeedGoal { get; set; }
+        public Dictionary<string, int> NeedTargets { get; set; }
         public Dictionary<string, int> ItemReserves { get; set; }
         public Dictionary<string, string> ItemReserveNames { get; set; }
         public Dictionary<string, int> ItemCaps { get; set; }

@@ -45,9 +45,11 @@ namespace Satisvampory.Services
         static readonly Dictionary<ulong, PendingItemChoice> pending = new();
         static readonly TimeSpan Ttl = TimeSpan.FromMinutes(2);
         public const int MaxListed = 25;
+        internal static void Clear(ulong platformId) => pending.Remove(platformId);
 
         public static void BeginAmbiguous(ulong platformId, List<(PrefabGUID Prefab, string Name)> candidates)
         {
+            NeedReport.ClearNumber(platformId);
             if (candidates == null)
                 candidates = new List<(PrefabGUID Prefab, string Name)>();
 

@@ -29,6 +29,7 @@ namespace Satisvampory.Services
         static readonly Dictionary<ulong, int> selectedPlot = new();
         static readonly Dictionary<ulong, float3> returnPos = new();
         static readonly Dictionary<ulong, PendingPick> pendingPick = new();
+        internal static void ClearNumberChoice(ulong steam) => pendingPick.Remove(steam);
         static readonly Dictionary<ulong, List<ServantRow>> pendingHuntList = new();
         static readonly Dictionary<ulong, PendingHunt> pendingHunt = new();
         static readonly Dictionary<int, Entity> throneByPlot = new();
@@ -135,6 +136,7 @@ namespace Satisvampory.Services
                 return "ClanShare is off or this plot is excluded. Sit this throne to manage its servants.";
             selectedPlot.TryGetValue(steam, out var managing);
             var usingDefault = managing <= 0 || managing == standing;
+            NeedReport.ClearNumber(steam);
             pendingPick[steam] = new PendingPick
             {
                 Plots = new List<int>(ids),

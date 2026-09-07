@@ -32,9 +32,10 @@ public class Plugin : BasePlugin
         Harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
         Harmony.PatchAll(typeof(Plugin).Assembly);
         CommandRegistry.RegisterAll(typeof(Plugin).Assembly);
+        CommandRegistry.Middlewares.Add(Services.NeedCommandScope.Instance);
         hookDOTS = new HookDOTS.API.HookDOTS(MyPluginInfo.PLUGIN_GUID, this.Log);
         hookDOTS.RegisterAnnotatedHooks();
     }
 
-    bool TearDown() { Services.HuntLoginNote.FlushLogouts(); Core.PlayerSettings?.FlushSettings(force: true); Services.DestDebugLog.Close(); CommandRegistry.UnregisterAssembly(); Harmony?.UnpatchSelf(); return true; }
+    bool TearDown() { Services.HuntLoginNote.FlushLogouts(); Core.PlayerSettings?.FlushSettings(force: true); Services.DestDebugLog.Close(); CommandRegistry.Middlewares.Remove(Services.NeedCommandScope.Instance); CommandRegistry.UnregisterAssembly(); Harmony?.UnpatchSelf(); return true; }
 }

@@ -17,7 +17,7 @@ namespace Satisvampory.Services
         static readonly EquipmentType[] Slots = { EquipmentType.Chest, EquipmentType.Gloves,
             EquipmentType.Legs, EquipmentType.Footgear, EquipmentType.Weapon, EquipmentType.MagicSource };
 
-        static List<Entity> Entities(ComponentType type)
+        internal static List<Entity> Entities(ComponentType type)
         {
             var builder = new EntityQueryBuilder(Allocator.Temp).AddAll(type);
             var query = Core.EntityManager.CreateEntityQuery(ref builder);
@@ -33,6 +33,29 @@ namespace Satisvampory.Services
             finally { if (array.IsCreated) array.Dispose(); query.Dispose(); }
         }
 
+        internal static float? Level(PrefabGUID guid, Entity instance = default)
+        {
+            Core.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(guid, out var prefab);
+            foreach (var ent in new[] { instance, prefab })
+            {
+                if (!Core.EntityManager.Exists(ent)) continue;
+                if (ent.Has<ArmorLevelSource>()) return ent.Read<ArmorLevelSource>().Level;
+                if (ent.Has<WeaponLevelSource>()) return ent.Read<WeaponLevelSource>().Level;
+                if (ent.Has<SpellLevelSource>()) return ent.Read<SpellLevelSource>().Level;
+                if (ent.Has<EquippableData>())
+                {
+                    var buff = ent.Read<EquippableData>().BuffGuid;
+                    if (Core.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(buff, out var b) && Core.EntityManager.Exists(b))
+                    {
+                        if (b.Has<ArmorLevel>()) return b.Read<ArmorLevel>().Level;
+                        if (b.Has<WeaponLevel>()) return b.Read<WeaponLevel>().Level;
+                        if (b.Has<SpellLevel>()) return b.Read<SpellLevel>().Level;
+                    }
+                }
+            }
+            return null;
+        }
+
         static object Item(PrefabGUID guid, Entity instance)
         {
             Core.PrefabCollectionSystem._PrefabGuidToEntityMap.TryGetValue(guid, out var prefab);
@@ -45,7 +68,7 @@ namespace Satisvampory.Services
                 if (ent.Has<SpellLevel>()) magic = ent.Read<SpellLevel>().Level;
             }
             return new { guid = guid.GuidHash, name = guid.GuidHash == 0 ? "Empty" : StashRouting.ItemLabel(guid),
-                instance = instance.ToString(), armorLevel = armor, weaponLevel = weapon, spellLevel = magic };
+                instance = instance.ToString(), level = Level(guid, instance), armorLevel = armor, weaponLevel = weapon, spellLevel = magic };
         }
 
         static object Gear(Entity entity, bool servant)
@@ -67,14 +90,22 @@ namespace Satisvampory.Services
         {
             var recipes = new List<int>();
             var research = new List<int>();
+            var unlocked = new List<int>();
+            var blueprints = new List<int>();
             if (Core.EntityManager.Exists(entity))
             {
                 if (entity.Has<ProgressionBookRecipeElement>())
                     foreach (var row in entity.ReadBuffer<ProgressionBookRecipeElement>()) recipes.Add(row.Recipe.GuidHash);
                 if (entity.Has<ResearchBuffer>())
                     foreach (var row in entity.ReadBuffer<ResearchBuffer>()) research.Add(row.ResearchGuid.GuidHash);
+                if (entity.Has<UnlockedRecipeElement>())
+                    foreach (var row in entity.ReadBuffer<UnlockedRecipeElement>())
+                        if (row.UserHasRequiredContentFlags) unlocked.Add(row.UnlockedRecipe.GuidHash);
+                if (entity.Has<UnlockedBlueprintElement>())
+                    foreach (var row in entity.ReadBuffer<UnlockedBlueprintElement>())
+                        if (row.UserHasRequiredContentFlags) blueprints.Add(row.UnlockedBlueprint.GuidHash);
             }
-            return new { recipes, research, recipesBufferPresent = Core.EntityManager.Exists(entity) && entity.Has<ProgressionBookRecipeElement>(),
+            return new { recipes, research, unlocked, blueprints, unlockedBufferPresent = Core.EntityManager.Exists(entity) && entity.Has<UnlockedRecipeElement>(), recipesBufferPresent = Core.EntityManager.Exists(entity) && entity.Has<ProgressionBookRecipeElement>(),
                 researchBufferPresent = Core.EntityManager.Exists(entity) && entity.Has<ResearchBuffer>() };
         }
 
@@ -96,9 +127,10 @@ namespace Satisvampory.Services
                     foreach (var row in buffer)
                         if (row.ItemType.GuidHash != 0)
                             bag.Add(new { amount = row.Amount, item = Item(row.ItemType, row.ItemEntity.GetEntityOnServer()) });
+                ProgressionUtility.TryGetProgressionEntity(Core.EntityManager, entity, out var progression);
                 players.Add(new { name = user.CharacterName.ToString(), connected = user.IsConnected,
                     equipment = Gear(character, false), inventory = bag, userUnlocks = Unlocks(entity),
-                    characterUnlocks = Unlocks(character), clanUnlocks = Unlocks(user.ClanEntity.GetEntityOnServer()) });
+                    progression = Unlocks(progression), characterUnlocks = Unlocks(character), clanUnlocks = Unlocks(user.ClanEntity.GetEntityOnServer()) });
             }
             var servants = new List<object>();
             foreach (var coffin in Entities(new(Il2CppType.Of<ServantCoffinstation>(), ComponentType.AccessMode.ReadOnly)))
@@ -112,7 +144,7 @@ namespace Satisvampory.Services
                     equipment = Gear(servant, true) });
             }
             var stations = new List<object>();
-            foreach (var station in Entities(new(Il2CppType.Of<CastleWorkstation>(), ComponentType.AccessMode.ReadOnly)))
+            foreach (var station in Entities(new(Il2CppType.Of<WorkstationRecipesBuffer>(), ComponentType.AccessMode.ReadOnly)))
             {
                 var home = Core.TerritoryService.GetTerritoryId(station);
                 if (!ids.Contains(home) || !station.Has<WorkstationRecipesBuffer>()) continue;

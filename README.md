@@ -18,7 +18,7 @@ Satisvampory is a server-side quality-of-life addon. It was built so playing the
 - **Servant deposits** - Servants returning from hunts stash their loot automatically using the same chest rules as you.
 - **Auto rerun hunts** - Servants go straight back out on the same hunt when they get home. Toggle per castle.
 - **Find item / find chest** - **.fi "Blood Essence"** and **.fc salvage** tell you which plot and chest, with **(here)** marking where you stand.
-- **.s need** - Shows the top 10 things your stations are hungriest for, so you know what to hunt or farm next.
+- **.s need** - Five ranked gear or stock goals, #1 last. Use `.s <number>` once after the list for ingredients, reserves, sources, and progression blockers.
 - **Item aliases** - Out of the box: BE (Blood Essence), GBE (Greater), PBE (Primal), ABE (Ancestral), GSS (Greater Stygian Shard), SGS (Siege Golem Stone), DSI (Dark Silver Ingot), OT (Onyx Tear). Admins can add their own with **.sg alias add**.
 - **Detailed hunt results** - Loot and losses from each servant hunt reported in chat to the owner.
 - **Server admin toggles** - Every feature has a server-wide allow under the **.sg** prefix (pull, craft-pull, conveyors, salvage, repeat hunts, and more), so admins decide what players can turn on.
@@ -34,7 +34,7 @@ Type **.s help** in game. Player commands use the **.s** prefix, admin toggles u
 - `.s item <item>` - Per-plot chest counts, machines using it (moving / not moving), cap, reserve, and total.
 - `.s conv <item>` - Why a conveyor is not moving that item (station, line, reason).
 - `.s why <item> [container]` - Why an item does or doesn't sort to a container: dest class with the reason, and belt links.
-- **.s need** - Station demand, total stock, and reserve for the top 10 inputs.
+- **.s need** - Five ranked goals. `.s needgoal auto|gear|stock` chooses the focus; stock targets override reserve minimums.
 - **.s diag** - Drops a marker in the server's rolling log for dupes, missing items, or lag. Tell your admin the time.
 - **.s settings** - Your toggles plus the reserve on the castle you're standing on.
 - **.s vq** - Work-queue depth (admin).
@@ -148,7 +148,7 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 | `.s conv <item>` | Plot / island | Why a belt is not moving that item | `.s conv plank` |
 | `.s why <item> [container]` | Plot / island | Dest ranking with reasons + belt links | `.s why "Grave Dust" "Bone Grave"` |
 | `.s alias` / `.s alias add <a> <item>` / `.s alias del <a>` | Castle | Castle-scoped item aliases for plates, `--exclusions`, `.fi`, `.pull` | `.s alias add sw Silkworm` |
-| `.s need` | Plot / island | Top 10 station inputs wanted | `.s need` |
+| `.s need` | Castle / clan supplies | Five ranked goals, #1 last | `.s need` |
 | `.s cs` / `.s gs` | Clan | Clan Share on or off | `.s cs` |
 | `.s cse` | Plot, owner | Exclude or include this plot | `.s cse` |
 | `.s hf` | Plot | Heart Blood Essence auto-feed | `.s hf` |
@@ -173,7 +173,7 @@ Stage the output as `BepInEx/plugins/Satisvampory.dll.next` while the server is 
 | `.s item <item>` | Chest counts, machines, cap, reserve, total | `.s item "Iron Ore"` |
 | `.s conv <item>` | Belt troubleshooting | `.s conv "Iron Ingot"` |
 | `.s why <item> [container]` | Sorting troubleshooting | `.s why "Grave Dust" "Bone Grave"` |
-| `.s need` | Station demand, stock, reserve | `.s need` |
+| `.s need` | Goals, prerequisites, stock, reserves | `.s need` |
 | `.s diag` | Mark the server log for dupes, missing items, or lag | `.s diag` |
 | `.s settings` | Your toggles and the castle reserve | `.s settings` |
 | `.s vq` | Work-queue depth (admin) | `.s vq` |

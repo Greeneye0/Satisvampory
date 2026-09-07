@@ -4,18 +4,19 @@
     <AssemblyName>Satisvampory</AssemblyName>
     <Product>Satisvampory</Product>
     <Description>Server QOL for V Rising: logistics, named dest, ClanShare, treasury lend, and ground scoop.</Description>
-    <Version>1.0.132</Version>
+    <Version>1.0.133</Version>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <LangVersion>latest</LangVersion>
     <RootNamespace>Satisvampory</RootNamespace>
-    <AssemblyVersion>1.0.132.0</AssemblyVersion>
-    <FileVersion>1.0.132.0</FileVersion>
+    <AssemblyVersion>1.0.133.0</AssemblyVersion>
+    <FileVersion>1.0.133.0</FileVersion>
     <BepInExPluginGuid>Satisvampory</BepInExPluginGuid>
     <CopyLocalLockFileAssemblies>false</CopyLocalLockFileAssemblies>
     <Nullable>disable</Nullable>
   </PropertyGroup>
   <ItemGroup>
     <Compile Remove="Patches.cs" />
+    <Compile Remove="tests\**\*.cs" />
     <Compile Remove="Preview.cs" />
     <Compile Remove="ClientWorld.cs" />
     <Compile Remove="_DumpInterop.cs" />
@@ -257,4 +258,3 @@
 		<!-- Do not copy over a live Satisvampory.dll while the server is running. Stage .next only. -->
 	</Target>
 </Project>
-

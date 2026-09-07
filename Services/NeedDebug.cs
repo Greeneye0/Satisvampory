@@ -11,10 +11,10 @@ namespace Satisvampory.Services
     // Raw evidence for offline analysis, not another conveyor planner. Never claims or moves stock.
     internal static class NeedDebug
     {
-        public static string Snapshot(int plot)
+        public static string Snapshot(int plot, IReadOnlyList<int> scope = null)
         {
             if (plot < 0) return JsonSerializer.Serialize(new { error = "no plot" });
-            var plots = Core.TerritoryService.GetLogisticsTerritoryIds(plot);
+            var plots = scope ?? Core.TerritoryService.GetLogisticsTerritoryIds(plot);
             if (plots == null || plots.Count == 0)
                 return JsonSerializer.Serialize(new { error = "no logistics plots" });
             Core.TerritoryService.TryGetTerritoryOwnerPlatformId(plot, out var owner);
@@ -111,7 +111,7 @@ namespace Satisvampory.Services
                         recipes.Add(new { guid = recipe.RecipeGuid.GuidHash, unlocked = recipe.Unlocked, disabled = recipe.Disabled, requirements, outputs });
                     }
                     stations.Add(new { plot = id, entity = station.ToString(), name = StashRouting.RawName(station), prefabName = station.EntityName(),
-                        disabled = station.Has<Disabled>(), receiverGroups = receiveGroups ?? new List<int>(), senderGroups = sendGroups ?? new List<int>(),
+                        disabled = station.Has<Disabled>(), status = rs.Status.ToString(), receiverGroups = receiveGroups ?? new List<int>(), senderGroups = sendGroups ?? new List<int>(),
                         floorScale = floor, inputInventory = input.ToString(), outputInventory = output.ToString(),
                         inputValid = Core.EntityManager.Exists(input) && input.Has<InventoryBuffer>(),
                         input = Items(held), output = Items(outputHeld), recipes });

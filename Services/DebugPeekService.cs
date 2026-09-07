@@ -223,7 +223,7 @@ namespace Satisvampory.Services
                 case "need":
                     if (plot < 0)
                         plot = FirstStandingPlot();
-                    return PeekNeed(plot);
+                    return NeedReport.Debug(plot, name);
                 case "fair":
                 case "occupy":
                     return ClanTreasuryLend.DebugFairness(users);
@@ -339,24 +339,6 @@ namespace Satisvampory.Services
                 query.Dispose();
             }
             return Entity.Null;
-        }
-
-        static string PeekNeed(int plot)
-        {
-            if (plot < 0)
-                return "{\"error\":\"no plot\"}";
-            if (Core.ConveyorService == null)
-                return "{\"error\":\"not ready\"}";
-            var lines = BeltInspect.Need(plot);
-            var sb = new StringBuilder();
-            sb.Append("{\"plot\":").Append(plot).Append(",\"lines\":[");
-            for (var i = 0; i < lines.Count; i++)
-            {
-                if (i > 0) sb.Append(',');
-                sb.Append('"').Append(Esc(lines[i])).Append('"');
-            }
-            sb.Append("]}");
-            return sb.ToString();
         }
 
         internal static string PeekNow(int plot)

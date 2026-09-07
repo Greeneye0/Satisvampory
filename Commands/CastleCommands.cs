@@ -39,7 +39,7 @@ namespace Satisvampory.Commands
             ctx.Reply("<color=white>CLAN</color>: <color=white>.s cs</color> all clan plots as one. <color=white>.s rh</color> repeat hunts per castle. <color=white>SERVER</color> admin: <color=white>.sg s</color>  <color=white>.sg rh</color>  <color=white>.sg sal</color>  (need adminauth). Player toggles still start off except scoop auto and .s dpl.");
             ctx.Reply("Example: <color=white>.s bagcap cotton 200</color> then <color=white>.s</color> — your bags. <color=white>.s cap cotton 200</color> — castle conveyors.");
             ctx.Reply("Example: <color=white>.s reserve plank 50</color> then <color=white>.pull plank 200</color> — pull ignores reserve. Name chests <color=white>s1</color>/<color=white>r1</color> then <color=white>.s co</color>.");
-            ctx.Reply("Ambiguous names: numbered list, then <color=white>.s 2</color> or <color=white>.s pick 2</color>. <color=white>.s settings</color>  <color=white>.s item \"Iron Ore\"</color>  <color=white>.s conv plank</color>  <color=white>.s need</color>");
+            ctx.Reply("Ambiguous names: numbered list, then <color=white>.s pick 2</color>. <color=white>.s settings</color>  <color=white>.s item \"Iron Ore\"</color>  <color=white>.s conv plank</color>  <color=white>.s need</color>");
         }
 
         [Command(name: "pick", shortHand: "p", usage: ".s pick <number>", description: "Pick a numbered item from the last ambiguous name search.")]
@@ -972,26 +972,35 @@ namespace Satisvampory.Commands
                 ctx.Reply(line);
         }
 
-        [Command(name: "need", usage: ".s need", description: "Top 10 items receiving stations want. Higher tier first, then lowest stock after reserve.")]
-        public static void ConveyorNeed(ChatCommandContext ctx)
+        [Command(name: "need", usage: ".s need [item] [here|clan]", description: "Five ranked goals, #1 last. .s 1–5 explains a result. Quotes around multiword items.")]
+        public static void ConveyorNeed(ChatCommandContext ctx, string item = null, string scope = null) => NeedReport.Show(ctx, item, scope);
+
+        [Command(name: "needpage", usage: ".s needpage <page>", description: "More details for the need you selected. Does not reuse bare-number selection.")]
+        public static void NeedPage(ChatCommandContext ctx, int page) => NeedReport.Page(ctx, page);
+
+        [Command(name: "needgoal", usage: ".s needgoal [auto|gear|stock]", description: "Choose your need goal. Auto prioritizes gear then stocks.")]
+        public static void NeedGoal(ChatCommandContext ctx, string mode = null)
         {
-            var standing = Core.TerritoryService.GetStandingTerritoryId(ctx.Event.SenderCharacterEntity);
-            if (standing < 0)
-            {
-                ctx.Reply("You must stand on a castle plot to list conveyor need.");
-                return;
-            }
-
-            if (Core.ConveyorService == null)
-            {
-                ctx.Reply("Satisvampory is not ready.");
-                return;
-            }
-
-            foreach (var line in BeltInspect.Need(standing))
-                ctx.Reply(line);
+            var row = Core.PlayerSettings.Snapshot(ctx.Event.User.PlatformId, true);
+            if (mode == null) { ctx.Reply("Need goal: " + (row.NeedGoal ?? "auto") + ". Options: auto, gear, stock."); return; }
+            mode = mode.Trim().ToLowerInvariant();
+            if (mode != "auto" && mode != "gear" && mode != "stock") { ctx.Reply("Choose auto, gear, or stock."); return; }
+            row.NeedGoal = mode; Core.PlayerSettings.Put(ctx.Event.User.PlatformId, row);
+            ctx.Reply("Need goal: " + mode + ". Run .s need.");
         }
 
+        [Command(name: "needtarget", usage: ".s needtarget <item> <amount|-1>", description: "Personal stock goal; -1 restores reserve fallback. Does not change reserves or caps.")]
+        public static void NeedTarget(ChatCommandContext ctx, FoundItem item, int amount)
+        {
+            if (item.Ambiguous) { ctx.Reply("Use an exact item name."); return; }
+            if (amount < -1 || amount > 1000000) { ctx.Reply("Use 0–1000000, or -1 to restore the reserve fallback."); return; }
+            var row = Core.PlayerSettings.Snapshot(ctx.Event.User.PlatformId, true);
+            row.NeedTargets = row.NeedTargets != null ? new Dictionary<string,int>(row.NeedTargets) : new();
+            if (amount == -1) row.NeedTargets.Remove(item.prefab.GuidHash.ToString());
+            else row.NeedTargets[item.prefab.GuidHash.ToString()] = amount;
+            Core.PlayerSettings.Put(ctx.Event.User.PlatformId, row);
+            ctx.Reply("Need target for " + StashRouting.ItemLabel(item.prefab) + ": " + (amount == -1 ? "reserve fallback" : amount.ToString()));
+        }
         [Command(name: "tidy", usage: ".s tidy", description: "Restack chests onto better dests (same rank as .stash/RR: matching s# first). Never drains s#/r#, NS, skip-quotes, hearts. Treasury floor is a source. ClanShare ON: whole clan island.")]
         public static void TidyChests(ChatCommandContext ctx)
         {

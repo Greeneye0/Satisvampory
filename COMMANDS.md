@@ -67,7 +67,11 @@ If ClanShare is **ON**, dest/source is the **clan island**. If **OFF**, standing
 | `.s why "Grave Dust"` | Plot / clan island | Why the item sorts where it does: every chest's dest class with the reason (exact / group word / item category / partial name / generic / overflow / NS), full, seeded, here; which chest stash/tidy would pick; belt links (s# → r#, mutual link winner, same-group loop) |
 | `.s why "Grave Dust" "Bone Grave"` | Plot / clan island | Same, narrowed to one container |
 | `.s alias` / `.s alias add sw Silkworm` / `.s alias del sw` | Castle (owner) | Castle item aliases (3–16 characters), island-wide under ClanShare: chest plates, `--exclusions`, `.fi`, `.pull` on any clan castle. Castle alias wins over a server alias. Server-wide aliases stay admin (`.sg alias`) |
-| `.s need` | Plot / clan island | Top 10 station inputs the conveyor wants. Shows demand, total, reserve. Higher tier first, then lowest stock after reserve |
+| `.s need [item] [here|clan]` | Castle goals / clan supplies | Five ranked goals, #1 last. An item or alias opens focused details. Quote multiword names. |
+| `.s <number>` | Last list, one use | As the next command after `.s need`, opens that ranked need. Item/throne selections still work after their own lists. |
+| `.s needpage <page>` | Selected need | Four detail lines per page, plus header. Snapshot expires after 15 minutes. |
+| `.s needgoal [auto|gear|stock]` | Personal | Auto: character gear, servant gear, then stocks. Gear and stock override the focus. |
+| `.s needtarget <item> <amount>` | Personal | Set a stock target. 0 suppresses that stock goal; -1 restores the castle reserve fallback. Does not change reserves/caps. |
 
 Chest **names**: `--word` = never deposit what that word matches (alias, item, group, category, or name fragment; `Weapons --copper --iron+`), trailing `+` = priority (more `+` = higher, beats `s#`; only for items the chest matches or holds; two chests with the same name and the same `+` count split deposits between them), `s#` sender, `r#` receiver, `overflow`, `salvage`, `spoils`, `trash`, `NS` or `''` at the start or end (`' '` with a space works) skip, braziers `night` / `prox`. Built-in dest words (`blood`, `stone`, `jewel`, …) match that dest group, not a substring of the item name (Blood Jewel → jewel, not blood). Blank-plate dest furniture (Jewel Storage) still counts as that dest; blank Small Chest / cabinet / bureau do not.
 
