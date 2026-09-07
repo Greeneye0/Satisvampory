@@ -66,7 +66,8 @@ namespace Satisvampory.Services
 
         public static string EntityName(Entity entity)
         {
-            var plate = Read<NameableInteractable>(entity).Name.ToString();
+            if (entity == Entity.Null || !Core.EntityManager.Exists(entity)) return "Unknown";
+            var plate = Has<NameableInteractable>(entity) ? Read<NameableInteractable>(entity).Name.ToString() : "";
             if (string.IsNullOrEmpty(plate) && Has<PrefabGUID>(entity))
                 plate = PrefabName(Read<PrefabGUID>(entity));
             return string.IsNullOrEmpty(plate) ? entity.ToString() : plate;
