@@ -14,6 +14,18 @@ namespace Satisvampory.Services
             public void Cancel() => armed = false;
             public bool Consume() { var wasArmed = armed; armed = false; return wasArmed; }
         }
+        internal sealed class MaterialDemand
+        {
+            public int Required, Covered, Priority;
+            public int Missing => Short(Required, Covered);
+        }
+        internal static void AddMaterial(Dictionary<int, MaterialDemand> goals, int item, int required, int covered, int priority)
+        {
+            if (!goals.TryGetValue(item, out var goal)) goals[item] = goal = new();
+            goal.Required = (int)Math.Min(int.MaxValue, (long)goal.Required + required);
+            goal.Covered = (int)Math.Min(int.MaxValue, (long)goal.Covered + Math.Min(required, covered));
+            goal.Priority = Math.Max(goal.Priority, priority);
+        }
         public static int Short(int target, int held, int reachable = 0) =>
             (int)Math.Max(0L, (long)target - held - reachable);
         public static int Crafts(int amount, int yield) => amount <= 0 ? 0 : (int)Math.Min(int.MaxValue, ((long)amount + Math.Max(1, yield) - 1) / Math.Max(1, yield));

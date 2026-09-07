@@ -33,6 +33,15 @@ Check(NeedRules.BottomFirst(rows.Reverse(), r=>NeedRules.StockPriority(r.name,1)
 Check(NeedRules.BottomFirst(Array.Empty<int>(), x=>x, x=>x, x=>x).Count == 0, "No manufactured empty goals");
 Check(NeedRules.StockPriority("ONYX TEARS",0)==100, "Case-insensitive endgame intent");
 var window = new NeedRules.NumberWindow();
+var materialGoals = new Dictionary<int,NeedRules.MaterialDemand>();
+NeedRules.AddMaterial(materialGoals, 10, 20, 12, 320); // character one
+NeedRules.AddMaterial(materialGoals, 10, 30, 0, 330); // character two, same resource
+NeedRules.AddMaterial(materialGoals, 10, 10, 3, 220); // servant, same resource
+Check(materialGoals.Count == 1, "Shared upgrade material occupies one list entry");
+Check(materialGoals[10].Required == 60 && materialGoals[10].Covered == 15 && materialGoals[10].Missing == 45, "Combined gear goal has honest covered and missing totals");
+Check(materialGoals[10].Priority == 330, "Servant contribution does not lower character priority");
+NeedRules.AddMaterial(materialGoals, 20, 5, 5, 300);
+Check(materialGoals.Values.Count(g => g.Missing > 0) == 1, "Covered upgrades create no extra shortage row");
 Check(!window.Consume(), "No number context before a list");
 window.Arm(); Check(window.Consume(), "First follow-up selects the list");
 Check(!window.Consume(), "Selection cannot be reused");
