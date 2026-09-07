@@ -54,4 +54,34 @@ window.Arm(); Check(window.Consume(), "First follow-up selects the list");
 Check(!window.Consume(), "Selection cannot be reused");
 window.Arm(); window.Cancel(); Check(!window.Consume(), "Intervening command expires selection");
 window.Arm(); window.Cancel(); window.Arm(); Check(window.Consume(), "A newer list establishes fresh context");
+var recipes = new Dictionary<int,NeedRules.ChainRecipe> {
+    [100] = new() { Yield = 1, Inputs = new() { [101] = 2, [102] = 3 } },
+    [101] = new() { Yield = 1, Inputs = new() { [103] = 4 } }
+};
+var emitted = new List<(int id, int amount, string action)>();
+void Emit(int id, int amount, string action, IReadOnlyList<int> path) => emitted.Add((id,amount,action));
+NeedRules.Expand(100, 2, new() { [101] = 1, [102] = 2 }, id => recipes.GetValueOrDefault(id), Emit);
+Check(emitted.Any(x => x.id == 103 && x.amount == 12) && emitted.Any(x => x.id == 102 && x.amount == 4), "Both missing branches become separate full-goal collection needs");
+Check(emitted.Count == 2 && !emitted.Any(x => x.id == 100), "Blocked finished product does not obscure its raw shortages");
+emitted.Clear();
+NeedRules.Expand(100, 1, new() { [101] = 2, [102] = 3 }, id => recipes.GetValueOrDefault(id), Emit);
+Check(emitted.Count == 1 && emitted[0] == (100,1,"Craft"), "Supplied product requests crafting instead of more gathering");
+emitted.Clear();
+var chainStock = new Dictionary<int,int> { [103] = 8 };
+NeedRules.Expand(101, 2, chainStock, id => recipes.GetValueOrDefault(id), Emit);
+NeedRules.Expand(101, 1, chainStock, id => recipes.GetValueOrDefault(id), Emit);
+Check(emitted.Any(x => x == (103,4,"Supply")), "Servant chain cannot reuse raw materials claimed by player chain");
+emitted.Clear();
+recipes[104] = new() { Yield = 3, Inputs = new() { [105] = 2 } };
+var batchStock = new Dictionary<int,int>();
+NeedRules.Expand(104, 1, batchStock, id => recipes.GetValueOrDefault(id), Emit);
+NeedRules.Expand(104, 2, batchStock, id => recipes.GetValueOrDefault(id), Emit);
+Check(emitted.Count == 1 && emitted[0].amount == 2, "Batch surplus prevents duplicate gathering goals");
+emitted.Clear();
+recipes[106] = new() { Inputs = new() { [106] = 1 } };
+NeedRules.Expand(106, 1, new(), id => recipes.GetValueOrDefault(id), Emit);
+Check(emitted.Single().action == "Unverified", "Recipe cycles stop with an honest unresolved action");
+emitted.Clear();
+NeedRules.Expand(100, 1, new(), id => recipes.GetValueOrDefault(id), Emit, true, new() { [101] = 2, [102] = 3 });
+Check(emitted.Single().action == "Craft", "Carried upstream ingredients reduce farming demand");
 Console.WriteLine($"{checks} need-rule regression checks passed.");

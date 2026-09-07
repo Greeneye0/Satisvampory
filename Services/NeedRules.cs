@@ -27,6 +27,45 @@ namespace Satisvampory.Services
             goal.Priority = Math.Max(goal.Priority, priority);
         }
         internal static int GearPriority(bool servant, int depth) => (servant ? 200 : 300) + Math.Clamp(depth, 0, 50);
+        internal sealed class ChainRecipe
+        {
+            public int Yield = 1;
+            public Dictionary<int, int> Inputs = new();
+        }
+        // Emit each missing branch, claiming supplies once across every goal in priority order.
+        // A null recipe is a terminal material or an explicitly unresolved production step.
+        internal static void Expand(int item, int amount, Dictionary<int, int> stock,
+            Func<int, ChainRecipe> recipeFor, Action<int, int, string, IReadOnlyList<int>> emit,
+            bool claimRoot = true, Dictionary<int, int> personal = null)
+        {
+            var emissions = 0;
+            void Visit(int id, int required, List<int> path, bool claim)
+            {
+                var carried = claim && personal != null ? Draw(personal, id, required) : 0;
+                var missing = Short(required, carried + (claim ? Draw(stock, id, required - carried) : 0));
+                if (missing == 0) return;
+                if (path.Contains(id) || path.Count >= 12)
+                { emit(id, missing, "Unverified", path); return; }
+                var recipe = recipeFor(id);
+                if (recipe == null || recipe.Inputs.Count == 0)
+                { emit(id, missing, "Supply", path); return; }
+                var next = new List<int>(path) { id };
+                var crafts = Crafts(missing, recipe.Yield);
+                var emitted = false;
+                // Track whether this branch needs gathering or only an already-supplied craft.
+                var before = emissions;
+                foreach (var input in recipe.Inputs.OrderBy(x => x.Key))
+                    Visit(input.Key, Cost(input.Value, crafts), next, true);
+                stock[id] = (int)Math.Min(int.MaxValue, (long)stock.GetValueOrDefault(id) + Math.Max(0, Cost(recipe.Yield, crafts) - missing));
+                emitted = emissions != before;
+                if (!emitted) Send(id, missing, "Craft", path);
+            }
+            var sink = emit;
+            void Send(int id, int missing, string action, IReadOnlyList<int> path)
+            { emissions++; sink(id, missing, action, path); }
+            emit = Send;
+            Visit(item, amount, new(), claimRoot);
+        }
         public static int Short(int target, int held, int reachable = 0) =>
             (int)Math.Max(0L, (long)target - held - reachable);
         public static int Crafts(int amount, int yield) => amount <= 0 ? 0 : (int)Math.Min(int.MaxValue, ((long)amount + Math.Max(1, yield) - 1) / Math.Max(1, yield));

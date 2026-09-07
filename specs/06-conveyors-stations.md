@@ -80,3 +80,9 @@ Not a tidy dest. Tidy may treat overflow/spoils as sources; trash plates are ski
 ## Special chests vs dest ranking
 
 `salvage` / `spoils` / `brazier` / `spawner` / `trash` are dest class **90**. They are not normal `.stash` dumps. Conveyor names are never inferred from prefab names.
+
+### Actionable production needs (1.0.138)
+
+Main needs expand gear and stock material shortages recursively through one available unlocked recipe per product, using verified floor-adjusted costs and batch yields. Subtract usable intermediate stock at every step, claim raw ingredients for players before servants before stock goals, and share planned batch surplus without reusing its inputs. Each missing terminal ingredient branch becomes its own numbered Collect row; preserve the originating product and player/servant purpose. Do not also list the blocked parent product. If inputs are covered, show Craft; if recipes exist but no usable unlocked station/recipe is verified, show Setup rather than claiming a farming shortage. Cycles/depth bounds show Unverified. Alternative recipes are not summed. These are manual production plans; line connectivity, power and caps remain detail diagnostics rather than promises of automatic delivery.
+
+The first detail page leads with the concrete action and quantity, its chain/beneficiary, source or setup status, then concise stock accounting. Do not put a page of reserves ahead of the action. No unverified farming location is invented. Keep five numbered rows, highest at the bottom, one-use .s # and existing pagination. Quantities reflect the complete selected upgrade/stock goal, not just one craft. Shared raw material rows aggregate within a purpose and action; details retain all supported chains.

@@ -22,12 +22,14 @@ namespace Satisvampory.Services
         public class Station { public int plot; public string name, status, inputInventory, outputInventory; public bool disabled; public float floorScale; public List<int> receiverGroups = new(), senderGroups = new(); public List<Amount> input = new(), output = new(); public List<RecipeRow> recipes = new(); }
         public class Snapshot { public bool serverConveyorEnabled, plannerOwnerConveyorEnabled; public List<Source> sources = new(); public List<Station> stations = new(); }
         #pragma warning restore CS0649
-        sealed class Entry { public int Id, Have, Target, Priority; public string Purpose, Reason, Color = "yellow"; public List<string> Details = new(), Reasons = new(); }
+        sealed class Entry { public int Id, Have, Target, Priority; public string Action, Purpose, Reason, Color = "yellow"; public List<string> Details = new(), Reasons = new(); public HashSet<int> Goals = new(); }
         sealed class Saved { public DateTime At; public List<int> Plots; public List<Entry> Rows; public NeedRules.NumberWindow Number = new(); public int Selected; }
         sealed class Context
         {
             public int Plot; public ulong Owner; public List<int> Plots; public Snapshot Data;
             public Dictionary<int, int> Local = new(), Island = new();
+            public Dictionary<int, int> Remaining;
+            public HashSet<int> GearProducts = new();
             public HashSet<int> Unlocked = new(), BuiltRecipes = new(), Blueprints = new();
             public Dictionary<int, string> CraftStations = new();
             public Dictionary<int, Dictionary<int, int>> CraftCosts = new();
@@ -83,7 +85,7 @@ namespace Satisvampory.Services
                     if (!IsStockMaterial(id, settings) || (!c.Local.ContainsKey(id) && settings.NeedTargets?.ContainsKey(id.ToString()) != true
                         && !NeedCatalog.Products.GetValueOrDefault(id, new()).Any(r => c.BuiltRecipes.Contains(r.Id)))) continue;
                     var e = Stock(c, id, settings, false);
-                    if (e != null && !rows.Any(x => x.Id == id)) rows.Add(e);
+                    if (e != null && !c.GearProducts.Contains(id) && !rows.Any(x => x.Id == id)) rows.Add(e);
                 }
             }
             // At reserve, maintain enough surplus for one blocked downstream craft; never consume the reserve.
@@ -109,6 +111,7 @@ namespace Satisvampory.Services
                     rows.Add(e);
                 }
             }
+            ExpandStock(c, rows);
             var title = mode == "stock" ? "Stock" : gearCount > 0 ? "Gear first" : mode == "gear" ? "Gear" : "Stock (gear covered or unavailable)";
             if (unknownGear) title += "; some gear unknown";
             SaveAndPrint(ctx, c, rows, title);
@@ -204,13 +207,25 @@ namespace Satisvampory.Services
         }
         static void Explain(Context c, Entry e)
         {
-            e.Details.Add(C($"{L(e.Id)} • castle {c.Plot}: {N(c.Local, e.Id)} • clan stock {N(c.Island, e.Id)}", "white"));
-            if (e.Purpose != null)
+            if (e.Action != null)
             {
+                e.Details.Add(C($"Next: {e.Action} {e.Target} {L(e.Id)} for {e.Purpose}.", e.Color));
+                e.Details.AddRange(e.Reasons.Take(1));
+                if (e.Action == "Collect") e.Details.Add("Gather/hunt supply: no crafting recipe is verified for this ingredient. Farming location is not verified.");
+                else if (e.Action == "Craft") e.Details.Add("Ingredients are covered in this plan; craft this step before its downstream product.");
+                else if (e.Action == "Setup") e.Details.Add("Production is not verified as usable. Check recipe unlock, station and enabled recipe below; this is not a farming shortage.");
+                else e.Details.Add("Recipe cycle or depth limit: required source is unverified.");
+                e.Details.Add($"Stock: castle {N(c.Local, e.Id)}, scoped total {N(c.Island, e.Id)}; {Reach(c, null, e.Id)} usable before gear allocation. Listed need is additional to allocated supply.");
+            }
+            else
+            {
+                e.Details.Add(C($"{L(e.Id)} • castle {c.Plot}: {N(c.Local, e.Id)} • clan stock {N(c.Island, e.Id)}", "white"));
+                if (e.Purpose != null) {
                 var supply = Sources(c, null, e.Id);
                 e.Details.Add($"{e.Purpose}: requires {e.Target}; allocated {e.Have} including carried ingredients; still need {NeedRules.Short(e.Target, e.Have)}.");
                 e.Details.Add($"Supply before gear allocation: {supply.Sum(x => x.available)} usable; {supply.Sum(x => Math.Min(x.have, x.reserve))} protected in source chests. Total stock above also includes station inputs.");
                 e.Details.Add("Players get shared supplies first; servants get the remainder. Protected stock is not spent.");
+                }
             }
             var locations = c.Data.sources.Where(s => !s.noShare).SelectMany(s => s.items.Where(a => a.guid == e.Id)
                 .Select(a => $"{Safe(s.name)} @ {s.plot}: {a.amount}, reserve {a.reserve}"));
@@ -309,15 +324,68 @@ namespace Satisvampory.Services
             return "UNKNOWN: recipe progression not verified.";
         }
 
+        static NeedRules.ChainRecipe ChainRecipe(Context c, int id)
+        {
+            if (!NeedCatalog.Products.TryGetValue(id, out var recipes)) return null;
+            var options = recipes.Where(r => (r.Always || c.Unlocked.Contains(r.Id)) && c.BuiltRecipes.Contains(r.Id))
+                .Select(r => {
+                    var live = c.Data.stations.Where(s => !s.disabled).SelectMany(s => s.recipes)
+                        .Where(x => x.guid == r.Id && x.unlocked && !x.disabled)
+                        .OrderBy(x => x.requirements.Sum(a => a.perCraft)).FirstOrDefault();
+                    if (live == null && !c.CraftCosts.ContainsKey(r.Id)) return null;
+                    return new NeedRules.ChainRecipe { Yield = live?.outputs.FirstOrDefault(x => x.guid == id)?.perCraft ?? r.Yield,
+                        Inputs = live != null ? live.requirements.ToDictionary(a => a.guid, a => a.perCraft) : c.CraftCosts[r.Id] };
+                }).Where(x => x != null).ToList();
+            // Choose one alternative, never sum alternative recipes. Prefer the least missing inputs.
+            return options.OrderBy(r => r.Inputs.Sum(a => (double)NeedRules.Short(a.Value, Reach(c, null, a.Key))) / Math.Max(1, r.Yield)).FirstOrDefault();
+        }
+        static Dictionary<int, int> PlanningStock(Context c)
+        {
+            var stock = c.Island.Keys.ToDictionary(id => id, id => NeedCatalog.Gear.ContainsKey(id) ? N(c.Island, id) : Reach(c, null, id));
+            var seen = new HashSet<string>(c.Data.sources.Select(s => s.inventory));
+            seen.UnionWith(c.Data.stations.Select(s => s.outputInventory));
+            foreach (var station in c.Data.stations)
+                if (station.inputInventory != null && seen.Add(station.inputInventory))
+                    foreach (var item in station.input.Where(a => !NeedCatalog.Gear.ContainsKey(a.guid))) Add(stock, item.guid, item.amount);
+            return stock;
+        }
+        static void AddChain(Context c, List<Entry> rows, int root, int amount, string purpose, int priority,
+            Dictionary<int, int> stock, Dictionary<int, int> personal = null, string beneficiary = null)
+        {
+            NeedRules.Expand(root, amount, stock, id => ChainRecipe(c, id), (id, missing, action, path) => {
+                if (action == "Supply") action = NeedCatalog.Products.ContainsKey(id) ? "Setup" : "Collect";
+                var entry = rows.FirstOrDefault(e => e.Id == id && e.Purpose == purpose && e.Action == action);
+                if (entry == null)
+                {
+                    entry = new Entry { Id = id, Purpose = purpose, Action = action, Priority = priority,
+                        Color = action is "Setup" or "Unverified" ? "yellow" : purpose == "Servant gear" ? "#87CEFA" : "#90EE90" };
+                    rows.Add(entry);
+                }
+                entry.Target = (int)Math.Min(int.MaxValue, (long)entry.Target + missing);
+                entry.Priority = Math.Max(entry.Priority, priority);
+                var chain = string.Join(" -> ", path.Reverse().Select(L));
+                var reason = $"{missing} {L(id)}" + (chain.Length > 0 ? $" -> {chain}" : "") + $" for {purpose}";
+                if (beneficiary != null) reason += $": {beneficiary}";
+                entry.Reasons.Add(reason);
+                entry.Goals.Add(root);
+                entry.Reason = $"{action} {entry.Target} {L(id)} — {purpose}" + (id != root ? $" • {L(entry.Goals.First())}" : "") + (entry.Goals.Count > 1 ? " + other goals" : "");
+            }, false, personal);
+        }
+        static void ExpandStock(Context c, List<Entry> rows)
+        {
+            var roots = rows.Where(e => e.Action == null && e.Purpose == null).OrderByDescending(e => e.Priority).ThenBy(e => e.Id).ToList();
+            var stock = c.Remaining ?? PlanningStock(c);
+            foreach (var root in roots)
+            {
+                rows.Remove(root);
+                AddChain(c, rows, root.Id, NeedRules.Short(root.Target, root.Have), "Stock", root.Priority, stock);
+            }
+        }
         static void GearGoals(Context c, List<Entry> rows, string caller, bool clan, ref bool unknown)
         {
             var root = c.Gear.RootElement;
-            var stored = new Dictionary<int, int>(); // claims are local to this report, never live reservations
-            foreach (var id in c.Island.Keys)
-                stored[id] = NeedCatalog.Gear.ContainsKey(id) ? N(c.Island, id) : Sources(c, null, id).Sum(x => x.available);
+            var stored = PlanningStock(c); // claims are local to this report, never live reservations
             var hadUnknown = false;
-            var materials = new Dictionary<(int item, bool servant), NeedRules.MaterialDemand>();
-            var reasons = new Dictionary<(int item, bool servant), List<string>>();
             void Person(JsonElement person, bool servant)
             {
                 var name = person.GetProperty("name").GetString();
@@ -388,10 +456,10 @@ namespace Satisvampory.Services
                             path.Remove(material);
                             return;
                         }
-                        NeedRules.AddMaterial(materials, material, servant, amount, personal + used,
-                            NeedRules.GearPriority(servant, NeedCatalog.Depth(material)));
-                        if (!reasons.TryGetValue((material, servant), out var list)) reasons[(material, servant)] = list = new();
-                        list.Add($"{amount} {L(material)} for {why}");
+                        c.GearProducts.Add(material);
+                        AddChain(c, rows, material, shortage, servant ? "Servant gear" : "Player gear",
+                            NeedRules.GearPriority(servant, NeedCatalog.Depth(material)), stored, bag, why);
+
                     }
                     foreach (var input in c.CraftCosts.GetValueOrDefault(recipe.Id, recipe.Inputs))
                         Ingredient(input.Key, input.Value, new HashSet<int>());
@@ -399,16 +467,7 @@ namespace Satisvampory.Services
             }
             if (root.TryGetProperty("players", out var players)) foreach (var p in players.EnumerateArray()) Person(p, false);
             if (root.TryGetProperty("servants", out var servants)) foreach (var p in servants.EnumerateArray()) Person(p, true);
-            foreach (var material in materials.OrderBy(x => x.Key))
-            {
-                var goal = material.Value;
-                if (goal.Missing == 0) continue;
-                var purpose = material.Key.servant ? "Servant gear" : "Player gear";
-                rows.Add(new Entry { Id = material.Key.item, Have = goal.Covered, Target = goal.Required, Priority = goal.Priority,
-                    Purpose = purpose, Color = material.Key.servant ? "#87CEFA" : "yellow",
-                    Reason = $"{L(material.Key.item)} — {purpose}: need {goal.Missing} • stock {N(c.Island, material.Key.item)}",
-                    Reasons = reasons.GetValueOrDefault(material.Key, new()) });
-            }
+            c.Remaining = stored;
             unknown = hadUnknown || !c.UnlocksKnown || NeedCatalog.Gear.Count == 0;
         }
         static void SaveAndPrint(ChatCommandContext ctx, Context c, List<Entry> entries, string title, bool focused = false)
@@ -466,7 +525,8 @@ namespace Satisvampory.Services
             var rows = new List<Entry>(); var unknown = false;
             if (mode != "stock") GearGoals(c, rows, "", true, ref unknown);
             foreach (var id in c.Local.Keys.Where(id => IsStockMaterial(id, default)))
-            { var entry = Stock(c, id, default, false); if (entry != null && !rows.Any(x => x.Id == id)) rows.Add(entry); }
+            { var entry = Stock(c, id, default, false); if (entry != null && !c.GearProducts.Contains(id) && !rows.Any(x => x.Id == id)) rows.Add(entry); }
+            ExpandStock(c, rows);
             var ranked = NeedRules.BottomFirst(rows, x => x.Priority, x => x.Target > 0 ? NeedRules.Short(x.Target, x.Have) / (double)x.Target : 0, x => x.Id).AsEnumerable().Reverse().ToList();
             foreach (var e in ranked) Explain(c, e);
             return JsonSerializer.Serialize(new { plot, unknownGear = unknown, catalogRecipes = NeedCatalog.Recipes.Count, catalogGear = NeedCatalog.Gear.Count,
