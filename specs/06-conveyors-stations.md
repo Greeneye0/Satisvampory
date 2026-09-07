@@ -33,6 +33,8 @@ Do not turn convloop on by default. Loops will vacuum a castle.
 `.s conv <item>`: why that product is not moving (station, line, cap, reserve).
 `.s need`: top 10 station inputs. Higher tier first, then lowest stock after reserve. Shows demand, total, reserve.
 
+Local debug mailbox `needraw` (optional `plot`, otherwise first connected player's standing plot) returns a versioned, timestamped, read-only logistics snapshot for investigating shortages. It includes all indexed refinement stations, locked/disabled recipes, floor-adjusted ingredient costs, output caps, station inventories, source chest groups/overflow status, stackable stock, per-source reserves, and inventory slots. Recipes with missing ingredients remain visible. Sources include non-senders so stock on the wrong line can be identified. Inventory IDs permit deduplication across lines. These are raw observations, not allocated demand: consumers must account for alternative recipes and shared-stock claims before ranking shortages. The operation never transfers items, claims live stock, or changes settings. It does not change `.s need` chat behavior.
+
 Station feed is **one complete craft**. Clan island item counts are snapshotted per drain generation.
 
 ## Salvage (`.s sal`)

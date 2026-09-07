@@ -132,7 +132,7 @@ namespace Satisvampory.Services
             switch (op)
             {
                 case "help":
-                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\",\"gotothrone\",\"hunt\",\"huntsend\",\"hunttime\",\"revive\",\"rhmax\"],"
+                    return "{\"ops\":[\"help\",\"players\",\"plots\",\"plot\",\"item\",\"covering\",\"upgrade\",\"settings\",\"dest\",\"sim\",\"fair\",\"occupy\",\"guest\",\"cover\",\"unstick\",\"need\",\"needraw\",\"selftest\",\"log\",\"perf\",\"logdump\",\"servants\",\"servantstash\",\"thrones\",\"gotothrone\",\"hunt\",\"huntsend\",\"hunttime\",\"revive\",\"rhmax\"],"
                         + "\"req\":\"" + Esc(ReqPath) + "\",\"res\":\"" + Esc(ResPath) + "\","
                         + "\"hint\":\"{\\\"op\\\":\\\"log\\\",\\\"name\\\":\\\"dupe\\\"}\","
                         + "\"sim\":\"dry-run covering as if you are standing on plot. apply:true actually moves\","
@@ -212,6 +212,10 @@ namespace Satisvampory.Services
                 case "servantstash":
                 case "asmstash":
                     return Core.Stash.DebugStashAllServants(plot);
+                case "needraw":
+                    if (plot < 0)
+                        plot = FirstStandingPlot();
+                    return NeedDebug.Snapshot(plot);
                 case "need":
                     if (plot < 0)
                         plot = FirstStandingPlot();
