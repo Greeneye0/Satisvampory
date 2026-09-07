@@ -92,4 +92,12 @@ Check(observed["100/101"] == (4,3), "Intermediate shortage distinguishes existin
 Check(observed["100/101/103"] == (12,12), "Terminal shortage retains its complete route and quantity");
 Check(observed["100/102"] == (6,0), "Covered sibling branch remains available to detail explanation");
 Check(observed.Count == 4, "Observing covered branches does not invent extra recursive demand");
+Check(NeedRules.CoveredByChain("Player gear", new[]{100,101}, "Player gear", new[]{100,101,103}), "Crafting intermediate is covered by its farming branch");
+Check(!NeedRules.CoveredByChain("Servant gear", new[]{100,101}, "Player gear", new[]{100,101,103}), "Player and servant branches remain separate");
+Check(!NeedRules.CoveredByChain("Player gear", new[]{200,101}, "Player gear", new[]{100,101,103}), "Same intermediate for a different goal remains separate");
+Check(!NeedRules.CoveredByChain("Player gear", new[]{100,102}, "Player gear", new[]{100,101,103}), "Sibling ingredient branches are not hidden");
+Check(!NeedRules.CoveredByChain("Player gear", new[]{100,101,103}, "Player gear", new[]{100,101,103}), "Equal routes cannot remove each other");
+var chains = new[] { (id:1,route:new[]{100,101}), (id:2,route:new[]{100,102}), (id:3,route:new[]{100,101,103}), (id:4,route:new[]{100,102,104}), (id:5,route:new[]{200,201}), (id:6,route:new[]{300,301}), (id:7,route:new[]{400,401}) };
+var distinctChains=chains.Where(r=>!chains.Any(other=>NeedRules.CoveredByChain("Player gear",r.route,"Player gear",other.route))).ToList();
+Check(NeedRules.BottomFirst(distinctChains,_=>300,_=>1,r=>r.id).Count==5 && distinctChains.All(r=>r.id>2), "Remove both duplicate ancestors before choosing five, filling freed slots");
 Console.WriteLine($"{checks} need-rule regression checks passed.");

@@ -408,6 +408,18 @@ namespace Satisvampory.Services
         }
         static void FormatChains(List<Entry> rows)
         {
+            // Stored routes run from finished goal to raw ingredient. Keep the deepest
+            // unresolved branches; their crafting ancestors belong in follow-up details.
+            var redundant = rows.Where(e => rows.Any(other => NeedRules.CoveredByChain(e.Purpose, e.Chain, other.Purpose, other.Chain))).ToList();
+            foreach (var parent in redundant)
+            {
+                foreach (var child in rows.Where(e => !redundant.Contains(e) && NeedRules.CoveredByChain(parent.Purpose, parent.Chain, e.Purpose, e.Chain)))
+                {
+                    child.Reasons.Add($"Related step: {parent.Action} {parent.Target} {L(parent.Id)} for {L(parent.Chain[0])}. Included in this chain, not an additional material goal.");
+                    child.Reasons.AddRange(parent.Reasons);
+                }
+                rows.Remove(parent);
+            }
             foreach (var e in rows.Where(e => e.Chain != null))
             {
                 e.Reason = string.Join(" → ", e.Chain.AsEnumerable().Reverse().Select(L)) + $" — {e.Purpose}";

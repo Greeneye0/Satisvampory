@@ -86,6 +86,10 @@ namespace Satisvampory.Services
         }
         public static List<T> BottomFirst<T>(IEnumerable<T> rows, Func<T, int> priority, Func<T, double> fraction, Func<T, int> id) =>
             rows.OrderByDescending(priority).ThenByDescending(fraction).ThenBy(id).Take(5).Reverse().ToList();
+        internal static bool CoveredByChain(string purpose, IReadOnlyList<int> route,
+            string otherPurpose, IReadOnlyList<int> otherRoute) =>
+            purpose == otherPurpose && route != null && otherRoute != null && route.Count > 0
+            && route.Count < otherRoute.Count && route.SequenceEqual(otherRoute.Take(route.Count));
         public static int Draw(Dictionary<int, int> stock, int item, int amount)
         {
             stock.TryGetValue(item, out var held);
