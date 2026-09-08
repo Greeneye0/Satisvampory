@@ -432,6 +432,18 @@ namespace Satisvampory.Services
                 }
                 e.QuantityLine = (e.Action == "Collect" ? "Need " : e.Action + " ") + string.Join(" for ", amounts);
             }
+            // Keep the player's quantity intact; the later servant requirement is detail
+            // context, not another ranked request to farm the same material.
+            var deferred = rows.Where(e => rows.Any(other => NeedRules.DeferredToPlayer(e.Id, e.Purpose, other.Id, other.Purpose))).ToList();
+            foreach (var servant in deferred)
+            {
+                foreach (var player in rows.Where(e => NeedRules.DeferredToPlayer(servant.Id, servant.Purpose, e.Id, e.Purpose)))
+                {
+                    player.Reasons.Add($"Later, servant gear: {servant.QuantityLine}. Route: {servant.Reason}. Not included in the player quantity.");
+                    player.Reasons.AddRange(servant.Reasons);
+                }
+                rows.Remove(servant);
+            }
         }
         static void ExpandStock(Context c, List<Entry> rows)
         {

@@ -100,4 +100,13 @@ Check(!NeedRules.CoveredByChain("Player gear", new[]{100,101,103}, "Player gear"
 var chains = new[] { (id:1,route:new[]{100,101}), (id:2,route:new[]{100,102}), (id:3,route:new[]{100,101,103}), (id:4,route:new[]{100,102,104}), (id:5,route:new[]{200,201}), (id:6,route:new[]{300,301}), (id:7,route:new[]{400,401}) };
 var distinctChains=chains.Where(r=>!chains.Any(other=>NeedRules.CoveredByChain("Player gear",r.route,"Player gear",other.route))).ToList();
 Check(NeedRules.BottomFirst(distinctChains,_=>300,_=>1,r=>r.id).Count==5 && distinctChains.All(r=>r.id>2), "Remove both duplicate ancestors before choosing five, filling freed slots");
+Check(NeedRules.DeferredToPlayer(103,"Servant gear",103,"Player gear"), "Same farming material defers servant need to player need");
+Check(!NeedRules.DeferredToPlayer(104,"Servant gear",103,"Player gear"), "Different servant farming material stays visible");
+Check(!NeedRules.DeferredToPlayer(103,"Player gear",103,"Servant gear"), "Servant need cannot suppress player need");
+Check(!NeedRules.DeferredToPlayer(103,"Stock",103,"Player gear"), "Rule is scoped to servant gear");
+var purposeRows = new[] { (id:103,purpose:"Player gear",amount:214), (id:104,purpose:"Player gear",amount:77), (id:103,purpose:"Servant gear",amount:324), (id:104,purpose:"Servant gear",amount:81), (id:105,purpose:"Servant gear",amount:648), (id:106,purpose:"Servant gear",amount:12), (id:107,purpose:"Servant gear",amount:20) };
+var displayed=purposeRows.Where(r=>!purposeRows.Any(other=>NeedRules.DeferredToPlayer(r.id,r.purpose,other.id,other.purpose))).ToList();
+Check(displayed.Count==5 && displayed.Count(r=>r.purpose=="Servant gear")==3, "Freed duplicate servant slots fill with distinct needs");
+Check(displayed.First(r=>r.id==103).amount==214, "Hidden servant quantity is not added to player farming goal");
+Check(!NeedRules.DeferredToPlayer(103,"Servant gear",103,"Servant gear"), "Servant need remains when no player needs that material");
 Console.WriteLine($"{checks} need-rule regression checks passed.");

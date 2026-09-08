@@ -90,6 +90,8 @@ namespace Satisvampory.Services
             string otherPurpose, IReadOnlyList<int> otherRoute) =>
             purpose == otherPurpose && route != null && otherRoute != null && route.Count > 0
             && route.Count < otherRoute.Count && route.SequenceEqual(otherRoute.Take(route.Count));
+        internal static bool DeferredToPlayer(int item, string purpose, int otherItem, string otherPurpose) =>
+            purpose == "Servant gear" && otherPurpose == "Player gear" && item == otherItem;
         public static int Draw(Dictionary<int, int> stock, int item, int amount)
         {
             stock.TryGetValue(item, out var held);
