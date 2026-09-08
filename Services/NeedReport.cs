@@ -37,6 +37,7 @@ namespace Satisvampory.Services
             public Dictionary<int, int> Remaining;
             public HashSet<int> GearProducts = new();
             public Dictionary<(int root, string purpose), ChainGoal> ChainGoals = new();
+            public List<Entry> Ready = new();
             public HashSet<int> Unlocked = new(), BuiltRecipes = new(), Blueprints = new();
             public Dictionary<int, string> CraftStations = new();
             public Dictionary<int, Dictionary<int, int>> CraftCosts = new();
@@ -409,7 +410,7 @@ namespace Satisvampory.Services
                 node.Covered = (int)Math.Min(int.MaxValue, (long)node.Covered + requested - missing);
             });
         }
-        static void FormatChains(List<Entry> rows)
+        static void FormatChains(Context c, List<Entry> rows)
         {
             // Stored routes run from finished goal to raw ingredient. Keep the deepest
             // unresolved branches; their crafting ancestors belong in follow-up details.
@@ -423,6 +424,9 @@ namespace Satisvampory.Services
                 }
                 rows.Remove(parent);
             }
+            // Fully supplied work is production context, not another farming target.
+            foreach (var ready in rows.Where(e => !NeedRules.RankedAction(e.Action)).ToList())
+            { c.Ready.Add(ready); rows.Remove(ready); }
             foreach (var e in rows.Where(e => e.Chain != null))
             {
                 e.Reason = string.Join(" → ", e.Chain.AsEnumerable().Reverse().Select(L)) + $" — {e.Purpose}";
@@ -473,21 +477,26 @@ namespace Satisvampory.Services
                 var bag = new Dictionary<int, int>();
                 if (!servant && person.TryGetProperty("inventory", out var inventory))
                     foreach (var a in inventory.EnumerateArray()) Add(bag, a.GetProperty("item").GetProperty("guid").GetInt32(), a.GetProperty("amount").GetInt32());
+                var armorSlots = new[] { EquipmentType.Chest, EquipmentType.Gloves, EquipmentType.Legs, EquipmentType.Footgear };
+                var armorFloor = person.GetProperty("equipment").GetProperty("slots").EnumerateArray()
+                    .Where(s => Enum.TryParse<EquipmentType>(s.GetProperty("slot").GetString(), out var t) && armorSlots.Contains(t))
+                    .Select(s => s.GetProperty("item")).Where(i => i.TryGetProperty("level", out var n) && n.ValueKind == JsonValueKind.Number && n.GetSingle() > 0)
+                    .Select(i => i.GetProperty("level").GetSingle()).DefaultIfEmpty(0).Min();
                 foreach (var slot in person.GetProperty("equipment").GetProperty("slots").EnumerateArray())
                 {
                     var current = slot.GetProperty("item"); var id = current.GetProperty("guid").GetInt32();
                     if (!Enum.TryParse<EquipmentType>(slot.GetProperty("slot").GetString(), out var type)) continue;
                     var level = current.TryGetProperty("level", out var l) && l.ValueKind == JsonValueKind.Number ? l.GetSingle() : id == 0 ? 0 : -1;
                     if (level < 0) { hadUnknown = true; continue; }
-                    // An unequipped weapon in the player's bag must not look like an empty gear tier.
-                    if (!servant && type == EquipmentType.Weapon)
+                    // Carried equipment also establishes the player's tier for that slot.
+                    if (!servant)
                     {
                         var best = bag.Keys.Where(x => NeedCatalog.Gear.TryGetValue(x, out var g) && g.slot == type)
                             .OrderByDescending(x => NeedCatalog.Gear[x].level).FirstOrDefault();
                         if (best != 0 && NeedCatalog.Gear[best].level > level) { id = best; level = NeedCatalog.Gear[best].level; }
                     }
                     NeedCatalog.Gear.TryGetValue(id, out var currentGear);
-                    var candidates = NeedCatalog.Gear.Where(x => x.Value.slot == type && x.Value.level > level && NeedCatalog.Products.ContainsKey(x.Key)
+                    var candidates = NeedCatalog.Gear.Where(x => x.Value.slot == type && NeedRules.GearCandidate(x.Value.level, level, armorFloor, !servant && id == 0 && armorSlots.Contains(type)) && NeedCatalog.Products.ContainsKey(x.Key)
                         && (servant || type != EquipmentType.Weapon || id == 0 || x.Value.weapon == currentGear.weapon))
                         .OrderBy(x => x.Value.level).ThenBy(x => x.Key).ToList();
                     if (candidates.Count == 0) continue;
@@ -549,7 +558,7 @@ namespace Satisvampory.Services
         }
         static void SaveAndPrint(ChatCommandContext ctx, Context c, List<Entry> entries, string title, bool focused = false)
         {
-            FormatChains(entries);
+            FormatChains(c, entries);
             var top = NeedRules.BottomFirst(entries, e => e.Priority, e => e.Target > 0 ? NeedRules.Short(e.Target, e.Have) / (double)e.Target : 0, e => e.Id);
             // Save #1 at index zero while displaying it last.
             var ranked = top.AsEnumerable().Reverse().ToList();
@@ -563,6 +572,7 @@ namespace Satisvampory.Services
             if (focused) { Detail(ctx, 1); return; }
             ctx.Reply(C($"Needs • {title} • castle {c.Plot}" + (c.Plots.Count > 1 ? " + clan supplies" : "") + $" • #1 highest" + (entries.Count > 5 ? $" • {entries.Count - 5} more" : ""), "white"));
             if (ranked.Count == 0) ctx.Reply(C("No verified unmet goals. Use .s needgoal or .s needtarget to choose goals.", "green"));
+            if (c.Ready.Count > 0) ctx.Reply(C("Ingredients ready: " + string.Join(", ", c.Ready.Select(e => L(e.Id)).Distinct().Take(3)) + ". Crafting details: .s need <item>.", "green"));
             for (var i = ranked.Count - 1; i >= 0; i--)
             {
                 ctx.Reply(C($"{i + 1}. {ranked[i].Reason}", ranked[i].Color));
@@ -609,11 +619,11 @@ namespace Satisvampory.Services
             foreach (var id in c.Local.Keys.Where(id => IsStockMaterial(id, default)))
             { var entry = Stock(c, id, default, false); if (entry != null && !c.GearProducts.Contains(id) && !rows.Any(x => x.Id == id)) rows.Add(entry); }
             ExpandStock(c, rows);
-            FormatChains(rows);
+            FormatChains(c, rows);
             var ranked = NeedRules.BottomFirst(rows, x => x.Priority, x => x.Target > 0 ? NeedRules.Short(x.Target, x.Have) / (double)x.Target : 0, x => x.Id).AsEnumerable().Reverse().ToList();
             foreach (var e in ranked) Explain(c, e);
             return JsonSerializer.Serialize(new { plot, unknownGear = unknown, catalogRecipes = NeedCatalog.Recipes.Count, catalogGear = NeedCatalog.Gear.Count,
-                craftStations = c.CraftStations.Count, unlockedRecipes = c.Unlocked.Count,
+                craftStations = c.CraftStations.Count, unlockedRecipes = c.Unlocked.Count, readyToCraft = c.Ready.Select(e => new { item = L(e.Id), amount = e.Target, purpose = e.Purpose }),
                 rows = ranked.Select((e, index) => new { rank = index + 1, item = L(e.Id), purpose = e.Purpose ?? "Stock", totalStock = N(c.Island, e.Id), localStock = N(c.Local, e.Id), usableBeforeGear = Reach(c, null, e.Id), allocatedForGear = e.Purpose == null ? (int?)null : e.Have, have = e.Have, target = e.Target, reason = e.Reason, quantityLine = e.QuantityLine, gearItems = e.Goal?.Items.Count, goalRequired = e.Goal?.Required, details = e.Details }) });
         }
     }

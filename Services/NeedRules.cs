@@ -92,6 +92,9 @@ namespace Satisvampory.Services
             && route.Count < otherRoute.Count && route.SequenceEqual(otherRoute.Take(route.Count));
         internal static bool DeferredToPlayer(int item, string purpose, int otherItem, string otherPurpose) =>
             purpose == "Servant gear" && otherPurpose == "Player gear" && item == otherItem;
+        internal static bool GearCandidate(float candidate, float worn, float armorFloor, bool emptyArmor) =>
+            emptyArmor && armorFloor > 0 ? candidate >= armorFloor : candidate > worn;
+        internal static bool RankedAction(string action) => action != "Craft";
         public static int Draw(Dictionary<int, int> stock, int item, int amount)
         {
             stock.TryGetValue(item, out var held);

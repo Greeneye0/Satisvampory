@@ -126,4 +126,10 @@ Check(ItemMatchRules.TypoScore("unrelated","Depleted Battery")==int.MaxValue,"Di
 var closeItems=new[]{"Depleted Battery","Charged Battery"}.Where(n=>ItemMatchRules.TypoScore("depleated",n)!=int.MaxValue).ToList();
 Check(closeItems.SequenceEqual(new[]{"Depleted Battery"}),"One plausible typo item can execute directly");
 Check(new[]{"Copper Sword","Copper Spear"}.Count(n=>ItemMatchRules.TypoScore("coppre",n)!=int.MaxValue)==2,"Multiple plausible item corrections still require selection");
+Check(!NeedRules.RankedAction("Craft"),"Ready crafting work never occupies a farming rank");
+Check(NeedRules.RankedAction("Collect") && NeedRules.RankedAction("Setup"),"Unresolved gathering and setup stay ranked");
+Check(!NeedRules.GearCandidate(10,0,80,true),"Empty player gloves do not create Boneguard demand beside tier-80 armor");
+Check(NeedRules.GearCandidate(80,0,80,true),"Empty armor slot can be restored at the existing armor tier");
+Check(!NeedRules.GearCandidate(80,80,80,false) && NeedRules.GearCandidate(90,80,80,false),"Worn armor still seeks upgrades rather than sidegrades");
+Check(NeedRules.GearCandidate(10,0,0,true),"A player with no established armor tier can still need starter armor");
 Console.WriteLine($"{checks} need-rule regression checks passed.");
