@@ -257,6 +257,7 @@ internal static class ItemCatalog
 
     static bool TryResolveUniqueOrExact(List<PrefabGUID> searchResults, string normalizedInput, out FoundItem item)
     {
+        ItemMatchRules.DistinctItems(searchResults);
         if (searchResults.Count == 1)
         {
             item = new FoundItem(searchResults[0]);

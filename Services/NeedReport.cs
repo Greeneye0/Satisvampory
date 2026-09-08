@@ -50,7 +50,7 @@ namespace Satisvampory.Services
         static int N(Dictionary<int, int> dict, int id) => dict.TryGetValue(id, out var n) ? n : 0;
         static void Add(Dictionary<int, int> dict, int id, int n) => dict[id] = (int)Math.Min(int.MaxValue, (long)N(dict, id) + n);
 
-        internal static void Show(ChatCommandContext ctx, string query = null, string scope = null)
+        internal static void Show(ChatCommandContext ctx, string query = null, string scope = null, int? selectedItem = null)
         {
             if (!Core.HasInitialized) { ctx.Reply("Satisvampory is not ready."); return; }
             var plot = Core.TerritoryService.GetStandingTerritoryId(ctx.Event.SenderCharacterEntity);
@@ -62,7 +62,7 @@ namespace Satisvampory.Services
             if (scope == "clan" && !Core.TerritoryService.IsClanShareOn(ctx.Event.User)) { ctx.Reply("Clan scope requires ClanShare enabled."); return; }
             var plots = scope == "here" ? new List<int> { plot } : permitted;
             var userId = ctx.Event.User.PlatformId;
-            if (saved.TryGetValue(userId, out var recent) && (DateTime.UtcNow - recent.At).TotalSeconds < 2)
+            if (!selectedItem.HasValue && saved.TryGetValue(userId, out var recent) && (DateTime.UtcNow - recent.At).TotalSeconds < 2)
             { ctx.Reply("Please wait two seconds between need reports."); return; }
             NeedCatalog.Ensure();
             using var gear = JsonDocument.Parse(GearDebug.Snapshot(plot));
@@ -71,11 +71,14 @@ namespace Satisvampory.Services
             var mode = settings.NeedGoal ?? "auto";
             if (!string.IsNullOrWhiteSpace(query))
             {
-                var alias = ItemGroupService.TryExactItemAlias(c.Owner, query, out var aliasId);
-                if (!alias && FoundItemConverter.TryResolve(query, out _, out _) != ItemResolveStatus.Unique)
-                { ctx.Reply("Item name is unknown or ambiguous. Use its full name or an item alias."); return; }
-                FoundItemConverter.TryResolve(query, out var item, out _);
-                var entry = Stock(c, alias ? aliasId : item.prefab.GuidHash, settings, true);
+                var item = selectedItem.HasValue ? new FoundItem(new PrefabGUID(selectedItem.Value)) : new FoundItemConverter().Parse(ctx, query);
+                if (item.Ambiguous)
+                {
+                    PendingItemChoiceService.AttachCommand(userId, PendingItemCommand.NeedInspect, groupName: scope);
+                    PendingItemChoiceService.ReplyNumberedList(ctx);
+                    return;
+                }
+                var entry = Stock(c, item.prefab.GuidHash, settings, true);
                 SaveAndPrint(ctx, c, new List<Entry> { entry }, "Item", true);
                 return;
             }

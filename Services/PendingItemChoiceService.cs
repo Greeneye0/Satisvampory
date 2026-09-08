@@ -27,7 +27,9 @@ namespace Satisvampory.Services
         ExcludeToggle,
         BagCapShow,
         BagCapSet,
-        AliasAdd
+        AliasAdd,
+        NeedInspect,
+        NeedTarget
     }
 
     internal sealed class PendingItemChoice
@@ -50,6 +52,7 @@ namespace Satisvampory.Services
         public static void BeginAmbiguous(ulong platformId, List<(PrefabGUID Prefab, string Name)> candidates)
         {
             NeedReport.ClearNumber(platformId);
+            ClanThroneServants.ClearNumberChoice(platformId);
             if (candidates == null)
                 candidates = new List<(PrefabGUID Prefab, string Name)>();
 
@@ -89,7 +92,7 @@ namespace Satisvampory.Services
                 return;
             }
 
-            ctx.Reply("Multiple matches. Type <color=white>.l <number></color> (or <color=white>.l pick <number></color>) to choose:");
+            ctx.Reply("Multiple matches. Type <color=white>.s <number></color> (or <color=white>.s pick <number></color>) to choose:");
             var limit = Math.Min(choice.Candidates.Count, MaxListed);
             for (var i = 0; i < limit; i++)
             {

@@ -992,7 +992,7 @@ namespace Satisvampory.Commands
         [Command(name: "needtarget", usage: ".s needtarget <item> <amount|-1>", description: "Personal stock goal; -1 restores reserve fallback. Does not change reserves or caps.")]
         public static void NeedTarget(ChatCommandContext ctx, FoundItem item, int amount)
         {
-            if (item.Ambiguous) { ctx.Reply("Use an exact item name."); return; }
+            if (LogisticsCommands.HandleAmbiguousItem(ctx, item, PendingItemCommand.NeedTarget, amount)) return;
             if (amount < -1 || amount > 1000000) { ctx.Reply("Use 0–1000000, or -1 to restore the reserve fallback."); return; }
             var row = Core.PlayerSettings.Snapshot(ctx.Event.User.PlatformId, true);
             row.NeedTargets = row.NeedTargets != null ? new Dictionary<string,int>(row.NeedTargets) : new();

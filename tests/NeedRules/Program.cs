@@ -109,4 +109,12 @@ var displayed=purposeRows.Where(r=>!purposeRows.Any(other=>NeedRules.DeferredToP
 Check(displayed.Count==5 && displayed.Count(r=>r.purpose=="Servant gear")==3, "Freed duplicate servant slots fill with distinct needs");
 Check(displayed.First(r=>r.id==103).amount==214, "Hidden servant quantity is not added to player farming goal");
 Check(!NeedRules.DeferredToPlayer(103,"Servant gear",103,"Servant gear"), "Servant need remains when no player needs that material");
+var aliasMatches = new List<int>{1270271716,1270271716,1270271716};
+ItemMatchRules.DistinctItems(aliasMatches);
+Check(aliasMatches.Count==1 && aliasMatches[0]==1270271716,"Aliases and split searches for one prefab resolve as a single item");
+var severalItems = new List<int>{1,2,1,3,2};
+ItemMatchRules.DistinctItems(severalItems);
+Check(severalItems.SequenceEqual(new[]{1,2,3}),"Distinct partial matches keep stable numbered choices");
+var noItems = new List<int>(); ItemMatchRules.DistinctItems(noItems);
+Check(noItems.Count==0,"No matching item stays an honest no-match");
 Console.WriteLine($"{checks} need-rule regression checks passed.");

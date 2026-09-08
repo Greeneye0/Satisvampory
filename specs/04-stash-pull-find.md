@@ -76,3 +76,7 @@ If an item name is ambiguous, the plugin lists numbered matches. Pick with `.s 2
 
 - `.adminstash <item> <n>`: spawn into standing-plot dests (admin).
 - `.emptytrash`: empty `trash` chests on the standing plot (admin; `.sg trash` allow).
+
+### Shared item lookup (1.0.142)
+
+All item-taking command paths use the shared case-insensitive resolver: exact item/alias first, one distinct partial item resolves directly, multiple distinct partial items show numbered choices. Deduplicate prefab IDs before deciding ambiguity, so aliases or repeated split-name hits for one item do not create false multiple matches. Focused .s need and .s needtarget retain their scope/amount when replaying the selected item. Existing exact group precedence is unchanged. A fresh item-choice list clears old need and throne number contexts. Partial matching is not typo correction: deplet/depleted match Depleted Battery; depleated is not a substring and is not guessed. Container labels follow the separate destination matching rules.
