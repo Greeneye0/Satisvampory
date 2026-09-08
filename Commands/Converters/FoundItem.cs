@@ -7,7 +7,7 @@ using Satisvampory.Services;
 
 namespace Satisvampory.Commands.Converters;
 
-public record struct FoundItem(PrefabGUID prefab, bool Ambiguous = false);
+public record struct FoundItem(PrefabGUID prefab, bool Ambiguous = false, bool Corrected = false);
 
 public enum ItemResolveStatus { Unique, None, Ambiguous }
 
@@ -20,7 +20,10 @@ class FoundItemConverter : CommandArgumentConverter<FoundItem>
             return aliased;
         var status = TryResolve(input, out var result, out var candidates);
         if (status == ItemResolveStatus.Unique)
+        {
+            if (result.Corrected && ctx is ChatCommandContext corrected) corrected.Reply($"Using {result.prefab.PrefabName()} (corrected item name).");
             return result;
+        }
 
         if (status == ItemResolveStatus.Ambiguous)
         {

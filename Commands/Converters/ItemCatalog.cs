@@ -2,6 +2,7 @@ using Satisvampory.Services;
 using Stunlock.Core;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using VampireCommandFramework;
 
@@ -98,6 +99,17 @@ internal static class ItemCatalog
         if (searchResults.Count > 1)
             return AmbiguousFrom(searchResults, out item, out candidates);
 
+        // Only after exact, substring and split-word matching all failed. Compare item
+        // labels rather than short aliases, and count distinct items rather than names.
+        var close = itemNamesToPrefabs.Values.Distinct()
+            .Select(p => (prefab: p, score: ItemMatchRules.TypoScore(normalizedInput, NormalizeName(p.PrefabName()))))
+            .Where(x => x.score != int.MaxValue).OrderBy(x => x.score).ThenBy(x => x.prefab.GuidHash).ToList();
+        if (close.Count == 1)
+        {
+            item = new FoundItem(close[0].prefab, Corrected: true);
+            return ItemResolveStatus.Unique;
+        }
+        if (close.Count > 1) return AmbiguousFrom(close.Select(x => x.prefab).ToList(), out item, out candidates);
         return ItemResolveStatus.None;
     }
 
