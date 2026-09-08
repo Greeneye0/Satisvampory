@@ -294,6 +294,7 @@ namespace Satisvampory.Services
                 if (moved > 0 && to.Has<InventoryConnection>()
                     && (Core.WorkQueue == null || !Core.WorkQueue.IsSelfTransferring))
                     Core.WorkQueue?.EnqueueOwner(to.Read<InventoryConnection>().InventoryOwner);
+                StationInputGrace.NoteModMove(from, to, item, moved);
                 return moved;
             }
             finally

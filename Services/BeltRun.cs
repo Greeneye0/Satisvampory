@@ -151,6 +151,8 @@ namespace Satisvampory.Services
                     if (input == Entity.Null || !Core.EntityManager.Exists(input))
                         continue;
                     var have = BeltRecipe.CountAll(input);
+                    // 1.0.145: stamp anything a player dropped in by hand since the last pass.
+                    StationInputGrace.Observe(input, have);
                     var held = 0;
                     foreach (var row in have)
                         held += row.Value;
@@ -230,8 +232,13 @@ namespace Satisvampory.Services
                     {
                         keep.TryGetValue(row.Key, out var stay);
                         var extra = row.Value - stay;
-                        if (extra > 0)
-                            leftover[row.Key] = extra;
+                        if (extra <= 0)
+                            continue;
+                        // 1.0.145: a stack the player put in by hand stays for the grace window
+                        // (StationInputGrace.GraceSeconds) before the tick may dump it back.
+                        if (StationInputGrace.IsProtected(input, row.Key))
+                            continue;
+                        leftover[row.Key] = extra;
                     }
                     if (leftover.Count > 0)
                     {
